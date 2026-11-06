@@ -45,4 +45,15 @@ class SearchRequestTest {
         assertNull(SearchSyntax.normalizeTag("   "))
         assertNull(SearchSyntax.normalizeTag("[]"))
     }
+
+    @Test
+    fun tagFieldTextParsesIntoCleanTags() {
+        assertEquals(
+            listOf("m4f", "m4m", "m4a"),
+            SearchSyntax.parseTagList("m4f, m4m, m4a, "),
+        )
+        assertEquals(listOf("script fill"), SearchSyntax.parseTagList("[Script Fill], ,"))
+        assertEquals(listOf("f4m"), SearchSyntax.parseTagList("F4M, f4m"))
+        assertTrue(SearchSyntax.parseTagList(" , ").isEmpty())
+    }
 }
