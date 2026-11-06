@@ -47,6 +47,27 @@ class AppPreferences(context: Context) {
         }.apply()
     }
 
+    /** The `cf_clearance` cookie and the User-Agent it was issued to. */
+    fun hotaudioClearance(): Pair<String, String>? {
+        val cookie = prefs.getString(KEY_HOTAUDIO_COOKIE, null).orEmpty()
+        val userAgent = prefs.getString(KEY_HOTAUDIO_USER_AGENT, null).orEmpty()
+        return (cookie to userAgent).takeIf { cookie.isNotBlank() }
+    }
+
+    fun saveHotaudioClearance(cookie: String, userAgent: String) {
+        prefs.edit()
+            .putString(KEY_HOTAUDIO_COOKIE, cookie)
+            .putString(KEY_HOTAUDIO_USER_AGENT, userAgent)
+            .apply()
+    }
+
+    fun clearHotaudioClearance() {
+        prefs.edit()
+            .remove(KEY_HOTAUDIO_COOKIE)
+            .remove(KEY_HOTAUDIO_USER_AGENT)
+            .apply()
+    }
+
     fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
 
     fun saveSaved(tracks: List<Track>) {
@@ -76,6 +97,8 @@ class AppPreferences(context: Context) {
         const val KEY_DEFAULTS_VERSION = "defaults_version"
         const val KEY_BLOCKED_TAGS = "blocked_tags"
         const val KEY_DOWNLOAD_TREE = "download_tree"
+        const val KEY_HOTAUDIO_COOKIE = "hotaudio_cookie"
+        const val KEY_HOTAUDIO_USER_AGENT = "hotaudio_user_agent"
         const val KEY_SAVED = "saved_tracks"
         const val KEY_HISTORY = "history_tracks"
         const val KEY_DOWNLOADS = "downloaded_tracks"

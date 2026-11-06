@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +60,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.BuildConfig
+import dev.dawngasm.app.HotaudioClearanceActivity
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.util.compactScore
@@ -75,6 +77,9 @@ fun SettingsScreen(
     downloadFolderLabel: String,
     downloadTreeUri: String?,
     tagLookup: suspend (String) -> List<TagSuggestion>,
+    hotaudioConnected: Boolean,
+    onHotaudioClearanceChanged: () -> Unit,
+    onClearHotaudioClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
@@ -82,6 +87,11 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val clearanceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
+    }
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
@@ -339,6 +349,43 @@ fun SettingsScreen(
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
                     Spacer(modifier = Modifier.size(8.dp))
                     Text("Remove downloaded entries")
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                icon = Icons.Outlined.Language,
+                title = "hotaudio",
+                subtitle = "hotaudio hides its audio behind a Cloudflare check. Open the site in the app, pass the check, and the clearance is saved for playback and downloads.",
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = if (hotaudioConnected) "Clearance saved" else "No clearance saved",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (hotaudioConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                clearanceLauncher.launch(
+                                    Intent(context, HotaudioClearanceActivity::class.java),
+                                )
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Text(if (hotaudioConnected) "Check again" else "Open hotaudio check")
+                        }
+                        if (hotaudioConnected) {
+                            TextButton(onClick = onClearHotaudioClearance) {
+                                Text("Clear")
+                            }
+                        }
+                    }
                 }
             }
         }

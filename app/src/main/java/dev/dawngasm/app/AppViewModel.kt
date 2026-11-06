@@ -129,6 +129,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             blockedTags = blocked,
             downloadTreeUri = tree,
             downloadFolderLabel = downloader.folderLabel(tree),
+            hotaudioConnected = prefs.hotaudioClearance() != null,
         )
     }
 
@@ -333,6 +334,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 downloadFolderLabel = downloader.folderLabel(uri),
             )
         }
+    }
+
+    /** Refresh the hotaudio clearance status after the WebView activity. */
+    fun refreshHotaudioClearance() {
+        _uiState.update { it.copy(hotaudioConnected = prefs.hotaudioClearance() != null) }
+    }
+
+    fun clearHotaudioClearance() {
+        prefs.clearHotaudioClearance()
+        _uiState.update { it.copy(hotaudioConnected = false) }
     }
 
     // --- playback -----------------------------------------------------------
