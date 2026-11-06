@@ -213,7 +213,10 @@ class AudioResolver(private val context: Context? = null) {
                     tempFile.delete()
                     try {
                         val options = net.hotaudio.extractor.DownloadOptions(
+                            trackId = null,
                             apiBase = endpoint.apiBase,
+                            delayMs = 0u,
+                            initialKeysJson = null,
                         )
                         net.hotaudio.extractor.downloadToFile(
                             pageUrl = endpoint.pageUrl,
