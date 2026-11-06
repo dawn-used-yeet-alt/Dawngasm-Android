@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
-    private val resolver = AudioResolver()
+    private val resolver = AudioResolver(application)
     private val downloader = TrackDownloader(application)
     private val headerFactory = HeaderDataSourceFactory(application, Network.client)
 
@@ -113,6 +113,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         loadFeed(reset = true)
         startProgressLoop()
+        runCatching {
+            net.hotaudio.extractor.Hotaudio.initAndroidTls(application)
+            prefs.hotaudioClearance()?.let { (cookie, ua) ->
+                net.hotaudio.extractor.setClearance(cookie, ua)
+            }
+        }
     }
 
     private fun initialState(): AppUiState {
@@ -338,11 +344,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Refresh the hotaudio clearance status after the WebView activity. */
     fun refreshHotaudioClearance() {
-        _uiState.update { it.copy(hotaudioConnected = prefs.hotaudioClearance() != null) }
+        val clearance = prefs.hotaudioClearance()
+        if (clearance != null) {
+            runCatching { net.hotaudio.extractor.setClearance(clearance.first, clearance.second) }
+        } else {
+            runCatching { net.hotaudio.extractor.clearClearance() }
+        }
+        _uiState.update { it.copy(hotaudioConnected = clearance != null) }
     }
 
     fun clearHotaudioClearance() {
         prefs.clearHotaudioClearance()
+        runCatching { net.hotaudio.extractor.clearClearance() }
         _uiState.update { it.copy(hotaudioConnected = false) }
     }
 

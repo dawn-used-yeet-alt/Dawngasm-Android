@@ -10,6 +10,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        runCatching {
+            net.hotaudio.extractor.Hotaudio.initAndroidTls(applicationContext)
+        }
         setContent {
             DawngasmTheme {
                 DawngasmApp()

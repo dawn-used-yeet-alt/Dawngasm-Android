@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import androidx.documentfile.provider.DocumentFile
+import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.util.safeFileName
 import java.io.File
@@ -31,21 +32,37 @@ class TrackDownloader(
         treeUri: String?,
     ): SavedDownload = withContext(Dispatchers.IO) {
         val fileName = buildFileName(track, audio.extension)
-        val request = Request.Builder()
-            .url(audio.url)
-            .apply { audio.headers.forEach { (name, value) -> header(name, value) } }
-            .header("User-Agent", Network.BROWSER_USER_AGENT)
-            .build()
-
-        Network.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw DownloadException("server returned HTTP ${response.code}")
-            }
-            val body = response.body ?: throw DownloadException("the server sent an empty file")
-            if (treeUri != null) {
-                saveToTree(treeUri, fileName, audio.extension, body.byteStream())
+        if (track.host == AudioHost.HOTAUDIO || audio.url.startsWith("file:")) {
+            val fileUri = Uri.parse(audio.url)
+            val inputStream = if (fileUri.scheme == "file") {
+                val file = File(fileUri.path ?: throw DownloadException("invalid local file URI"))
+                if (!file.exists()) throw DownloadException("resolved audio file does not exist")
+                file.inputStream()
             } else {
-                saveToAppStorage(fileName, body.byteStream())
+                throw DownloadException("unsupported hotaudio URI: ${audio.url}")
+            }
+            if (treeUri != null) {
+                saveToTree(treeUri, fileName, audio.extension, inputStream)
+            } else {
+                saveToAppStorage(fileName, inputStream)
+            }
+        } else {
+            val request = Request.Builder()
+                .url(audio.url)
+                .apply { audio.headers.forEach { (name, value) -> header(name, value) } }
+                .header("User-Agent", Network.BROWSER_USER_AGENT)
+                .build()
+
+            Network.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw DownloadException("server returned HTTP ${response.code}")
+                }
+                val body = response.body ?: throw DownloadException("the server sent an empty file")
+                if (treeUri != null) {
+                    saveToTree(treeUri, fileName, audio.extension, body.byteStream())
+                } else {
+                    saveToAppStorage(fileName, body.byteStream())
+                }
             }
         }
     }

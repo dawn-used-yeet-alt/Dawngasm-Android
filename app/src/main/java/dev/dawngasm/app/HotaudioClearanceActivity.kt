@@ -69,6 +69,9 @@ class HotaudioClearanceActivity : ComponentActivity() {
         val userAgent = webView?.settings?.userAgentString
             ?: WebSettings.getDefaultUserAgent(this)
         AppPreferences(this).saveHotaudioClearance(cookie, userAgent)
+        runCatching {
+            net.hotaudio.extractor.setClearance(cookie, userAgent)
+        }
         CookieManager.getInstance().flush()
         setResult(RESULT_OK, Intent().putExtra(EXTRA_CONNECTED, true))
         finish()

@@ -107,6 +107,8 @@ dependencies {
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.documentfile)
     implementation(libs.okhttp)
+    implementation(libs.jna)
+    implementation(libs.rustls.platform.verifier)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
 

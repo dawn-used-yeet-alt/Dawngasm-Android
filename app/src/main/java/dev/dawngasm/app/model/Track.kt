@@ -3,11 +3,12 @@ package dev.dawngasm.app.model
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** The audio hosts this first pass resolves. hotaudio is deliberately absent. */
+/** Supported audio hosts. */
 enum class AudioHost(val label: String) {
     SOUNDGASM("soundgasm"),
     WHYP("whyp"),
     AUDIOCHAN("audiochan"),
+    HOTAUDIO("hotaudio"),
     UNKNOWN("audio");
 
     companion object {

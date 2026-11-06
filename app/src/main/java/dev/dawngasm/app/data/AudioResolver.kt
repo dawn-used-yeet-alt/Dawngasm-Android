@@ -1,7 +1,10 @@
 package dev.dawngasm.app.data
 
+import android.content.Context
+import android.net.Uri
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,7 +28,7 @@ data class ResolvedAudio(
  * cookie-gated play intent followed by a signed stream URL; the shared
  * [Network] cookie jar carries the cookie to the media requests.
  */
-class AudioResolver {
+class AudioResolver(private val context: Context? = null) {
     private data class CacheEntry(val audio: ResolvedAudio, val createdAt: Long)
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
@@ -39,6 +42,7 @@ class AudioResolver {
             AudioHost.SOUNDGASM -> soundgasm(track)
             AudioHost.WHYP -> whyp(track)
             AudioHost.AUDIOCHAN -> audiochan(track)
+            AudioHost.HOTAUDIO -> hotaudio(track)
             AudioHost.UNKNOWN -> throw ResolveException("Unsupported audio host")
         }
         cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
@@ -133,6 +137,44 @@ class AudioResolver {
                 "Referer" to AUDIOCHAN_REFERER,
             ),
             extension = extensionFromUrl(streamUrl, "m4a"),
+        )
+    }
+
+    private fun hotaudio(track: Track): ResolvedAudio {
+        val cacheRoot = context?.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
+        val hotaudioDir = File(cacheRoot, "hotaudio").apply { mkdirs() }
+        val targetFile = File(hotaudioDir, "${track.id}.m4a")
+        if (!targetFile.exists() || targetFile.length() == 0L) {
+            val tempFile = File(hotaudioDir, "${track.id}.${System.currentTimeMillis()}.tmp")
+            try {
+                net.hotaudio.extractor.downloadToFile(
+                    url = track.pageUrl,
+                    path = tempFile.absolutePath,
+                )
+                if (!tempFile.renameTo(targetFile)) {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
+                }
+            } catch (error: Throwable) {
+                tempFile.delete()
+                val message = when (error) {
+                    is net.hotaudio.extractor.FfiException.Failed -> {
+                        if (error.code == "challenge") {
+                            "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
+                        } else {
+                            "hotaudio error (${error.code}): ${error.detail}"
+                        }
+                    }
+                    is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${error.detail}"
+                    else -> error.message ?: "hotaudio extraction failed"
+                }
+                throw ResolveException(message)
+            }
+        }
+        return ResolvedAudio(
+            url = Uri.fromFile(targetFile).toString(),
+            headers = emptyMap(),
+            extension = "m4a",
         )
     }
 
