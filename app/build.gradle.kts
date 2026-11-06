@@ -109,7 +109,7 @@ dependencies {
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.documentfile)
     implementation(libs.okhttp)
-    implementation(libs.jna)
+    implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     implementation(libs.rustls.platform.verifier)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
@@ -242,12 +242,9 @@ abstract class BuildHotaudioNativeTask : DefaultTask() {
                     } else null
                 } else null
 
-            val cmd = mutableListOf("cargo", "ndk")
-            if (ndkDir != null && ndkDir.exists()) {
-                cmd.add("--ndk-path")
-                cmd.add(ndkDir.absolutePath)
-            }
-            cmd.addAll(listOf(
+            val cmd = listOf(
+                "cargo", "ndk",
+                "--platform", "26",
                 "-t", "arm64-v8a",
                 "-t", "x86_64",
                 "-o", destDir.absolutePath,
@@ -255,22 +252,28 @@ abstract class BuildHotaudioNativeTask : DefaultTask() {
                 "--manifest-path", "Cargo.toml",
                 "--release",
                 "-p", "hotaudio-ffi"
-            ))
+            )
 
             println("Building libhotaudio_ffi.so for arm64-v8a and x86_64: ${cmd.joinToString(" ")}")
             val bindingsDir = File(tempDir, "bindings")
-            val buildProc = ProcessBuilder(cmd)
+            val pb = ProcessBuilder(cmd)
                 .directory(bindingsDir)
-                .inheritIO()
-                .start()
-            val exit = buildProc.waitFor()
-            if (exit == 0) {
-                println("Successfully built native libraries in ${destDir.absolutePath}")
-            } else {
-                println("Warning: cargo ndk exited with code $exit")
+                .redirectErrorStream(true)
+            if (ndkDir != null && ndkDir.exists()) {
+                println("Using NDK from: ${ndkDir.absolutePath}")
+                pb.environment()["ANDROID_NDK_HOME"] = ndkDir.absolutePath
+                pb.environment()["NDK_HOME"] = ndkDir.absolutePath
             }
-        } catch (e: Exception) {
-            println("Warning: Could not build native libraries: ${e.message}")
+            val buildProc = pb.start()
+            buildProc.inputStream.bufferedReader().forEachLine { println(it) }
+            val exit = buildProc.waitFor()
+            if (exit != 0) {
+                throw GradleException("cargo ndk exited with code $exit")
+            }
+            if (!arm64So.exists() || !x86_64So.exists()) {
+                throw GradleException("Expected native libraries at ${arm64So.absolutePath} and ${x86_64So.absolutePath} were not generated")
+            }
+            println("Successfully built native libraries in ${destDir.absolutePath}")
         } finally {
             tempDir.deleteRecursively()
         }

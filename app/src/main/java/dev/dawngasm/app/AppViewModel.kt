@@ -1,8 +1,13 @@
 package dev.dawngasm.app
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import java.io.File
+import java.util.Date
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -107,7 +112,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             override fun onPlayerError(error: PlaybackException) {
                 val message = error.message ?: error.errorCodeName
                 updatePlayer { copy(isLoading = false, isPlaying = false, error = message) }
-                emitMessage("Playback failed: $message", isError = true)
+                emitMessage("Playback failed: $message", isError = true, throwable = error)
             }
         })
 
@@ -271,7 +276,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         error = message,
                     )
                 }
-                emitMessage(message, isError = true)
+                emitMessage(message, isError = true, throwable = error)
             }
         }
     }
@@ -325,7 +330,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                emitMessage("Download failed: ${error.message ?: "unknown error"}", isError = true)
+                emitMessage("Download failed: ${error.message ?: "unknown error"}", isError = true, throwable = error)
             } finally {
                 _uiState.update { it.copy(downloadingIds = it.downloadingIds - track.id) }
             }
@@ -403,6 +408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 emitMessage(
                     "Could not play this track: ${error.message ?: "unknown error"}",
                     isError = true,
+                    throwable = error,
                 )
             }
         }
@@ -485,8 +491,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun emitMessage(text: String, isError: Boolean = false) {
+    private fun emitMessage(text: String, isError: Boolean = false, throwable: Throwable? = null) {
+        if (isError) {
+            handleDebugError(text, throwable)
+        }
         _messages.tryEmit(UiMessage(text, isError))
+    }
+
+    private fun handleDebugError(message: String, throwable: Throwable?) {
+        if (!BuildConfig.DEBUG) return
+        val stackTrace = throwable?.let { Log.getStackTraceString(it) } ?: ""
+        val errorText = buildString {
+            appendLine("Error: $message")
+            if (throwable != null) {
+                appendLine("Exception: ${throwable.javaClass.name}: ${throwable.message}")
+                if (stackTrace.isNotBlank()) {
+                    appendLine("Stacktrace:")
+                    appendLine(stackTrace)
+                }
+            }
+        }.trim()
+
+        try {
+            val app = getApplication<Application>()
+            val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Dawngasm Error", errorText))
+
+            val dir = app.getExternalFilesDir(null) ?: app.filesDir
+            File(dir, "last_error.log").writeText("${Date()}\n$errorText\n")
+            File(app.filesDir, "last_error.log").writeText("${Date()}\n$errorText\n")
+            File(dir, "errors.log").appendText("${Date()}\n$errorText\n----------------------------------------\n")
+        } catch (e: Throwable) {
+            Log.e("AppViewModel", "Failed to copy/save debug error", e)
+        }
     }
 
     override fun onCleared() {
