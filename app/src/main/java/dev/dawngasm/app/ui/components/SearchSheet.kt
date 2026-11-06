@@ -28,8 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.LocalOffer
-import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
@@ -89,14 +87,24 @@ fun SearchSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val keyboard = LocalSoftwareKeyboardController.current
     var text by rememberSaveable { mutableStateOf(initialQuery) }
-    var includeText by rememberSaveable { mutableStateOf(initialTags.joinToString(", ")) }
-    var excludeText by rememberSaveable { mutableStateOf(initialExcludeTags.joinToString(", ")) }
+    var includeCsv by rememberSaveable { mutableStateOf(initialTags.joinToString(",")) }
+    var excludeCsv by rememberSaveable { mutableStateOf(initialExcludeTags.joinToString(",")) }
+    var includeDraft by rememberSaveable { mutableStateOf("") }
+    var excludeDraft by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf(defaultSort) }
     var window by rememberSaveable { mutableStateOf(defaultWindow) }
 
-    // The tag fields themselves show the selection, so no chip rows are needed.
-    val includeTags = remember(includeText) { SearchSyntax.parseTagList(includeText) }
-    val excludeTags = remember(excludeText) { SearchSyntax.parseTagList(excludeText) }
+    // Tags live in the query preview; each field is only a transient input, so
+    // a chosen tag clears the box and leaves it ready for the next one.
+    val includeTags = remember(includeCsv) { SearchSyntax.parseTagList(includeCsv) }
+    val excludeTags = remember(excludeCsv) { SearchSyntax.parseTagList(excludeCsv) }
+
+    fun addTag(csv: String, raw: String): String {
+        val tag = SearchSyntax.normalizeTag(raw) ?: return csv
+        return (SearchSyntax.parseTagList(csv) + tag)
+            .distinctBy { it.lowercase(Locale.ROOT) }
+            .joinToString(",")
+    }
 
     val preview = SearchRequest(text, includeTags, excludeTags, sort, window).summary()
 
@@ -180,9 +188,12 @@ fun SearchSheet(
                 TagPickerField(
                     label = "Block tags",
                     supportingText = "eg m4f, m4m",
-                    icon = Icons.Rounded.RemoveCircleOutline,
-                    value = excludeText,
-                    onValueChange = { excludeText = it },
+                    draft = excludeDraft,
+                    onDraftChange = { excludeDraft = it },
+                    onAddTag = {
+                        excludeCsv = addTag(excludeCsv, it)
+                        excludeDraft = ""
+                    },
                     selected = excludeTags,
                     tagLookup = tagLookup,
                     modifier = Modifier.weight(1f),
@@ -206,9 +217,12 @@ fun SearchSheet(
                 TagPickerField(
                     label = "Search tags",
                     supportingText = "eg f4m, script fill",
-                    icon = Icons.Rounded.LocalOffer,
-                    value = includeText,
-                    onValueChange = { includeText = it },
+                    draft = includeDraft,
+                    onDraftChange = { includeDraft = it },
+                    onAddTag = {
+                        includeCsv = addTag(includeCsv, it)
+                        includeDraft = ""
+                    },
                     selected = includeTags,
                     tagLookup = tagLookup,
                     modifier = Modifier.weight(1f),
@@ -289,9 +303,9 @@ fun SearchSheet(
 private fun TagPickerField(
     label: String,
     supportingText: String,
-    icon: ImageVector,
-    value: String,
-    onValueChange: (String) -> Unit,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onAddTag: (String) -> Unit,
     selected: List<String>,
     tagLookup: suspend (String) -> List<TagSuggestion>,
     modifier: Modifier = Modifier,
@@ -299,22 +313,11 @@ private fun TagPickerField(
     var suggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var searching by remember { mutableStateOf(false) }
 
-    // Everything after the last comma is the tag currently being typed.
-    val draft = value.substringAfterLast(',').trim()
-
-    /** Strips blanks and the trailing separator, e.g. `m4f, ,` -> `m4f`. */
-    fun commitDraft() {
-        onValueChange(SearchSyntax.parseTagList(value).joinToString(", "))
-        suggestions = emptyList()
-    }
-
+    /** Adds the tag to the query, then empties the box for the next one. */
     fun addTag(raw: String) {
-        val tag = SearchSyntax.normalizeTag(raw) ?: return
-        val lastComma = value.lastIndexOf(',')
-        val committed = if (lastComma >= 0) value.substring(0, lastComma) else ""
-        val kept = SearchSyntax.parseTagList(committed)
-            .filterNot { it.equals(tag, ignoreCase = true) }
-        onValueChange((kept + tag).joinToString(", ") + ", ")
+        if (SearchSyntax.normalizeTag(raw) == null) return
+        onAddTag(raw)
+        onDraftChange("")
         suggestions = emptyList()
     }
 
@@ -344,28 +347,21 @@ private fun TagPickerField(
 
     Column(modifier = modifier) {
         OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
+            value = draft,
+            onValueChange = onDraftChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("tag_field_$label"),
             singleLine = true,
             shape = MaterialTheme.shapes.large,
             label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            leadingIcon = {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
             trailingIcon = {
                 when {
                     searching -> CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
                     )
-                    value.isNotEmpty() -> IconButton(onClick = { onValueChange("") }) {
+                    draft.isNotEmpty() -> IconButton(onClick = { onDraftChange("") }) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
                             contentDescription = "Clear $label",
@@ -378,7 +374,7 @@ private fun TagPickerField(
                 Text(supportingText, maxLines = 1, overflow = TextOverflow.Ellipsis)
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { commitDraft() }),
+            keyboardActions = KeyboardActions(onDone = { addTag(draft) }),
         )
 
         AnimatedVisibility(
