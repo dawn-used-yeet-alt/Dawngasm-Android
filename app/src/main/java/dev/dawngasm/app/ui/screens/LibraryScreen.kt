@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.state.LibrarySubTab
@@ -47,6 +48,7 @@ fun LibraryScreen(
     downloadingIds: Set<String>,
     onTrackClick: (Track, List<Track>) -> Unit,
     onToggleDownload: (Track) -> Unit,
+    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     var selectedSubTab by rememberSaveable { mutableStateOf(LibrarySubTab.History) }
@@ -91,6 +93,7 @@ fun LibraryScreen(
                     testTag = "history_track_list",
                     onTrackClick = { onTrackClick(it, historyTracks) },
                     onToggleDownload = onToggleDownload,
+                    bottomInset = bottomInset,
                 )
 
                 LibrarySubTab.Saved -> TrackList(
@@ -103,6 +106,7 @@ fun LibraryScreen(
                     testTag = "saved_track_list",
                     onTrackClick = { onTrackClick(it, savedTracks) },
                     onToggleDownload = onToggleDownload,
+                    bottomInset = bottomInset,
                 )
 
                 LibrarySubTab.Downloads -> TrackList(
@@ -115,6 +119,7 @@ fun LibraryScreen(
                     testTag = "downloads_track_list",
                     onTrackClick = { onTrackClick(it, downloadedTracks) },
                     onToggleDownload = onToggleDownload,
+                    bottomInset = bottomInset,
                 )
             }
         }
@@ -132,6 +137,7 @@ private fun TrackList(
     testTag: String,
     onTrackClick: (Track) -> Unit,
     onToggleDownload: (Track) -> Unit,
+    bottomInset: Dp = 0.dp,
 ) {
     if (tracks.isEmpty()) {
         EmptyState(
@@ -150,13 +156,15 @@ private fun TrackList(
             start = Dimens.ScreenHorizontalPadding,
             end = Dimens.ScreenHorizontalPadding,
             top = Dimens.ScreenHorizontalPadding,
-            bottom = 24.dp,
+            bottom = 24.dp + bottomInset,
         ),
     ) {
         itemsIndexed(
             items = tracks,
             key = { _, track -> track.id },
-        ) { _, track ->
+        ) { index, track ->
+            // groupPosition/groupGap live in HomeScreen.kt (same package).
+            val position = groupPosition(index, tracks.size)
             TrackCard(
                 track = track,
                 isSaved = false,
@@ -165,10 +173,11 @@ private fun TrackList(
                 onTrackClick = onTrackClick,
                 onToggleSave = {},
                 onToggleDownload = { onToggleDownload(track) },
+                cardPosition = position,
                 showSaveAction = false,
                 modifier = Modifier.animateItem(),
             )
-            Spacer(modifier = Modifier.height(Dimens.CardGroupGap))
+            Spacer(modifier = Modifier.height(groupGap(position)))
         }
     }
 }
