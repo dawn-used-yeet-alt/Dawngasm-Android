@@ -2,6 +2,7 @@ package dev.dawngasm.app
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -9,7 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -23,9 +24,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.dawngasm.app.model.AudioHost
@@ -38,17 +41,31 @@ import dev.dawngasm.app.ui.components.SearchSheet
 import dev.dawngasm.app.ui.screens.HomeScreen
 import dev.dawngasm.app.ui.screens.LibraryScreen
 import dev.dawngasm.app.ui.screens.SettingsScreen
+import dev.dawngasm.app.ui.theme.Dimens
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 
 @Composable
 fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by rememberSaveable { mutableStateOf(NavigationTab.Home) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
 
     val savedIds = remember(state.saved) { state.saved.mapTo(HashSet()) { it.id } }
     val downloadedIds = remember(state.downloads) { state.downloads.mapTo(HashSet()) { it.id } }
+
+    // Space the floating mini player occupies, so lists and the FAB can stay clear of it.
+    val playerVisible = state.player.currentTrack != null
+    val bottomInset by animateDpAsState(
+        targetValue = if (playerVisible) {
+            Dimens.MiniPlayerHeight + Dimens.MiniPlayerBottomMargin * 2
+        } else {
+            0.dp
+        },
+        animationSpec = tween(200),
+        label = "miniPlayerInset",
+    )
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
@@ -64,88 +81,98 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            val progress by viewModel.progress.collectAsStateWithLifecycle()
-            Column(modifier = Modifier.testTag("bottom_bar_container")) {
-                MiniPlayer(
-                    player = state.player,
-                    progress = progress,
-                    isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
-                    onTogglePlayPause = viewModel::togglePlayPause,
-                    onToggleSave = {
-                        state.player.currentTrack?.let(viewModel::toggleSave)
-                    },
-                    onNextTrack = viewModel::nextTrack,
-                    onDismiss = viewModel::dismissPlayer,
-                )
-                AppNavBar(
-                    selectedTab = selectedTab,
-                    onTabSelect = { selectedTab = it },
-                )
-            }
-        },
-        floatingActionButton = {
-            if (selectedTab == NavigationTab.Home && !searchOpen) {
-                SearchFab(onClick = { searchOpen = true })
-            }
-        },
+            AppNavBar(
+                selectedTab = selectedTab,
+                onTabSelect = { selectedTab = it },
+            )
+        }
     ) { innerPadding ->
-        AnimatedContent(
-            targetState = selectedTab,
-            transitionSpec = {
-                (fadeIn(tween(220)) + scaleIn(
-                    initialScale = 0.975f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
-                )) togetherWith (fadeOut(tween(130)) + scaleOut(targetScale = 1.01f))
-            },
-            label = "screenTabTransition",
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-        ) { tab ->
-            when (tab) {
-                NavigationTab.Home -> HomeScreen(
-                    tracks = state.tracks,
-                    savedIds = savedIds,
-                    downloadedIds = downloadedIds,
-                    downloadingIds = state.downloadingIds,
-                    query = state.searchSummary,
-                    isLoading = state.isLoading,
-                    isRefreshing = state.isRefreshing,
-                    error = state.error,
-                    hasMore = state.hasMore,
-                    onOpenSearch = { searchOpen = true },
-                    onClearSearch = viewModel::clearSearch,
-                    onRefresh = viewModel::refresh,
-                    onLoadMore = viewModel::loadMore,
-                    onTrackClick = { viewModel.play(it, state.tracks) },
-                    onToggleSave = viewModel::toggleSave,
-                    onToggleDownload = viewModel::download,
-                )
+        ) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    (fadeIn(tween(220)) + scaleIn(
+                        initialScale = 0.975f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    )) togetherWith (fadeOut(tween(130)) + scaleOut(targetScale = 1.01f))
+                },
+                label = "screenTabTransition",
+                modifier = Modifier.fillMaxSize(),
+            ) { tab ->
+                when (tab) {
+                    NavigationTab.Home -> HomeScreen(
+                        tracks = state.tracks,
+                        savedIds = savedIds,
+                        downloadedIds = downloadedIds,
+                        downloadingIds = state.downloadingIds,
+                        query = state.searchSummary,
+                        isLoading = state.isLoading,
+                        isRefreshing = state.isRefreshing,
+                        error = state.error,
+                        hasMore = state.hasMore,
+                        onOpenSearch = { searchOpen = true },
+                        onClearSearch = viewModel::clearSearch,
+                        onRefresh = viewModel::refresh,
+                        onLoadMore = viewModel::loadMore,
+                        onTrackClick = { viewModel.play(it, state.tracks) },
+                        onToggleSave = viewModel::toggleSave,
+                        onToggleDownload = viewModel::download,
+                        bottomInset = bottomInset,
+                    )
 
-                NavigationTab.Library -> LibraryScreen(
-                    historyTracks = state.history,
-                    savedTracks = state.saved,
-                    downloadedTracks = state.downloads,
-                    downloadedIds = downloadedIds,
-                    downloadingIds = state.downloadingIds,
-                    onTrackClick = { track, list -> viewModel.play(track, list) },
-                    onToggleDownload = viewModel::download,
-                )
+                    NavigationTab.Library -> LibraryScreen(
+                        historyTracks = state.history,
+                        savedTracks = state.saved,
+                        downloadedTracks = state.downloads,
+                        downloadedIds = downloadedIds,
+                        downloadingIds = state.downloadingIds,
+                        onTrackClick = { track, list -> viewModel.play(track, list) },
+                        onToggleDownload = viewModel::download,
+                        bottomInset = bottomInset,
+                    )
 
-                NavigationTab.Settings -> SettingsScreen(
-                    blockedTags = state.blockedTags,
-                    downloadFolderLabel = state.downloadFolderLabel,
-                    downloadTreeUri = state.downloadTreeUri,
-                    tagLookup = viewModel::suggestTags,
-                    onAddBlockedTag = viewModel::addBlockedTag,
-                    onRemoveBlockedTag = viewModel::removeBlockedTag,
-                    onDownloadTreeChange = viewModel::setDownloadTree,
-                    onClearDownloads = viewModel::clearDownloads,
+                    NavigationTab.Settings -> SettingsScreen(
+                        blockedTags = state.blockedTags,
+                        downloadFolderLabel = state.downloadFolderLabel,
+                        downloadTreeUri = state.downloadTreeUri,
+                        tagLookup = viewModel::suggestTags,
+                        onAddBlockedTag = viewModel::addBlockedTag,
+                        onRemoveBlockedTag = viewModel::removeBlockedTag,
+                        onDownloadTreeChange = viewModel::setDownloadTree,
+                        onClearDownloads = viewModel::clearDownloads,
+                    )
+                }
+            }
+
+            if (selectedTab == NavigationTab.Home && !searchOpen) {
+                SearchFab(
+                    onClick = { searchOpen = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp + bottomInset),
                 )
             }
+
+            // Floats over the content, so the area around the pill is transparent.
+            MiniPlayer(
+                player = state.player,
+                progress = progress,
+                isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
+                onTogglePlayPause = viewModel::togglePlayPause,
+                onToggleSave = {
+                    state.player.currentTrack?.let(viewModel::toggleSave)
+                },
+                onNextTrack = viewModel::nextTrack,
+                onDismiss = viewModel::dismissPlayer,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 

@@ -60,6 +60,7 @@ fun HomeScreen(
     onTrackClick: (Track) -> Unit,
     onToggleSave: (Track) -> Unit,
     onToggleDownload: (Track) -> Unit,
+    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -91,7 +92,7 @@ fun HomeScreen(
                     start = Dimens.ScreenHorizontalPadding,
                     end = Dimens.ScreenHorizontalPadding,
                     top = 8.dp,
-                    bottom = 24.dp,
+                    bottom = 24.dp + bottomInset,
                 ),
             ) {
                 if (error != null && tracks.isNotEmpty()) {
