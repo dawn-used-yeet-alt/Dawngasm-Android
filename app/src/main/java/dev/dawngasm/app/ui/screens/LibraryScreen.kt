@@ -156,7 +156,9 @@ private fun TrackList(
         itemsIndexed(
             items = tracks,
             key = { _, track -> track.id },
-        ) { _, track ->
+        ) { index, track ->
+            // groupPosition/groupGap live in HomeScreen.kt (same package).
+            val position = groupPosition(index, tracks.size)
             TrackCard(
                 track = track,
                 isSaved = false,
@@ -165,10 +167,11 @@ private fun TrackList(
                 onTrackClick = onTrackClick,
                 onToggleSave = {},
                 onToggleDownload = { onToggleDownload(track) },
+                cardPosition = position,
                 showSaveAction = false,
                 modifier = Modifier.animateItem(),
             )
-            Spacer(modifier = Modifier.height(Dimens.CardGroupGap))
+            Spacer(modifier = Modifier.height(groupGap(position)))
         }
     }
 }
