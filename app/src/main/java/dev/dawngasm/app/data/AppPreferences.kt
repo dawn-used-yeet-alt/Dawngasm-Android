@@ -1,0 +1,70 @@
+package dev.dawngasm.app.data
+
+import android.content.Context
+import dev.dawngasm.app.model.SearchSyntax
+import dev.dawngasm.app.model.Track
+
+/**
+ * Small SharedPreferences-backed store. Saved/history/downloads are full track
+ * snapshots so the library still renders when the feed is unavailable.
+ */
+class AppPreferences(context: Context) {
+    private val prefs = context.getSharedPreferences("dawngasm", Context.MODE_PRIVATE)
+
+    fun sort(): String = prefs.getString(KEY_SORT, SearchSyntax.DEFAULT_SORT)
+        ?.takeIf { it in SearchSyntax.SORTS } ?: SearchSyntax.DEFAULT_SORT
+
+    fun window(): String = prefs.getString(KEY_WINDOW, SearchSyntax.DEFAULT_WINDOW)
+        ?.takeIf { SearchSyntax.normalizeWindow(it) != null } ?: SearchSyntax.DEFAULT_WINDOW
+
+    fun saveFeed(sort: String, window: String) {
+        prefs.edit().putString(KEY_SORT, sort).putString(KEY_WINDOW, window).apply()
+    }
+
+    fun blockedTags(): List<String> = readTags(KEY_BLOCKED_TAGS)
+
+    fun saveBlockedTags(tags: List<String>) {
+        prefs.edit().putString(KEY_BLOCKED_TAGS, tags.joinToString("\u0001")).apply()
+    }
+
+    fun downloadTreeUri(): String? = prefs.getString(KEY_DOWNLOAD_TREE, null)
+
+    fun saveDownloadTreeUri(uri: String?) {
+        prefs.edit().apply {
+            if (uri == null) remove(KEY_DOWNLOAD_TREE) else putString(KEY_DOWNLOAD_TREE, uri)
+        }.apply()
+    }
+
+    fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
+
+    fun saveSaved(tracks: List<Track>) {
+        prefs.edit().putString(KEY_SAVED, Track.listToJson(tracks)).apply()
+    }
+
+    fun history(): List<Track> = Track.listFromJson(prefs.getString(KEY_HISTORY, null))
+
+    fun saveHistory(tracks: List<Track>) {
+        prefs.edit().putString(KEY_HISTORY, Track.listToJson(tracks)).apply()
+    }
+
+    fun downloads(): List<Track> = Track.listFromJson(prefs.getString(KEY_DOWNLOADS, null))
+
+    fun saveDownloads(tracks: List<Track>) {
+        prefs.edit().putString(KEY_DOWNLOADS, Track.listToJson(tracks)).apply()
+    }
+
+    private fun readTags(key: String): List<String> {
+        val raw = prefs.getString(key, null) ?: return emptyList()
+        return raw.split('\u0001').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    }
+
+    private companion object {
+        const val KEY_SORT = "feed_sort"
+        const val KEY_WINDOW = "feed_window"
+        const val KEY_BLOCKED_TAGS = "blocked_tags"
+        const val KEY_DOWNLOAD_TREE = "download_tree"
+        const val KEY_SAVED = "saved_tracks"
+        const val KEY_HISTORY = "history_tracks"
+        const val KEY_DOWNLOADS = "downloaded_tracks"
+    }
+}
