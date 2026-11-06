@@ -32,3 +32,6 @@ Currently supported audio hosts:
 
 HotAudio PR is in the works.
 
+# If you want to try it anyway or don't care about hotaudio.net (fuck that site bro)
+
+You can download a release from the CI/Actions. The workflow builds the app every commit. 
