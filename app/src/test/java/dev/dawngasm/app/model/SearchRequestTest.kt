@@ -26,7 +26,14 @@ class SearchRequestTest {
     @Test
     fun changedSortOrWindowCountsAsFilter() {
         assertTrue(SearchRequest(sort = "new").hasFilters())
-        assertTrue(SearchRequest(window = "week").hasFilters())
+        assertTrue(SearchRequest(window = "month").hasFilters())
+    }
+
+    @Test
+    fun defaultWindowIsPastWeek() {
+        assertEquals("week", SearchSyntax.DEFAULT_WINDOW)
+        assertEquals("Top · Past week", SearchRequest().filtersLabel())
+        assertEquals("week", SearchRequest().window)
     }
 
     @Test

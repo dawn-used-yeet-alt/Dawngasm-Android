@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
-import dev.dawngasm.app.ui.components.CardGroupPosition
 import dev.dawngasm.app.ui.components.EmptyState
 import dev.dawngasm.app.ui.components.SearchRow
 import dev.dawngasm.app.ui.components.TrackCard
@@ -104,20 +103,9 @@ fun HomeScreen(
                 }
 
                 if (isLoading && tracks.isEmpty()) {
-                    items(8) { index ->
-                        TrackSkeleton(
-                            modifier = Modifier.animateItem(),
-                            cardPosition = skeletonPosition(index, 8),
-                        )
-                        Spacer(
-                            modifier = Modifier.height(
-                                if (skeletonPosition(index, 8) == CardGroupPosition.Bottom) {
-                                    Dimens.CardGroupGap
-                                } else {
-                                    Dimens.CardConnectedGap
-                                },
-                            ),
-                        )
+                    items(8) {
+                        TrackSkeleton(modifier = Modifier.animateItem())
+                        Spacer(modifier = Modifier.height(Dimens.CardGroupGap))
                     }
                 } else if (tracks.isEmpty() && error != null) {
                     item(key = "error_empty") {
@@ -151,8 +139,7 @@ fun HomeScreen(
                     itemsIndexed(
                         items = tracks,
                         key = { _, track -> track.id },
-                    ) { index, track ->
-                        val position = groupPosition(index, tracks.size)
+                    ) { _, track ->
                         TrackCard(
                             track = track,
                             isSaved = track.id in savedIds,
@@ -161,21 +148,10 @@ fun HomeScreen(
                             onTrackClick = onTrackClick,
                             onToggleSave = { onToggleSave(track) },
                             onToggleDownload = { onToggleDownload(track) },
-                            cardPosition = position,
                             showSaveAction = true,
                             modifier = Modifier.animateItem(),
                         )
-                        Spacer(
-                            modifier = Modifier.height(
-                                if (position == CardGroupPosition.Bottom ||
-                                    position == CardGroupPosition.Standalone
-                                ) {
-                                    Dimens.CardGroupGap
-                                } else {
-                                    Dimens.CardConnectedGap
-                                },
-                            ),
-                        )
+                        Spacer(modifier = Modifier.height(Dimens.CardGroupGap))
                     }
 
                     if (hasMore) {
@@ -239,16 +215,3 @@ private fun ErrorBanner(
         }
     }
 }
-
-internal fun groupPosition(index: Int, total: Int): CardGroupPosition {
-    if (total == 1) return CardGroupPosition.Standalone
-    if (index == total - 1) return CardGroupPosition.Bottom
-    return when (index % 4) {
-        0 -> CardGroupPosition.Top
-        3 -> CardGroupPosition.Bottom
-        else -> CardGroupPosition.Middle
-    }
-}
-
-private fun skeletonPosition(index: Int, total: Int): CardGroupPosition =
-    groupPosition(index, total)

@@ -33,7 +33,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.state.LibrarySubTab
-import dev.dawngasm.app.ui.components.CardGroupPosition
 import dev.dawngasm.app.ui.components.EmptyState
 import dev.dawngasm.app.ui.components.PillTabs
 import dev.dawngasm.app.ui.components.TrackCard
@@ -157,8 +156,7 @@ private fun TrackList(
         itemsIndexed(
             items = tracks,
             key = { _, track -> track.id },
-        ) { index, track ->
-            val position = groupPosition(index, tracks.size)
+        ) { _, track ->
             TrackCard(
                 track = track,
                 isSaved = false,
@@ -167,21 +165,10 @@ private fun TrackList(
                 onTrackClick = onTrackClick,
                 onToggleSave = {},
                 onToggleDownload = { onToggleDownload(track) },
-                cardPosition = position,
                 showSaveAction = false,
                 modifier = Modifier.animateItem(),
             )
-            Spacer(
-                modifier = Modifier.height(
-                    if (position == CardGroupPosition.Bottom ||
-                        position == CardGroupPosition.Standalone
-                    ) {
-                        Dimens.CardGroupGap
-                    } else {
-                        Dimens.CardConnectedGap
-                    },
-                ),
-            )
+            Spacer(modifier = Modifier.height(Dimens.CardGroupGap))
         }
     }
 }

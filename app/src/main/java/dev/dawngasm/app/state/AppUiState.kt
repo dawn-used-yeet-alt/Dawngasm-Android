@@ -19,7 +19,7 @@ data class AppUiState(
     val includeTags: List<String> = emptyList(),
     val excludeTags: List<String> = emptyList(),
     val sort: String = "top",
-    val window: String = "day",
+    val window: String = "week",
     val blockedTags: List<String> = emptyList(),
     val downloadTreeUri: String? = null,
     val downloadFolderLabel: String = "App storage (Music/Dawngasm)",

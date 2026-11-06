@@ -4,7 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,11 +30,11 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Tag
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +43,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,10 +54,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.BuildConfig
+import dev.dawngasm.app.model.SearchSyntax
+import dev.dawngasm.app.model.TagSuggestion
+import dev.dawngasm.app.util.compactScore
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import dev.dawngasm.app.ui.theme.Dimens
+
+private const val TAG_LOOKUP_DEBOUNCE_MS = 180L
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -60,6 +74,7 @@ fun SettingsScreen(
     blockedTags: List<String>,
     downloadFolderLabel: String,
     downloadTreeUri: String?,
+    tagLookup: suspend (String) -> List<TagSuggestion>,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
@@ -67,8 +82,40 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var showTagDialog by rememberSaveable { mutableStateOf(false) }
     var tagDraft by rememberSaveable { mutableStateOf("") }
+    var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
+    var tagSearching by remember { mutableStateOf(false) }
+
+    fun addBlockedTag(raw: String) {
+        val tag = SearchSyntax.normalizeTag(raw) ?: return
+        if (blockedTags.none { it.equals(tag, ignoreCase = true) }) onAddBlockedTag(tag)
+        tagDraft = ""
+        tagSuggestions = emptyList()
+    }
+
+    LaunchedEffect(tagDraft, blockedTags) {
+        val prefix = SearchSyntax.normalizeTag(tagDraft)
+        if (prefix.isNullOrEmpty()) {
+            tagSuggestions = emptyList()
+            tagSearching = false
+            return@LaunchedEffect
+        }
+        tagSearching = true
+        delay(TAG_LOOKUP_DEBOUNCE_MS)
+        val blockedLower = blockedTags.mapTo(HashSet()) { it.lowercase() }
+        val result = try {
+            tagLookup(prefix)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
+        tagSuggestions = result
+            .filter { it.tag.lowercase() !in blockedLower }
+            .distinctBy { it.tag.lowercase() }
+            .take(4)
+        tagSearching = false
+    }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -142,16 +189,85 @@ fun SettingsScreen(
                             }
                         }
                     }
-                    FilledTonalButton(
-                        onClick = {
-                            tagDraft = ""
-                            showTagDialog = true
-                        },
+
+                    OutlinedTextField(
+                        value = tagDraft,
+                        onValueChange = { tagDraft = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("blocked_tag_field"),
+                        singleLine = true,
                         shape = CircleShape,
+                        placeholder = { Text("Type a tag, e.g. incest") },
+                        trailingIcon = {
+                            when {
+                                tagSearching -> CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                tagDraft.isNotEmpty() -> IconButton(
+                                    onClick = {
+                                        tagDraft = ""
+                                        tagSuggestions = emptyList()
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Clear tag",
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { addBlockedTag(tagDraft) },
+                        ),
+                    )
+
+                    AnimatedVisibility(
+                        visible = tagSuggestions.isNotEmpty(),
+                        enter = fadeIn(),
+                        exit = fadeOut(),
                     ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text("Add blocked tag")
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Column {
+                                tagSuggestions.forEach { suggestion ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { addBlockedTag(suggestion.tag) }
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = suggestion.tag,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            text = compactScore(suggestion.count),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Spacer(modifier = Modifier.size(8.dp))
+                                        Icon(
+                                            imageVector = Icons.Outlined.Add,
+                                            contentDescription = "Block ${suggestion.tag}",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -241,37 +357,6 @@ fun SettingsScreen(
                 )
             }
         }
-    }
-
-    if (showTagDialog) {
-        AlertDialog(
-            onDismissRequest = { showTagDialog = false },
-            title = { Text("Block a tag") },
-            text = {
-                OutlinedTextField(
-                    value = tagDraft,
-                    onValueChange = { tagDraft = it },
-                    singleLine = true,
-                    placeholder = { Text("e.g. incest") },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (tagDraft.isNotBlank()) onAddBlockedTag(tagDraft)
-                        showTagDialog = false
-                    },
-                ) {
-                    Text("Add")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTagDialog = false }) {
-                    Text("Cancel")
-                }
-            },
-        )
     }
 }
 

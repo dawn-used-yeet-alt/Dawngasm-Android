@@ -115,7 +115,6 @@ fun TrackCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
-                    HostPill(track)
                     Text(
                         text = buildString {
                             append(track.displayAuthor)
@@ -195,22 +194,6 @@ fun TrackCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun HostPill(track: Track) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.75f),
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        Text(
-            text = track.host.label,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp),
-            maxLines = 1,
-        )
     }
 }
 
