@@ -10,8 +10,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +41,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
@@ -77,7 +74,7 @@ import kotlinx.coroutines.delay
 private const val MAX_TAG_SUGGESTIONS = 6
 private const val TAG_LOOKUP_DEBOUNCE_MS = 180L
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSheet(
     initialQuery: String,
@@ -92,10 +89,14 @@ fun SearchSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val keyboard = LocalSoftwareKeyboardController.current
     var text by rememberSaveable { mutableStateOf(initialQuery) }
-    var includeTags by remember { mutableStateOf(initialTags.toList()) }
-    var excludeTags by remember { mutableStateOf(initialExcludeTags.toList()) }
+    var includeText by rememberSaveable { mutableStateOf(initialTags.joinToString(", ")) }
+    var excludeText by rememberSaveable { mutableStateOf(initialExcludeTags.joinToString(", ")) }
     var sort by rememberSaveable { mutableStateOf(defaultSort) }
     var window by rememberSaveable { mutableStateOf(defaultWindow) }
+
+    // The tag fields themselves show the selection, so no chip rows are needed.
+    val includeTags = remember(includeText) { SearchSyntax.parseTagList(includeText) }
+    val excludeTags = remember(excludeText) { SearchSyntax.parseTagList(excludeText) }
 
     val preview = SearchRequest(text, includeTags, excludeTags, sort, window).summary()
 
@@ -177,11 +178,12 @@ fun SearchSheet(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 TagPickerField(
-                    label = "Tags to block",
-                    supportingText = "eg m4f",
+                    label = "Block tags",
+                    supportingText = "eg m4f, m4m",
                     icon = Icons.Rounded.RemoveCircleOutline,
+                    value = excludeText,
+                    onValueChange = { excludeText = it },
                     selected = excludeTags,
-                    onSelectedChange = { excludeTags = it },
                     tagLookup = tagLookup,
                     modifier = Modifier.weight(1f),
                 )
@@ -202,11 +204,12 @@ fun SearchSheet(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 TagPickerField(
-                    label = "Tags to search",
-                    supportingText = "must match exactly",
+                    label = "Search tags",
+                    supportingText = "eg f4m, script fill",
                     icon = Icons.Rounded.LocalOffer,
+                    value = includeText,
+                    onValueChange = { includeText = it },
                     selected = includeTags,
-                    onSelectedChange = { includeTags = it },
                     tagLookup = tagLookup,
                     modifier = Modifier.weight(1f),
                 )
@@ -281,32 +284,42 @@ fun SearchSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TagPickerField(
     label: String,
     supportingText: String,
     icon: ImageVector,
+    value: String,
+    onValueChange: (String) -> Unit,
     selected: List<String>,
-    onSelectedChange: (List<String>) -> Unit,
     tagLookup: suspend (String) -> List<TagSuggestion>,
     modifier: Modifier = Modifier,
 ) {
-    var query by rememberSaveable { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var searching by remember { mutableStateOf(false) }
 
-    fun addTag(raw: String) {
-        val tag = SearchSyntax.normalizeTag(raw) ?: return
-        if (selected.none { it.equals(tag, ignoreCase = true) }) {
-            onSelectedChange(selected + tag)
-        }
-        query = ""
+    // Everything after the last comma is the tag currently being typed.
+    val draft = value.substringAfterLast(',').trim()
+
+    /** Strips blanks and the trailing separator, e.g. `m4f, ,` -> `m4f`. */
+    fun commitDraft() {
+        onValueChange(SearchSyntax.parseTagList(value).joinToString(", "))
         suggestions = emptyList()
     }
 
-    LaunchedEffect(query, selected) {
-        val prefix = SearchSyntax.normalizeTag(query)
+    fun addTag(raw: String) {
+        val tag = SearchSyntax.normalizeTag(raw) ?: return
+        val lastComma = value.lastIndexOf(',')
+        val committed = if (lastComma >= 0) value.substring(0, lastComma) else ""
+        val kept = SearchSyntax.parseTagList(committed)
+            .filterNot { it.equals(tag, ignoreCase = true) }
+        onValueChange((kept + tag).joinToString(", ") + ", ")
+        suggestions = emptyList()
+    }
+
+    LaunchedEffect(draft) {
+        val prefix = SearchSyntax.normalizeTag(draft)
         if (prefix.isNullOrEmpty()) {
             suggestions = emptyList()
             searching = false
@@ -331,8 +344,8 @@ private fun TagPickerField(
 
     Column(modifier = modifier) {
         OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
+            value = value,
+            onValueChange = onValueChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("tag_field_$label"),
@@ -352,7 +365,7 @@ private fun TagPickerField(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
                     )
-                    query.isNotEmpty() -> IconButton(onClick = { query = "" }) {
+                    value.isNotEmpty() -> IconButton(onClick = { onValueChange("") }) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
                             contentDescription = "Clear $label",
@@ -361,9 +374,11 @@ private fun TagPickerField(
                     }
                 }
             },
-            supportingText = { Text(supportingText) },
+            supportingText = {
+                Text(supportingText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { addTag(query) }),
+            keyboardActions = KeyboardActions(onDone = { commitDraft() }),
         )
 
         AnimatedVisibility(
@@ -415,35 +430,6 @@ private fun TagPickerField(
                             )
                         }
                     }
-                }
-            }
-        }
-
-        if (selected.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(6.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                selected.forEach { tag ->
-                    InputChip(
-                        selected = true,
-                        onClick = { onSelectedChange(selected - tag) },
-                        label = {
-                            Text(
-                                text = tag,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "Remove $tag",
-                                modifier = Modifier.size(16.dp),
-                            )
-                        },
-                    )
                 }
             }
         }

@@ -40,10 +40,10 @@ data class AppUiState(
         get() {
             val request = searchRequest
             val queryText = request.summary()
-            return when {
-                !request.hasFilters() -> ""
-                queryText.isEmpty() -> request.filtersLabel()
-                else -> "$queryText · ${request.filtersLabel()}"
+            return if (queryText.isEmpty()) {
+                ""
+            } else {
+                "$queryText · ${request.filtersLabel()}"
             }
         }
 }

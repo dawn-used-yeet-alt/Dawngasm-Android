@@ -97,6 +97,15 @@ object SearchSyntax {
             .takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * Turns a comma-separated field value into clean tags, so the visible text
+     * in each tag field is the single source of truth for that filter.
+     */
+    fun parseTagList(raw: String): List<String> =
+        raw.split(',')
+            .mapNotNull { normalizeTag(it) }
+            .distinctBy { it.lowercase(Locale.ROOT) }
+
     fun activeToken(input: String): String {
         if (input.isEmpty() || input.last().isWhitespace()) return ""
         val trimmed = input.trimEnd()
