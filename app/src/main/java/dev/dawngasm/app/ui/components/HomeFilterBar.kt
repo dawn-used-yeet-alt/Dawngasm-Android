@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
@@ -38,7 +38,7 @@ fun HomeFilterBar(
     ) {
         FilterMenuChip(
             label = SearchSyntax.sortLabel(sort),
-            icon = Icons.Rounded.Sort,
+            icon = Icons.AutoMirrored.Rounded.Sort,
             options = SearchSyntax.SORTS.map { it to SearchSyntax.sortLabel(it) },
             onSelect = onSort,
         )

@@ -41,7 +41,7 @@ class SearchSyntaxTest {
         assertEquals("30d", SearchSyntax.normalizeWindow("30D"))
         assertEquals("day", SearchSyntax.normalizeWindow(" Day "))
         assertNull(SearchSyntax.normalizeWindow("0d"))
-        assertNull(SearchSyntax.normalizeWindow("3651d"))
+        assertNull(SearchSyntax.normalizeWindow("36501d"))
         assertNull(SearchSyntax.normalizeWindow("weekdays"))
     }
 

@@ -25,7 +25,7 @@ object SearchSyntax {
     val SORTS = listOf("top", "new", "relevance")
     val WINDOWS = listOf("day", "week", "month", "year", "all")
 
-    private val customWindow = Regex("""^(\d{1,4})d$""")
+    private val customWindow = Regex("""^(\d{1,5})d$""")
 
     data class Parsed(
         val text: String,
@@ -61,7 +61,7 @@ object SearchSyntax {
         if (value in WINDOWS) return value
         val match = customWindow.matchEntire(value) ?: return null
         val days = match.groupValues[1].toIntOrNull() ?: return null
-        return if (days in 1..3650) "${days}d" else null
+        return if (days in 1..36500) "${days}d" else null
     }
 
     fun windowLabel(window: String): String = when (window) {
@@ -83,16 +83,19 @@ object SearchSyntax {
     }
 
     fun activeToken(input: String): String {
+        if (input.isEmpty() || input.last().isWhitespace()) return ""
         val trimmed = input.trimEnd()
-        if (trimmed.isEmpty() || trimmed.endsWith(" ")) return ""
         val space = trimmed.indexOfLast { it.isWhitespace() }
         return if (space == -1) trimmed else trimmed.substring(space + 1)
     }
 
     /** Replaces the last, partially typed token with the chosen suggestion. */
     fun replaceActiveToken(input: String, token: String): String {
+        if (input.isEmpty() || input.last().isWhitespace()) {
+            val base = input.trimEnd()
+            return if (base.isEmpty()) "$token " else "$base $token "
+        }
         val trimmed = input.trimEnd()
-        if (trimmed.isEmpty() || trimmed.endsWith(" ")) return "$input$token "
         val space = trimmed.indexOfLast { it.isWhitespace() }
         val prefix = if (space == -1) "" else trimmed.substring(0, space + 1)
         return "$prefix$token "

@@ -222,7 +222,14 @@ class DawngasmApi(
             "day", "1d" -> "1d"
             "week", "7d" -> "7d"
             "month", "year", "all" -> window
-            else -> if (Regex("""^\d{1,4}d$""").matches(window)) window else "all"
+            else -> {
+                val days = Regex("""^(\d{1,5})d$""")
+                    .find(window)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.toIntOrNull()
+                if (days != null && days in 1..36500) "${days}d" else "all"
+            }
         }
     }
 }

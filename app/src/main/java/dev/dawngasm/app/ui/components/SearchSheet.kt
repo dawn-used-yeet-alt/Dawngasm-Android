@@ -23,10 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -272,7 +272,7 @@ private fun SuggestionRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val icon = if (suggestion.token.startsWith("sort:")) {
-                Icons.Rounded.Sort
+                Icons.AutoMirrored.Rounded.Sort
             } else {
                 Icons.Rounded.Schedule
             }
