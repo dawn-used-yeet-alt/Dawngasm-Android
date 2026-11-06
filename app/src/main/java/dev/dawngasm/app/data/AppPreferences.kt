@@ -11,6 +11,18 @@ import dev.dawngasm.app.model.Track
 class AppPreferences(context: Context) {
     private val prefs = context.getSharedPreferences("dawngasm", Context.MODE_PRIVATE)
 
+    init {
+        // One-time reset so existing installs pick up the new Top / Past week
+        // home default instead of a previously persisted window.
+        if (prefs.getInt(KEY_DEFAULTS_VERSION, 0) < 1) {
+            prefs.edit()
+                .remove(KEY_SORT)
+                .remove(KEY_WINDOW)
+                .putInt(KEY_DEFAULTS_VERSION, 1)
+                .apply()
+        }
+    }
+
     fun sort(): String = prefs.getString(KEY_SORT, SearchSyntax.DEFAULT_SORT)
         ?.takeIf { it in SearchSyntax.SORTS } ?: SearchSyntax.DEFAULT_SORT
 
@@ -61,6 +73,7 @@ class AppPreferences(context: Context) {
     private companion object {
         const val KEY_SORT = "feed_sort"
         const val KEY_WINDOW = "feed_window"
+        const val KEY_DEFAULTS_VERSION = "defaults_version"
         const val KEY_BLOCKED_TAGS = "blocked_tags"
         const val KEY_DOWNLOAD_TREE = "download_tree"
         const val KEY_SAVED = "saved_tracks"

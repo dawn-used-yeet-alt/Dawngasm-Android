@@ -20,7 +20,7 @@ data class SearchSuggestion(
  */
 object SearchSyntax {
     const val DEFAULT_SORT = "top"
-    const val DEFAULT_WINDOW = "day"
+    const val DEFAULT_WINDOW = "week"
 
     val SORTS = listOf("top", "new", "relevance")
     val WINDOWS = listOf("day", "week", "month", "year", "all")

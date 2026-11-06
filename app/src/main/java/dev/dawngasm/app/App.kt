@@ -139,6 +139,7 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                     blockedTags = state.blockedTags,
                     downloadFolderLabel = state.downloadFolderLabel,
                     downloadTreeUri = state.downloadTreeUri,
+                    tagLookup = viewModel::suggestTags,
                     onAddBlockedTag = viewModel::addBlockedTag,
                     onRemoveBlockedTag = viewModel::removeBlockedTag,
                     onDownloadTreeChange = viewModel::setDownloadTree,
