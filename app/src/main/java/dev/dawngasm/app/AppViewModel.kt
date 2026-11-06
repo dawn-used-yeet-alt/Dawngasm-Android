@@ -20,7 +20,9 @@ import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DawngasmApi
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.TrackDownloader
+import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
+import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.state.AppUiState
 import dev.dawngasm.app.state.PlaybackProgress
@@ -142,31 +144,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadFeed(reset = false)
     }
 
-    fun applySearch(input: String) {
-        _uiState.update { it.copy(query = input.trim()) }
+    fun applySearch(request: SearchRequest) {
+        // Keep inline top:/sort: support for anyone who still types it, while
+        // the sheet's dropdowns provide the visible controls.
+        val parsed = SearchSyntax.parse(request.text)
+        _uiState.update {
+            it.copy(
+                query = parsed.text,
+                includeTags = request.includeTags.mapNotNull(SearchSyntax::normalizeTag).distinct(),
+                excludeTags = request.excludeTags.mapNotNull(SearchSyntax::normalizeTag).distinct(),
+                sort = parsed.sort ?: request.sort,
+                window = parsed.window ?: request.window,
+            )
+        }
+        persistFeed()
         loadFeed(reset = true)
     }
 
     fun clearSearch() {
-        _uiState.update { it.copy(query = "") }
-        loadFeed(reset = true)
-    }
-
-    fun setSort(sort: String) {
-        if (sort == _uiState.value.sort) return
-        val query = SearchSyntax.withoutToken(_uiState.value.query, "sort:")
-        _uiState.update { it.copy(sort = sort, query = query) }
+        _uiState.update {
+            it.copy(
+                query = "",
+                includeTags = emptyList(),
+                excludeTags = emptyList(),
+                sort = SearchSyntax.DEFAULT_SORT,
+                window = SearchSyntax.DEFAULT_WINDOW,
+            )
+        }
         persistFeed()
         loadFeed(reset = true)
     }
 
-    fun setWindow(window: String) {
-        if (window == _uiState.value.window) return
-        val query = SearchSyntax.withoutToken(_uiState.value.query, "top:")
-        _uiState.update { it.copy(window = window, query = query) }
-        persistFeed()
-        loadFeed(reset = true)
-    }
+    /** Tag autocomplete for the search sheet. Failures simply show no rows. */
+    suspend fun suggestTags(prefix: String): List<TagSuggestion> =
+        runCatching { api.tagSuggestions(prefix) }.getOrDefault(emptyList())
 
     fun addBlockedTag(raw: String) {
         val tag = raw.trim().lowercase()
@@ -194,10 +205,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val generation = feedGeneration.incrementAndGet()
         feedJob?.cancel()
 
-        val parsed = SearchSyntax.parse(state.query)
-        val sort = parsed.sort ?: state.sort
-        val window = parsed.window ?: state.window
-        val text = parsed.text
+        val sort = state.sort
+        val window = state.window
+        val text = state.query
         val page = if (reset) 0 else feedPage + 1
 
         _uiState.update {
@@ -215,7 +225,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     sort = sort,
                     window = window,
                     query = text,
-                    blockedTags = state.blockedTags,
+                    includeTags = state.includeTags,
+                    excludeTags = (state.blockedTags + state.excludeTags).distinct(),
                     page = page,
                 )
                 if (generation != feedGeneration.get()) return@launch

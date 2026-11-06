@@ -1,6 +1,7 @@
 package dev.dawngasm.app.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DawngasmApiTest {
@@ -38,5 +39,23 @@ class DawngasmApiTest {
     fun pageLimitMatchesIndexMaximumUsefully() {
         assertEquals(100, DawngasmApi.PAGE_LIMIT)
         assertEquals(99, DawngasmApi.MAX_PAGE_INDEX)
+    }
+
+    @Test
+    fun parsesTagAutocompleteRows() {
+        val body = """
+            {"tags":[{"tag":"f4m","count":94946},{"tag":"script fill","count":104656}]}
+        """.trimIndent()
+        val tags = DawngasmApi.parseTags(body)
+        assertEquals(2, tags.size)
+        assertEquals("f4m", tags[0].tag)
+        assertEquals(94946L, tags[0].count)
+        assertEquals("script fill", tags[1].tag)
+    }
+
+    @Test
+    fun ignoresBrokenTagResponses() {
+        assertTrue(DawngasmApi.parseTags("not json").isEmpty())
+        assertTrue(DawngasmApi.parseTags("""{"tags":[]}""").isEmpty())
     }
 }
