@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.webkit.CookieManager
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -64,15 +65,22 @@ class HotaudioClearanceActivity : ComponentActivity() {
     }
 
     private fun captureClearance(webView: WebView?): Boolean {
-        val cookie = CookieManager.getInstance().getCookie(HOTAUDIO_URL).orEmpty()
-        if (!cookie.contains("cf_clearance", ignoreCase = true)) return false
+        val cookieManager = CookieManager.getInstance()
+        val cookieApex = cookieManager.getCookie(HOTAUDIO_URL).orEmpty()
+        val cookieWww = cookieManager.getCookie(HOTAUDIO_WWW_URL).orEmpty()
+        val rawCookie = listOf(cookieApex, cookieWww)
+            .filter { it.isNotBlank() }
+            .flatMap { it.split("; ") }
+            .distinct()
+            .joinToString("; ")
+        if (!rawCookie.contains("cf_clearance", ignoreCase = true)) return false
         val userAgent = webView?.settings?.userAgentString
             ?: WebSettings.getDefaultUserAgent(this)
-        AppPreferences(this).saveHotaudioClearance(cookie, userAgent)
+        AppPreferences(this).saveHotaudioClearance(rawCookie, userAgent)
         runCatching {
-            net.hotaudio.extractor.setClearance(cookie, userAgent)
+            net.hotaudio.extractor.setClearance(rawCookie, userAgent)
         }
-        CookieManager.getInstance().flush()
+        cookieManager.flush()
         setResult(RESULT_OK, Intent().putExtra(EXTRA_CONNECTED, true))
         finish()
         return true
@@ -81,6 +89,7 @@ class HotaudioClearanceActivity : ComponentActivity() {
     companion object {
         const val EXTRA_CONNECTED = "hotaudio_connected"
         private const val HOTAUDIO_URL = "https://hotaudio.net/"
+        private const val HOTAUDIO_WWW_URL = "https://www.hotaudio.net/"
     }
 }
 
@@ -95,9 +104,11 @@ private fun HotaudioClearanceScreen(
     var connected by remember { mutableStateOf(false) }
 
     fun refreshStatus() {
-        connected = CookieManager.getInstance()
-            .getCookie("https://hotaudio.net/")
-            ?.contains("cf_clearance", ignoreCase = true) == true
+        val cookieManager = CookieManager.getInstance()
+        val cookieApex = cookieManager.getCookie("https://hotaudio.net/").orEmpty()
+        val cookieWww = cookieManager.getCookie("https://www.hotaudio.net/").orEmpty()
+        connected = cookieApex.contains("cf_clearance", ignoreCase = true) ||
+            cookieWww.contains("cf_clearance", ignoreCase = true)
     }
 
     BackHandler {
@@ -178,6 +189,16 @@ private fun HotaudioClearanceScreen(
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 loading = false
                                 refreshStatus()
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView?,
+                                request: WebResourceRequest?,
+                                error: WebResourceError?,
+                            ) {
+                                if (request?.isForMainFrame == true) {
+                                    loading = false
+                                }
                             }
 
                             override fun shouldOverrideUrlLoading(

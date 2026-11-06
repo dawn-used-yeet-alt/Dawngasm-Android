@@ -5,6 +5,7 @@ import android.net.Uri
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
 import java.io.File
+import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -140,36 +141,134 @@ class AudioResolver(private val context: Context? = null) {
         )
     }
 
+    private data class HotaudioEndpoint(val pageUrl: String, val apiBase: String)
+
+    private fun isDnsOrTransientNetworkError(error: Throwable): Boolean {
+        val detail = when (error) {
+            is net.hotaudio.extractor.FfiException.Failed -> error.detail
+            is net.hotaudio.extractor.FfiException.Panic -> error.detail
+            else -> error.message.orEmpty()
+        }
+        val text = "${error.message.orEmpty()} $detail"
+        return text.contains("failed to lookup address information", ignoreCase = true) ||
+            text.contains("No address associated with hostname", ignoreCase = true) ||
+            text.contains("Name or service not known", ignoreCase = true) ||
+            text.contains("connection refused", ignoreCase = true) ||
+            text.contains("connection reset", ignoreCase = true) ||
+            text.contains("timeout", ignoreCase = true) ||
+            text.contains("timed out", ignoreCase = true) ||
+            text.contains("network is unreachable", ignoreCase = true)
+    }
+
+    private fun warmDns(host: String): Boolean {
+        return try {
+            val addrs = InetAddress.getAllByName(host)
+            addrs != null && addrs.isNotEmpty()
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     private fun hotaudio(track: Track): ResolvedAudio {
+        // Ensure clearance from preferences is passed down to native FFI if available
+        context?.let { ctx ->
+            AppPreferences(ctx).hotaudioClearance()?.let { (cookie, ua) ->
+                runCatching { net.hotaudio.extractor.setClearance(cookie, ua) }
+            }
+        }
+
         val cacheRoot = context?.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
         val hotaudioDir = File(cacheRoot, "hotaudio").apply { mkdirs() }
         val targetFile = File(hotaudioDir, "${track.id}.m4a")
         if (!targetFile.exists() || targetFile.length() == 0L) {
             val tempFile = File(hotaudioDir, "${track.id}.${System.currentTimeMillis()}.tmp")
-            try {
-                net.hotaudio.extractor.downloadToFile(
-                    pageUrl = track.pageUrl,
-                    path = tempFile.absolutePath,
-                    options = null,
-                    progress = null,
-                    cancel = null,
-                )
-                if (!tempFile.renameTo(targetFile)) {
-                    tempFile.copyTo(targetFile, overwrite = true)
+
+            var normalizedUrl = track.pageUrl.trim()
+            if (normalizedUrl.startsWith("http://", ignoreCase = true)) {
+                normalizedUrl = "https" + normalizedUrl.substring(4)
+            }
+
+            // Warm up Android DNS resolution via JVM for apex and www domains
+            val canResolveApex = warmDns("hotaudio.net")
+            val canResolveWww = warmDns("www.hotaudio.net")
+
+            val candidates = mutableListOf<HotaudioEndpoint>()
+            if (normalizedUrl.contains("www.hotaudio.net", ignoreCase = true)) {
+                candidates.add(HotaudioEndpoint(normalizedUrl, "https://www.hotaudio.net"))
+                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://www.hotaudio.net", "://hotaudio.net"), "https://hotaudio.net"))
+            } else if (canResolveWww && !canResolveApex) {
+                // Apex failed DNS resolution in JVM, but www succeeded: prioritize www
+                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://hotaudio.net", "://www.hotaudio.net"), "https://www.hotaudio.net"))
+                candidates.add(HotaudioEndpoint(normalizedUrl, "https://hotaudio.net"))
+            } else {
+                candidates.add(HotaudioEndpoint(normalizedUrl, "https://hotaudio.net"))
+                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://hotaudio.net", "://www.hotaudio.net"), "https://www.hotaudio.net"))
+            }
+
+            var lastError: Throwable? = null
+            var succeeded = false
+
+            for (endpoint in candidates) {
+                for (attempt in 1..2) {
                     tempFile.delete()
-                }
-            } catch (error: Throwable) {
-                tempFile.delete()
-                val message = when (error) {
-                    is net.hotaudio.extractor.FfiException.Failed -> {
-                        if (error.code == "challenge") {
-                            "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
-                        } else {
-                            "hotaudio error (${error.code}): ${error.detail}"
+                    try {
+                        val options = net.hotaudio.extractor.DownloadOptions(
+                            apiBase = endpoint.apiBase,
+                        )
+                        net.hotaudio.extractor.downloadToFile(
+                            pageUrl = endpoint.pageUrl,
+                            path = tempFile.absolutePath,
+                            options = options,
+                            progress = null,
+                            cancel = null,
+                        )
+                        if (!tempFile.renameTo(targetFile)) {
+                            tempFile.copyTo(targetFile, overwrite = true)
+                            tempFile.delete()
+                        }
+                        succeeded = true
+                        break
+                    } catch (error: Throwable) {
+                        tempFile.delete()
+                        lastError = error
+                        val isDnsOrNetwork = isDnsOrTransientNetworkError(error)
+                        if (isDnsOrNetwork && attempt < 2) {
+                            try {
+                                Thread.sleep(750)
+                            } catch (_: InterruptedException) {}
+                            continue
+                        }
+                        if (!isDnsOrNetwork) {
+                            // Non-network error (e.g. Cloudflare challenge or cancelled) — don't retry candidate
+                            break
                         }
                     }
-                    is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${error.detail}"
-                    else -> error.message ?: "hotaudio extraction failed"
+                }
+                if (succeeded) break
+            }
+
+            if (!succeeded) {
+                val err = lastError
+                val message = when (err) {
+                    is net.hotaudio.extractor.FfiException.Failed -> {
+                        if (err.code == "challenge") {
+                            "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
+                        } else if (isDnsOrTransientNetworkError(err)) {
+                            "hotaudio DNS resolution failed (${err.detail}). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
+                        } else {
+                            "hotaudio error (${err.code}): ${err.detail}"
+                        }
+                    }
+                    is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${err.detail}"
+                    null -> "hotaudio extraction failed"
+                    else -> {
+                        val errText = err.message ?: err.toString()
+                        if (isDnsOrTransientNetworkError(err)) {
+                            "hotaudio DNS resolution failed ($errText). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
+                        } else {
+                            errText
+                        }
+                    }
                 }
                 throw ResolveException(message)
             }

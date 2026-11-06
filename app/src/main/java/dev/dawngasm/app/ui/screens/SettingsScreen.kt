@@ -387,6 +387,11 @@ fun SettingsScreen(
                             }
                         }
                     }
+                    Text(
+                        text = "Tip: If hotaudio tracks fail with a DNS lookup error, your carrier may be blocking the site. Enable Private DNS in Android Settings (e.g. set provider to dns.google or one.one.one.one).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
