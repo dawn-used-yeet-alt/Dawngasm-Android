@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
+import dev.dawngasm.app.state.PlaybackProgress
 import dev.dawngasm.app.state.PlayerUiState
 import dev.dawngasm.app.ui.theme.Dimens
 import dev.dawngasm.app.util.formatDuration
@@ -66,6 +67,7 @@ import kotlin.math.roundToInt
 @Composable
 fun MiniPlayer(
     player: PlayerUiState,
+    progress: PlaybackProgress,
     isSaved: Boolean,
     onTogglePlayPause: () -> Unit,
     onToggleSave: () -> Unit,
@@ -92,6 +94,7 @@ fun MiniPlayer(
             MiniPlayerBody(
                 track = track,
                 player = player,
+                progress = progress,
                 isSaved = isSaved,
                 onTogglePlayPause = onTogglePlayPause,
                 onToggleSave = onToggleSave,
@@ -106,6 +109,7 @@ fun MiniPlayer(
 private fun MiniPlayerBody(
     track: Track,
     player: PlayerUiState,
+    progress: PlaybackProgress,
     isSaved: Boolean,
     onTogglePlayPause: () -> Unit,
     onToggleSave: () -> Unit,
@@ -116,8 +120,8 @@ private fun MiniPlayerBody(
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 40.dp.toPx() }
-    val progress = if (player.durationMs > 0) {
-        (player.positionMs.toFloat() / player.durationMs.toFloat()).coerceIn(0f, 1f)
+    val fraction = if (progress.durationMs > 0) {
+        (progress.positionMs.toFloat() / progress.durationMs.toFloat()).coerceIn(0f, 1f)
     } else {
         0f
     }
@@ -193,11 +197,11 @@ private fun MiniPlayerBody(
                         )
                         val subtitle = buildString {
                             append(current.displayAuthor)
-                            if (player.durationMs > 0) {
+                            if (progress.durationMs > 0) {
                                 append(" · ")
-                                append(formatDuration(player.positionMs))
+                                append(formatDuration(progress.positionMs))
                                 append(" / ")
-                                append(formatDuration(player.durationMs))
+                                append(formatDuration(progress.durationMs))
                             }
                         }
                         Text(
@@ -311,9 +315,9 @@ private fun MiniPlayerBody(
                 }
             }
 
-            if (player.durationMs > 0) {
+            if (progress.durationMs > 0) {
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { fraction },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()

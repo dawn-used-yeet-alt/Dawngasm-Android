@@ -23,6 +23,7 @@ import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.state.AppUiState
+import dev.dawngasm.app.state.PlaybackProgress
 import dev.dawngasm.app.state.PlayerUiState
 import dev.dawngasm.app.state.UiMessage
 import java.util.concurrent.atomic.AtomicLong
@@ -64,6 +65,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
 
+    private val _progress = MutableStateFlow(PlaybackProgress())
+    val progress: StateFlow<PlaybackProgress> = _progress.asStateFlow()
+
     private val _messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 16)
     val messages: SharedFlow<UiMessage> = _messages.asSharedFlow()
 
@@ -84,17 +88,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> updatePlayer { copy(isLoading = true) }
                     Player.STATE_READY -> updatePlayer {
-                        copy(
-                            isLoading = false,
-                            durationMs = player.duration.coerceAtLeast(0L),
-                            positionMs = player.currentPosition.coerceAtLeast(0L),
-                        )
+                        copy(isLoading = false)
                     }
                     Player.STATE_ENDED -> {
+                        _progress.value = PlaybackProgress()
                         if (queue.isNotEmpty()) {
                             nextTrack()
                         } else {
-                            updatePlayer { copy(isPlaying = false, positionMs = 0L) }
+                            updatePlayer { copy(isPlaying = false) }
                         }
                     }
                     else -> Unit
@@ -382,14 +383,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = playWhenReady
+        _progress.value = PlaybackProgress()
         _uiState.update {
             it.copy(
                 player = it.player.copy(
                     currentTrack = track,
                     isLoading = true,
                     isPlaying = playWhenReady,
-                    positionMs = 0L,
-                    durationMs = 0L,
                     error = null,
                 ),
             )
@@ -425,6 +425,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         playJob?.cancel()
         player.stop()
         player.clearMediaItems()
+        _progress.value = PlaybackProgress()
         _uiState.update { it.copy(player = PlayerUiState()) }
     }
 
@@ -440,8 +441,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (_uiState.value.player.currentTrack != null) {
                     val position = player.currentPosition.coerceAtLeast(0L)
                     val duration = player.duration.takeIf { it > 0L }
-                        ?: _uiState.value.player.durationMs
-                    updatePlayer { copy(positionMs = position, durationMs = duration) }
+                        ?: _progress.value.durationMs
+                    val next = PlaybackProgress(position, duration)
+                    if (next != _progress.value) _progress.value = next
                 }
                 delay(500L)
             }

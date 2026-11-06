@@ -6,8 +6,6 @@ data class PlayerUiState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
-    val positionMs: Long = 0L,
-    val durationMs: Long = 0L,
     val error: String? = null,
 )
 

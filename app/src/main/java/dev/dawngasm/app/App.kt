@@ -64,9 +64,11 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
+            val progress by viewModel.progress.collectAsStateWithLifecycle()
             Column(modifier = Modifier.testTag("bottom_bar_container")) {
                 MiniPlayer(
                     player = state.player,
+                    progress = progress,
                     isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
                     onTogglePlayPause = viewModel::togglePlayPause,
                     onToggleSave = {
