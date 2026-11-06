@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.ui.components.CardGroupPosition
 import dev.dawngasm.app.ui.components.EmptyState
-import dev.dawngasm.app.ui.components.HomeFilterBar
 import dev.dawngasm.app.ui.components.SearchRow
 import dev.dawngasm.app.ui.components.TrackCard
 import dev.dawngasm.app.ui.components.TrackSkeleton
@@ -49,16 +48,12 @@ fun HomeScreen(
     downloadedIds: Set<String>,
     downloadingIds: Set<String>,
     query: String,
-    sort: String,
-    window: String,
     isLoading: Boolean,
     isRefreshing: Boolean,
     error: String?,
     hasMore: Boolean,
     onOpenSearch: () -> Unit,
     onClearSearch: () -> Unit,
-    onSort: (String) -> Unit,
-    onWindow: (String) -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onTrackClick: (Track) -> Unit,
@@ -81,25 +76,6 @@ fun HomeScreen(
                 top = Dimens.SearchRowTopPadding,
             ),
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = Dimens.ScreenHorizontalPadding,
-                    end = Dimens.ScreenHorizontalPadding,
-                    top = 8.dp,
-                    bottom = 6.dp,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HomeFilterBar(
-                sort = sort,
-                window = window,
-                onSort = onSort,
-                onWindow = onWindow,
-                modifier = Modifier.weight(1f),
-            )
-        }
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,

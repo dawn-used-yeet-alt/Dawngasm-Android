@@ -76,7 +76,7 @@ fun SearchRow(
                 modifier = Modifier.weight(1f),
             ) { hasQuery ->
                 Text(
-                    text = if (hasQuery) query else "Search titles, tags, or top:7d",
+                    text = if (hasQuery) query else "Search titles and tags",
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (hasQuery) {
                         MaterialTheme.colorScheme.onSurface

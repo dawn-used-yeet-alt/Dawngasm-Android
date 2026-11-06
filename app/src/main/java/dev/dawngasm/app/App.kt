@@ -111,17 +111,13 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                     savedIds = savedIds,
                     downloadedIds = downloadedIds,
                     downloadingIds = state.downloadingIds,
-                    query = state.query,
-                    sort = state.sort,
-                    window = state.window,
+                    query = state.searchSummary,
                     isLoading = state.isLoading,
                     isRefreshing = state.isRefreshing,
                     error = state.error,
                     hasMore = state.hasMore,
                     onOpenSearch = { searchOpen = true },
                     onClearSearch = viewModel::clearSearch,
-                    onSort = viewModel::setSort,
-                    onWindow = viewModel::setWindow,
                     onRefresh = viewModel::refresh,
                     onLoadMore = viewModel::loadMore,
                     onTrackClick = { viewModel.play(it, state.tracks) },
@@ -155,11 +151,14 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
     if (searchOpen) {
         SearchSheet(
             initialQuery = state.query,
+            initialTags = state.includeTags,
+            initialExcludeTags = state.excludeTags,
             defaultSort = state.sort,
             defaultWindow = state.window,
+            tagLookup = viewModel::suggestTags,
             onDismiss = { searchOpen = false },
-            onApply = { query ->
-                viewModel.applySearch(query)
+            onApply = { request ->
+                viewModel.applySearch(request)
                 searchOpen = false
             },
         )
@@ -205,16 +204,12 @@ private fun HomePreview() {
             downloadedIds = setOf("3"),
             downloadingIds = emptySet(),
             query = "",
-            sort = "top",
-            window = "day",
             isLoading = false,
             isRefreshing = false,
             error = null,
             hasMore = false,
             onOpenSearch = {},
             onClearSearch = {},
-            onSort = {},
-            onWindow = {},
             onRefresh = {},
             onLoadMore = {},
             onTrackClick = {},

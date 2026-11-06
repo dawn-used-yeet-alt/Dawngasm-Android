@@ -1,5 +1,6 @@
 package dev.dawngasm.app.state
 
+import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.Track
 
 data class AppUiState(
@@ -15,6 +16,8 @@ data class AppUiState(
     val downloadingIds: Set<String> = emptySet(),
     val player: PlayerUiState = PlayerUiState(),
     val query: String = "",
+    val includeTags: List<String> = emptyList(),
+    val excludeTags: List<String> = emptyList(),
     val sort: String = "top",
     val window: String = "day",
     val blockedTags: List<String> = emptyList(),
@@ -23,6 +26,26 @@ data class AppUiState(
 ) {
     val savedIds: Set<String> get() = saved.mapTo(HashSet()) { it.id }
     val downloadedIds: Set<String> get() = downloads.mapTo(HashSet()) { it.id }
+
+    val searchRequest: SearchRequest
+        get() = SearchRequest(
+            text = query,
+            includeTags = includeTags,
+            excludeTags = excludeTags,
+            sort = sort,
+            window = window,
+        )
+
+    val searchSummary: String
+        get() {
+            val request = searchRequest
+            val queryText = request.summary()
+            return when {
+                !request.hasFilters() -> ""
+                queryText.isEmpty() -> request.filtersLabel()
+                else -> "$queryText · ${request.filtersLabel()}"
+            }
+        }
 }
 
 data class UiMessage(

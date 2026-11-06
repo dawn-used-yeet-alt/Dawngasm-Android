@@ -82,6 +82,21 @@ object SearchSyntax {
         else -> "Top"
     }
 
+    /**
+     * Cleans a typed or suggested tag: `[F4M]`, `-m4f`, and `M4F` all become
+     * `m4f`, while multi-word tags such as `script fill` stay intact.
+     */
+    fun normalizeTag(raw: String): String? {
+        var tag = raw.trim().removePrefix("-").trim()
+        if (tag.length >= 2 && tag.startsWith("[") && tag.endsWith("]")) {
+            tag = tag.substring(1, tag.length - 1).trim()
+        }
+        return tag
+            .lowercase(Locale.ROOT)
+            .replace(Regex("\\s+"), " ")
+            .takeIf { it.isNotEmpty() }
+    }
+
     fun activeToken(input: String): String {
         if (input.isEmpty() || input.last().isWhitespace()) return ""
         val trimmed = input.trimEnd()

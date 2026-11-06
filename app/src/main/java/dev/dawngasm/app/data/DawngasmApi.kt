@@ -1,7 +1,10 @@
 package dev.dawngasm.app.data
 
 import dev.dawngasm.app.model.AudioLinks
+import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
@@ -28,11 +31,14 @@ data class SearchPage(
 class DawngasmApi(
     private val baseUrl: String = DEFAULT_BASE_URL,
 ) {
+    private val tagCache = ConcurrentHashMap<String, Pair<Long, List<TagSuggestion>>>()
+
     suspend fun search(
         sort: String,
         window: String,
         query: String,
-        blockedTags: List<String>,
+        includeTags: List<String>,
+        excludeTags: List<String>,
         page: Int,
         limit: Int = PAGE_LIMIT,
     ): SearchPage = withContext(Dispatchers.IO) {
@@ -45,8 +51,10 @@ class DawngasmApi(
             .addQueryParameter("window", apiWindow(window))
             .apply {
                 if (query.isNotBlank()) addQueryParameter("text", query.trim())
-                val blocked = blockedTags.filter { it.isNotBlank() }.joinToString(",")
-                if (blocked.isNotEmpty()) addQueryParameter("excludeTags", blocked)
+                val included = includeTags.filter { it.isNotBlank() }.joinToString(",")
+                if (included.isNotEmpty()) addQueryParameter("tags", included)
+                val excluded = excludeTags.filter { it.isNotBlank() }.joinToString(",")
+                if (excluded.isNotEmpty()) addQueryParameter("excludeTags", excluded)
             }
             .build()
 
@@ -77,6 +85,30 @@ class DawngasmApi(
         }
         SearchPage(tracks.values.toList(), parsed.hasMore, page)
     }
+
+    /**
+     * Tag autocomplete backed by `/tags?prefix=`. Results are cached briefly so
+     * typing and backspacing does not hammer the index.
+     */
+    suspend fun tagSuggestions(prefix: String, limit: Int = TAG_LIMIT): List<TagSuggestion> =
+        withContext(Dispatchers.IO) {
+            val key = "${prefix.trim().lowercase(Locale.ROOT)}|$limit"
+            val now = System.currentTimeMillis()
+            tagCache[key]?.takeIf { now - it.first < TAG_CACHE_TTL_MS }?.let {
+                return@withContext it.second
+            }
+
+            val url = "$baseUrl/tags".toHttpUrl().newBuilder()
+                .addQueryParameter("limit", limit.toString())
+                .apply {
+                    val clean = prefix.trim().lowercase(Locale.ROOT)
+                    if (clean.isNotEmpty()) addQueryParameter("prefix", clean)
+                }
+                .build()
+            val tags = parseTags(get(url))
+            tagCache[key] = now to tags
+            tags
+        }
 
     private fun get(url: HttpUrl): String {
         val request = Request.Builder()
@@ -211,7 +243,21 @@ class DawngasmApi(
         const val DEFAULT_BASE_URL = "https://dawngasm.dawnusedyeet.workers.dev"
         const val PAGE_LIMIT = 100
         const val MAX_PAGE_INDEX = 99
+        const val TAG_LIMIT = 12
+        private const val TAG_CACHE_TTL_MS = 10 * 60 * 1000L
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        fun parseTags(body: String): List<TagSuggestion> {
+            val root = runCatching { JSONObject(body) }.getOrNull() ?: return emptyList()
+            val array = root.optJSONArray("tags") ?: return emptyList()
+            return buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val tag = item.optString("tag").trim()
+                    if (tag.isNotEmpty()) add(TagSuggestion(tag, item.optLong("count", 0L)))
+                }
+            }
+        }
 
         fun apiSort(sort: String): String = when (sort) {
             "new", "relevance" -> sort
