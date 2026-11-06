@@ -144,12 +144,16 @@ class AudioResolver(private val context: Context? = null) {
         val cacheRoot = context?.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
         val hotaudioDir = File(cacheRoot, "hotaudio").apply { mkdirs() }
         val targetFile = File(hotaudioDir, "${track.id}.m4a")
+        val pageUrl = track.pageUrl.ifBlank { track.audioUrl }
         if (!targetFile.exists() || targetFile.length() == 0L) {
             val tempFile = File(hotaudioDir, "${track.id}.${System.currentTimeMillis()}.tmp")
             try {
                 net.hotaudio.extractor.downloadToFile(
-                    url = track.pageUrl,
+                    pageUrl = pageUrl,
                     path = tempFile.absolutePath,
+                    options = null,
+                    progress = null,
+                    cancel = null,
                 )
                 if (!tempFile.renameTo(targetFile)) {
                     tempFile.copyTo(targetFile, overwrite = true)

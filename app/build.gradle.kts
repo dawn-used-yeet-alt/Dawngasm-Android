@@ -126,97 +126,164 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-val generateHotaudioBindings by tasks.registering {
-    val outputDir = layout.projectDirectory.dir("src/main/java/net/hotaudio/extractor")
-    val outputFile = outputDir.file("hotaudio_ffi.kt").asFile
-    outputs.file(outputFile)
+abstract class GenerateHotaudioBindingsTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
 
-    doLast {
-        if (!outputFile.exists()) {
-            val hasCargo = try {
-                project.exec { commandLine("cargo", "--version") }.exitValue == 0
-            } catch (e: Exception) {
-                false
+    @TaskAction
+    fun generate() {
+        val outDir = outputDir.get().asFile
+        val outputFile = File(outDir, "hotaudio_ffi.kt")
+        if (outputFile.exists()) return
+
+        val hasCargo = try {
+            ProcessBuilder("cargo", "--version").start().waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
+        if (!hasCargo) {
+            println("Cargo not found; skipping hotaudio bindings generation")
+            return
+        }
+
+        val tempDir = Files.createTempDirectory("hotaudio-extractor").toFile()
+        try {
+            println("Cloning hotaudio-extractor to generate UniFFI bindings...")
+            val cloneProc = ProcessBuilder("git", "clone", "--depth", "1", "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git", tempDir.absolutePath)
+                .inheritIO()
+                .start()
+            if (cloneProc.waitFor() != 0) {
+                throw GradleException("Failed to clone hotaudio-extractor")
             }
-            if (hasCargo) {
-                val tempDir = Files.createTempDirectory("hotaudio-extractor").toFile()
-                try {
-                    println("Cloning hotaudio-extractor to generate UniFFI bindings...")
-                    project.exec {
-                        commandLine("git", "clone", "--depth", "1", "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git", tempDir.absolutePath)
-                    }
-                    println("Building bindings with scripts/build-bindings.sh...")
-                    project.exec {
-                        workingDir = tempDir
-                        commandLine("bash", "scripts/build-bindings.sh", "--release")
-                    }
-                    val generated = File(tempDir.absolutePath, "bindings/out/net/hotaudio/extractor/hotaudio_ffi.kt")
-                    if (generated.exists()) {
-                        outputDir.asFile.mkdirs()
-                        generated.copyTo(outputFile, overwrite = true)
-                        println("Successfully generated ${outputFile.absolutePath}")
-                    } else {
-                        throw GradleException("Failed to locate generated hotaudio_ffi.kt at ${generated.absolutePath}")
-                    }
-                    val tlsFile = File(tempDir.absolutePath, "bindings/android/HotaudioTls.kt")
-                    val targetTls = outputDir.file("HotaudioTls.kt").asFile
-                    if (tlsFile.exists() && !targetTls.exists()) {
-                        tlsFile.copyTo(targetTls, overwrite = true)
-                    }
-                } finally {
-                    tempDir.deleteRecursively()
-                }
+
+            println("Building bindings with scripts/build-bindings.sh...")
+            val buildProc = ProcessBuilder("bash", "scripts/build-bindings.sh", "--release")
+                .directory(tempDir)
+                .inheritIO()
+                .start()
+            if (buildProc.waitFor() != 0) {
+                throw GradleException("Failed to build bindings")
+            }
+
+            val generated = File(tempDir, "bindings/out/net/hotaudio/extractor/hotaudio_ffi.kt")
+            if (generated.exists()) {
+                outDir.mkdirs()
+                generated.copyTo(outputFile, overwrite = true)
+                println("Successfully generated ${outputFile.absolutePath}")
             } else {
-                println("Cargo not found; skipping hotaudio bindings generation")
+                throw GradleException("Failed to locate generated hotaudio_ffi.kt at ${generated.absolutePath}")
             }
+
+            val tlsFile = File(tempDir, "bindings/android/HotaudioTls.kt")
+            val targetTls = File(outDir, "HotaudioTls.kt")
+            if (tlsFile.exists() && !targetTls.exists()) {
+                tlsFile.copyTo(targetTls, overwrite = true)
+            }
+        } finally {
+            tempDir.deleteRecursively()
         }
     }
 }
 
-val buildHotaudioNative by tasks.registering {
-    dependsOn(generateHotaudioBindings)
-    val jniDir = layout.projectDirectory.dir("src/main/jniLibs")
-    val arm64So = jniDir.file("arm64-v8a/libhotaudio_ffi.so").asFile
-    val x86_64So = jniDir.file("x86_64/libhotaudio_ffi.so").asFile
-    outputs.files(arm64So, x86_64So)
+abstract class BuildHotaudioNativeTask : DefaultTask() {
+    @get:OutputDirectory
+    abstract val jniDir: DirectoryProperty
 
-    doLast {
-        if (!arm64So.exists() || !x86_64So.exists()) {
-            val hasCargo = try {
-                project.exec { commandLine("cargo", "--version") }.exitValue == 0
+    @TaskAction
+    fun buildNative() {
+        val destDir = jniDir.get().asFile
+        val arm64So = File(destDir, "arm64-v8a/libhotaudio_ffi.so")
+        val x86_64So = File(destDir, "x86_64/libhotaudio_ffi.so")
+        if (arm64So.exists() && x86_64So.exists()) return
+
+        val hasCargo = try {
+            ProcessBuilder("cargo", "--version").start().waitFor() == 0
+        } catch (e: Exception) {
+            false
+        }
+        if (!hasCargo) {
+            println("Cargo not found; skipping native build")
+            return
+        }
+
+        val tempDir = Files.createTempDirectory("hotaudio-native").toFile()
+        try {
+            println("Cloning hotaudio-extractor for native build...")
+            val cloneProc = ProcessBuilder("git", "clone", "--depth", "1", "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git", tempDir.absolutePath)
+                .inheritIO()
+                .start()
+            if (cloneProc.waitFor() != 0) {
+                println("Warning: git clone failed")
+                return
+            }
+
+            val hasCargoNdk = try {
+                ProcessBuilder("cargo", "ndk", "--version").start().waitFor() == 0
             } catch (e: Exception) {
                 false
             }
-            if (hasCargo) {
-                val tempDir = Files.createTempDirectory("hotaudio-native").toFile()
-                try {
-                    project.exec {
-                        commandLine("git", "clone", "--depth", "1", "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git", tempDir.absolutePath)
-                    }
-                    val hasCargoNdk = try {
-                        project.exec { commandLine("cargo", "ndk", "--version") }.exitValue == 0
-                    } catch (e: Exception) {
-                        false
-                    }
-                    if (!hasCargoNdk) {
-                        println("Installing cargo-ndk...")
-                        project.exec { commandLine("cargo", "install", "cargo-ndk", "--locked") }
-                    }
-                    project.exec { commandLine("rustup", "target", "add", "aarch64-linux-android", "x86_64-linux-android") }
-                    println("Building libhotaudio_ffi.so for arm64-v8a and x86_64...")
-                    project.exec {
-                        workingDir = File(tempDir.absolutePath, "bindings")
-                        commandLine("cargo", "ndk", "-t", "arm64-v8a", "-t", "x86_64", "-o", jniDir.asFile.absolutePath, "build", "--manifest-path", "Cargo.toml", "--release", "-p", "hotaudio-ffi")
-                    }
-                    println("Successfully built native libraries in ${jniDir.asFile.absolutePath}")
-                } catch (e: Exception) {
-                    println("Warning: Could not build native libraries: ${e.message}")
-                } finally {
-                    tempDir.deleteRecursively()
+            if (!hasCargoNdk) {
+                println("Installing cargo-ndk...")
+                val installProc = ProcessBuilder("cargo", "install", "cargo-ndk", "--locked").inheritIO().start()
+                if (installProc.waitFor() != 0) {
+                    println("Warning: cargo install cargo-ndk failed")
+                    return
                 }
             }
+
+            ProcessBuilder("rustup", "target", "add", "aarch64-linux-android", "x86_64-linux-android").inheritIO().start().waitFor()
+
+            val androidHome = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+            val ndkDir = System.getenv("ANDROID_NDK_HOME")?.let { File(it) }
+                ?: if (androidHome != null) {
+                    val ndkParent = File(androidHome, "ndk")
+                    if (ndkParent.exists()) {
+                        ndkParent.listFiles()?.filter { it.isDirectory }?.maxByOrNull { it.name }
+                    } else null
+                } else null
+
+            val cmd = mutableListOf("cargo", "ndk")
+            if (ndkDir != null && ndkDir.exists()) {
+                cmd.add("--ndk-path")
+                cmd.add(ndkDir.absolutePath)
+            }
+            cmd.addAll(listOf(
+                "-t", "arm64-v8a",
+                "-t", "x86_64",
+                "-o", destDir.absolutePath,
+                "build",
+                "--manifest-path", "Cargo.toml",
+                "--release",
+                "-p", "hotaudio-ffi"
+            ))
+
+            println("Building libhotaudio_ffi.so for arm64-v8a and x86_64: ${cmd.joinToString(" ")}")
+            val bindingsDir = File(tempDir, "bindings")
+            val buildProc = ProcessBuilder(cmd)
+                .directory(bindingsDir)
+                .inheritIO()
+                .start()
+            val exit = buildProc.waitFor()
+            if (exit == 0) {
+                println("Successfully built native libraries in ${destDir.absolutePath}")
+            } else {
+                println("Warning: cargo ndk exited with code $exit")
+            }
+        } catch (e: Exception) {
+            println("Warning: Could not build native libraries: ${e.message}")
+        } finally {
+            tempDir.deleteRecursively()
         }
     }
+}
+
+val generateHotaudioBindings = tasks.register<GenerateHotaudioBindingsTask>("generateHotaudioBindings") {
+    outputDir.set(layout.projectDirectory.dir("src/main/java/net/hotaudio/extractor"))
+}
+
+val buildHotaudioNative = tasks.register<BuildHotaudioNativeTask>("buildHotaudioNative") {
+    dependsOn(generateHotaudioBindings)
+    jniDir.set(layout.projectDirectory.dir("src/main/jniLibs"))
 }
 
 tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }.configureEach {
