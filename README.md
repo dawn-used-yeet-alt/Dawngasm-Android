@@ -18,7 +18,7 @@ Instead, Dawngasm uses my own ["database"](https://dawngasm.dawnusedyeet.workers
 
 I don't collect any(yes any) user data, and I don't want or intend to.
 
-The only tracking you might encounter comes from third-party services, such as Cloudflare or the audio hosting platforms you connect to. Which I can't realistically do nothing about.
+The only tracking you might encounter comes from third-party services, such as Cloudflare or the audio hosting platforms you connect to. Which I can't realistically do anything about.
 
 # Development status
 
