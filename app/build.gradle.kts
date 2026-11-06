@@ -1,3 +1,5 @@
+import java.io.File
+import java.nio.file.Files
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -137,7 +139,7 @@ val generateHotaudioBindings by tasks.registering {
                 false
             }
             if (hasCargo) {
-                val tempDir = java.nio.file.Files.createTempDirectory("hotaudio-extractor").toFile()
+                val tempDir = Files.createTempDirectory("hotaudio-extractor").toFile()
                 try {
                     println("Cloning hotaudio-extractor to generate UniFFI bindings...")
                     project.exec {
@@ -148,7 +150,7 @@ val generateHotaudioBindings by tasks.registering {
                         workingDir = tempDir
                         commandLine("bash", "scripts/build-bindings.sh", "--release")
                     }
-                    val generated = File(tempDir, "bindings/out/net/hotaudio/extractor/hotaudio_ffi.kt")
+                    val generated = File(tempDir.absolutePath, "bindings/out/net/hotaudio/extractor/hotaudio_ffi.kt")
                     if (generated.exists()) {
                         outputDir.asFile.mkdirs()
                         generated.copyTo(outputFile, overwrite = true)
@@ -156,7 +158,7 @@ val generateHotaudioBindings by tasks.registering {
                     } else {
                         throw GradleException("Failed to locate generated hotaudio_ffi.kt at ${generated.absolutePath}")
                     }
-                    val tlsFile = File(tempDir, "bindings/android/HotaudioTls.kt")
+                    val tlsFile = File(tempDir.absolutePath, "bindings/android/HotaudioTls.kt")
                     val targetTls = outputDir.file("HotaudioTls.kt").asFile
                     if (tlsFile.exists() && !targetTls.exists()) {
                         tlsFile.copyTo(targetTls, overwrite = true)
@@ -186,7 +188,7 @@ val buildHotaudioNative by tasks.registering {
                 false
             }
             if (hasCargo) {
-                val tempDir = java.nio.file.Files.createTempDirectory("hotaudio-native").toFile()
+                val tempDir = Files.createTempDirectory("hotaudio-native").toFile()
                 try {
                     project.exec {
                         commandLine("git", "clone", "--depth", "1", "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git", tempDir.absolutePath)
@@ -203,7 +205,7 @@ val buildHotaudioNative by tasks.registering {
                     project.exec { commandLine("rustup", "target", "add", "aarch64-linux-android", "x86_64-linux-android") }
                     println("Building libhotaudio_ffi.so for arm64-v8a and x86_64...")
                     project.exec {
-                        workingDir = File(tempDir, "bindings")
+                        workingDir = File(tempDir.absolutePath, "bindings")
                         commandLine("cargo", "ndk", "-t", "arm64-v8a", "-t", "x86_64", "-o", jniDir.asFile.absolutePath, "build", "--manifest-path", "Cargo.toml", "--release", "-p", "hotaudio-ffi")
                     }
                     println("Successfully built native libraries in ${jniDir.asFile.absolutePath}")
