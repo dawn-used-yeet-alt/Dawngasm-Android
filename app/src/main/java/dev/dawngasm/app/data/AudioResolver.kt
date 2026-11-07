@@ -219,7 +219,7 @@ class AudioResolver(private val context: Context? = null) {
                     val options = net.hotaudio.extractor.DownloadOptions(
                         trackId = null,
                         apiBase = "https://hotaudio.net",
-                        delayMs = 0u,
+                        delayMs = 250u,
                         initialKeysJson = null,
                     )
                     net.hotaudio.extractor.downloadToFile(
@@ -242,11 +242,19 @@ class AudioResolver(private val context: Context? = null) {
                     tempFile.delete()
                     lastError = error
                     val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
+                    val isRateLimit = isRateLimitError(error)
                     if (isChallenge) {
                         // IP mismatch against clearance — try alternate family
                         continue@familyLoop
                     }
-                    // For rate limits or other fatal errors, stop early rather than stalling
+                    if (isRateLimit && family != familiesToTry.last()) {
+                        // Rate limited on this IP / family — wait 2.5s and try alternate IP family
+                        try {
+                            Thread.sleep(2500)
+                        } catch (_: InterruptedException) {}
+                        continue@familyLoop
+                    }
+                    // Fatal error, stop early rather than stalling
                     break@familyLoop
                 }
             }
@@ -258,7 +266,7 @@ class AudioResolver(private val context: Context? = null) {
                         "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
                     }
                     err != null && isRateLimitError(err) -> {
-                        "hotaudio rate limit reached (too many requests) — please wait a few seconds and try again"
+                        "hotaudio rate limit reached (too many requests) — please wait 20–30 seconds before trying again"
                     }
                     err != null && isDnsOrTransientNetworkError(err) -> {
                         val detail = (err as? net.hotaudio.extractor.FfiException.Failed)?.detail
