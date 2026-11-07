@@ -199,26 +199,9 @@ class AudioResolver(private val context: Context? = null) {
             if (normalizedUrl.startsWith("http://", ignoreCase = true)) {
                 normalizedUrl = "https" + normalizedUrl.substring(4)
             }
+            val pageUrl = normalizedUrl.replace("://www.hotaudio.net", "://hotaudio.net")
 
-            // Warm up Android DNS resolution via JVM for apex and www domains
-            val canResolveApex = warmDns("hotaudio.net")
-            val canResolveWww = warmDns("www.hotaudio.net")
-
-            val candidates = mutableListOf<HotaudioEndpoint>()
-            if (normalizedUrl.contains("www.hotaudio.net", ignoreCase = true)) {
-                candidates.add(HotaudioEndpoint(normalizedUrl, "https://www.hotaudio.net"))
-                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://www.hotaudio.net", "://hotaudio.net"), "https://hotaudio.net"))
-            } else if (canResolveWww && !canResolveApex) {
-                // Apex failed DNS resolution in JVM, but www succeeded: prioritize www
-                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://hotaudio.net", "://www.hotaudio.net"), "https://www.hotaudio.net"))
-                candidates.add(HotaudioEndpoint(normalizedUrl, "https://hotaudio.net"))
-            } else {
-                candidates.add(HotaudioEndpoint(normalizedUrl, "https://hotaudio.net"))
-                candidates.add(HotaudioEndpoint(normalizedUrl.replace("://hotaudio.net", "://www.hotaudio.net"), "https://www.hotaudio.net"))
-            }
-
-            // Dual-stack IP family matching: try preferred family first, then fallback
-            val ipFamilies = listOfNotNull(
+            val familiesToTry = listOfNotNull(
                 savedFamily,
                 if (savedFamily == "ipv4") "ipv6" else "ipv4",
                 "any",
@@ -227,74 +210,44 @@ class AudioResolver(private val context: Context? = null) {
             var lastError: Throwable? = null
             var succeeded = false
 
-            familyLoop@ for (family in ipFamilies) {
+            familyLoop@ for (family in familiesToTry) {
                 runCatching { net.hotaudio.extractor.setIpFamily(family) }
                 runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", family, true) }
 
-                for (endpoint in candidates) {
-                    for (attempt in 1..2) {
+                tempFile.delete()
+                try {
+                    val options = net.hotaudio.extractor.DownloadOptions(
+                        trackId = null,
+                        apiBase = "https://hotaudio.net",
+                        delayMs = 0u,
+                        initialKeysJson = null,
+                    )
+                    net.hotaudio.extractor.downloadToFile(
+                        pageUrl = pageUrl,
+                        path = tempFile.absolutePath,
+                        options = options,
+                        progress = null,
+                        cancel = null,
+                    )
+                    if (!tempFile.renameTo(targetFile)) {
+                        tempFile.copyTo(targetFile, overwrite = true)
                         tempFile.delete()
-                        try {
-                            val options = net.hotaudio.extractor.DownloadOptions(
-                                trackId = null,
-                                apiBase = endpoint.apiBase,
-                                delayMs = 400u,
-                                initialKeysJson = null,
-                            )
-                            net.hotaudio.extractor.downloadToFile(
-                                pageUrl = endpoint.pageUrl,
-                                path = tempFile.absolutePath,
-                                options = options,
-                                progress = null,
-                                cancel = null,
-                            )
-                            if (!tempFile.renameTo(targetFile)) {
-                                tempFile.copyTo(targetFile, overwrite = true)
-                                tempFile.delete()
-                            }
-                            succeeded = true
-                            if (family != "any") {
-                                prefs?.saveHotaudioIpFamily(family)
-                            }
-                            break@familyLoop
-                        } catch (error: Throwable) {
-                            tempFile.delete()
-                            lastError = error
-                            val isDnsOrNetwork = isDnsOrTransientNetworkError(error)
-                            val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
-                            val isRateLimit = isRateLimitError(error)
-
-                            if (isChallenge) {
-                                // Clearance rejected by Cloudflare — could be IP mismatch, try next IP family
-                                break
-                            }
-
-                            if (isRateLimit) {
-                                if (attempt < 2) {
-                                    try {
-                                        Thread.sleep(2500)
-                                    } catch (_: InterruptedException) {}
-                                    continue
-                                }
-                                try {
-                                    Thread.sleep(1500)
-                                } catch (_: InterruptedException) {}
-                                break
-                            }
-
-                            if (isDnsOrNetwork) {
-                                if (attempt < 2) {
-                                    try {
-                                        Thread.sleep(500)
-                                    } catch (_: InterruptedException) {}
-                                    continue
-                                }
-                            } else {
-                                // Non-network / non-challenge / non-rate-limit fatal error
-                                break@familyLoop
-                            }
-                        }
                     }
+                    succeeded = true
+                    if (family != "any") {
+                        prefs?.saveHotaudioIpFamily(family)
+                    }
+                    break@familyLoop
+                } catch (error: Throwable) {
+                    tempFile.delete()
+                    lastError = error
+                    val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
+                    if (isChallenge) {
+                        // IP mismatch against clearance — try alternate family
+                        continue@familyLoop
+                    }
+                    // For rate limits or other fatal errors, stop early rather than stalling
+                    break@familyLoop
                 }
             }
 
