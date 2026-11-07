@@ -1,5 +1,6 @@
 package dev.dawngasm.app.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +61,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.BuildConfig
+import dev.dawngasm.app.HotaudioClearanceActivity
+import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.util.compactScore
@@ -75,6 +79,9 @@ fun SettingsScreen(
     downloadFolderLabel: String,
     downloadTreeUri: String?,
     tagLookup: suspend (String) -> List<TagSuggestion>,
+    hotaudioConnected: Boolean,
+    onHotaudioClearanceChanged: () -> Unit,
+    onClearHotaudioClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
@@ -82,6 +89,18 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val clearanceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
+    }
+    val prefs = remember { AppPreferences(context) }
+    val clearanceIp = remember(hotaudioConnected) {
+        if (hotaudioConnected) prefs.hotaudioClientIp() else null
+    }
+    val clearanceFamily = remember(hotaudioConnected) {
+        if (hotaudioConnected) prefs.hotaudioIpFamily()?.uppercase() else null
+    }
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
@@ -339,6 +358,63 @@ fun SettingsScreen(
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
                     Spacer(modifier = Modifier.size(8.dp))
                     Text("Remove downloaded entries")
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                icon = Icons.Outlined.Language,
+                title = "hotaudio",
+                subtitle = "hotaudio hides its audio behind a Cloudflare check. Open the site in the app, pass the check, and the clearance is saved for playback and downloads.",
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val clearanceStatus = if (hotaudioConnected) {
+                        buildString {
+                            append("Clearance saved")
+                            if (!clearanceIp.isNullOrBlank()) {
+                                append(" (")
+                                if (!clearanceFamily.isNullOrBlank()) append("$clearanceFamily: ")
+                                append(clearanceIp)
+                                append(")")
+                            } else if (!clearanceFamily.isNullOrBlank()) {
+                                append(" ($clearanceFamily)")
+                            }
+                        }
+                    } else {
+                        "No clearance saved"
+                    }
+                    Text(
+                        text = clearanceStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (hotaudioConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                clearanceLauncher.launch(
+                                    Intent(context, HotaudioClearanceActivity::class.java),
+                                )
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Text(if (hotaudioConnected) "Check again" else "Open hotaudio check")
+                        }
+                        if (hotaudioConnected) {
+                            TextButton(onClick = onClearHotaudioClearance) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+                    Text(
+                        text = "Tip: If hotaudio tracks fail with a DNS lookup error, your carrier may be blocking the site. Enable Private DNS in Android Settings (e.g. set provider to dns.google or one.one.one.one).",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
