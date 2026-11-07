@@ -101,4 +101,19 @@ class SearchSyntaxTest {
         assertTrue(SearchSyntax.suggestions("").isEmpty())
         assertTrue(SearchSyntax.suggestions("rain").isEmpty())
     }
+
+    @Test
+    fun parsesHostAndExcludeHostTokens() {
+        val parsed = SearchSyntax.parse("rain host:soundgasm -host:whyp sort:new")
+        assertEquals("rain", parsed.text)
+        assertEquals("new", parsed.sort)
+        assertEquals(listOf("soundgasm"), parsed.hosts)
+        assertEquals(listOf("whyp"), parsed.excludeHosts)
+    }
+
+    @Test
+    fun stripsHostTokensWithWithoutToken() {
+        assertEquals("rain", SearchSyntax.withoutToken("rain host:soundgasm", "host:"))
+        assertEquals("rain", SearchSyntax.withoutToken("rain -host:whyp", "-host:"))
+    }
 }

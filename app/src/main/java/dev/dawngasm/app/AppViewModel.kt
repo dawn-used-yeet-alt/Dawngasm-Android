@@ -145,9 +145,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun applySearch(request: SearchRequest) {
-        // Keep inline top:/sort: support for anyone who still types it, while
+        // Keep inline top:/sort:/host: support for anyone who still types it, while
         // the sheet's dropdowns provide the visible controls.
         val parsed = SearchSyntax.parse(request.text)
+        val combinedHosts = (request.hosts + parsed.hosts).distinct()
+        val combinedExcludeHosts = (request.excludeHosts + parsed.excludeHosts).distinct()
         _uiState.update {
             it.copy(
                 query = parsed.text,
@@ -155,6 +157,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 excludeTags = request.excludeTags.mapNotNull(SearchSyntax::normalizeTag).distinct(),
                 sort = parsed.sort ?: request.sort,
                 window = parsed.window ?: request.window,
+                hosts = combinedHosts,
+                excludeHosts = combinedExcludeHosts,
             )
         }
         persistFeed()
@@ -169,6 +173,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 excludeTags = emptyList(),
                 sort = SearchSyntax.DEFAULT_SORT,
                 window = SearchSyntax.DEFAULT_WINDOW,
+                hosts = emptyList(),
+                excludeHosts = emptyList(),
             )
         }
         persistFeed()
@@ -228,6 +234,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     includeTags = state.includeTags,
                     excludeTags = (state.blockedTags + state.excludeTags).distinct(),
                     page = page,
+                    hosts = state.hosts,
+                    excludeHosts = state.excludeHosts,
                 )
                 if (generation != feedGeneration.get()) return@launch
                 feedPage = result.page

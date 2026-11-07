@@ -31,12 +31,16 @@ object SearchSyntax {
         val text: String,
         val sort: String?,
         val window: String?,
+        val hosts: List<String> = emptyList(),
+        val excludeHosts: List<String> = emptyList(),
     )
 
     fun parse(input: String): Parsed {
         val words = input.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         var sort: String? = null
         var window: String? = null
+        val hosts = mutableListOf<String>()
+        val excludeHosts = mutableListOf<String>()
         val text = mutableListOf<String>()
 
         for (word in words) {
@@ -50,10 +54,18 @@ object SearchSyntax {
                     val value = normalizeWindow(lower.removePrefix("top:"))
                     if (value != null) window = value else text += word
                 }
+                lower.startsWith("-host:") -> {
+                    val value = lower.removePrefix("-host:").trim()
+                    if (value.isNotEmpty()) excludeHosts += value else text += word
+                }
+                lower.startsWith("host:") -> {
+                    val value = lower.removePrefix("host:").trim()
+                    if (value.isNotEmpty()) hosts += value else text += word
+                }
                 else -> text += word
             }
         }
-        return Parsed(text.joinToString(" "), sort, window)
+        return Parsed(text.joinToString(" "), sort, window, hosts, excludeHosts)
     }
 
     fun normalizeWindow(raw: String): String? {
@@ -138,6 +150,8 @@ object SearchSyntax {
             when (prefix) {
                 "sort:" -> lower.removePrefix(prefix) in SORTS
                 "top:" -> normalizeWindow(lower.removePrefix(prefix)) != null
+                "host:" -> lower.removePrefix(prefix).isNotBlank()
+                "-host:" -> lower.removePrefix(prefix).isNotBlank()
                 else -> false
             }
         }.joinToString(" ")
