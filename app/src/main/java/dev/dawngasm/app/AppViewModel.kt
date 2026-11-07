@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DawngasmApi
+import dev.dawngasm.app.data.HotaudioWebViewCapture
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.SearchRequest
