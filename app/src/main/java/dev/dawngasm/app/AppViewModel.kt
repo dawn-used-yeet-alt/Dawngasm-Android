@@ -361,6 +361,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         val generation = playGeneration.incrementAndGet()
         playJob?.cancel()
+        resolver.cancelActiveCapture()
         _uiState.update {
             it.copy(
                 player = PlayerUiState(
@@ -478,6 +479,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         feedJob?.cancel()
         playJob?.cancel()
+        resolver.cancelActiveCapture()
         player.release()
         super.onCleared()
     }

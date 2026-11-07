@@ -35,6 +35,14 @@ class AudioResolver(
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
+    @Volatile
+    private var activeCapture: HotaudioWebViewCapture? = null
+
+    fun cancelActiveCapture() {
+        activeCapture?.cancel()
+        activeCapture = null
+    }
+
     suspend fun resolve(track: Track): ResolvedAudio = withContext(Dispatchers.IO) {
         cache[track.id]?.takeIf { System.currentTimeMillis() - it.createdAt < CACHE_TTL_MS }
             ?.audio
@@ -67,10 +75,12 @@ class AudioResolver(
             )
         }
 
+        cancelActiveCapture()
         val capture = HotaudioWebViewCapture(ctx)
-        val capturedFile = capture.captureToFile(track.pageUrl, cachedFile)
+        activeCapture = capture
+        val streamUrl = capture.startStreaming(track.pageUrl, cachedFile)
         return ResolvedAudio(
-            url = Uri.fromFile(capturedFile).toString(),
+            url = streamUrl,
             headers = emptyMap(),
             extension = "m4a",
         )

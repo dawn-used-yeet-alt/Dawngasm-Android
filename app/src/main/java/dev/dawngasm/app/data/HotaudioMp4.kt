@@ -3,6 +3,8 @@ package dev.dawngasm.app.data
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentSkipListMap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * ISO BMFF (fMP4) box parser and fragment assembler, translating decrypted
@@ -100,10 +102,19 @@ object HotaudioMp4 {
         var initSegment: ByteArray? = null
             private set
 
+        @Volatile
+        var isComplete: Boolean = false
+            private set
+
+        @Volatile
+        var isFailed: Boolean = false
+            private set
+
         val fragments = ConcurrentSkipListMap<Long, ByteArray>()
+        private val lock = Object()
 
         fun add(data: ByteArray): Boolean {
-            return when (val kind = classifyFragment(data)) {
+            val added = when (val kind = classifyFragment(data)) {
                 is FragmentKind.Init -> {
                     if (initSegment == null) {
                         initSegment = data
@@ -117,6 +128,86 @@ object HotaudioMp4 {
                     } else false
                 }
                 null -> false
+            }
+            if (added) {
+                synchronized(lock) {
+                    lock.notifyAll()
+                }
+            }
+            return added
+        }
+
+        fun markComplete() {
+            isComplete = true
+            synchronized(lock) {
+                lock.notifyAll()
+            }
+        }
+
+        fun markFailed() {
+            isFailed = true
+            synchronized(lock) {
+                lock.notifyAll()
+            }
+        }
+
+        suspend fun waitForInit(timeoutMs: Long): ByteArray? = withContext(Dispatchers.IO) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            synchronized(lock) {
+                while (initSegment == null && !isFailed) {
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0) break
+                    try {
+                        lock.wait(remaining)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }
+            initSegment
+        }
+
+        suspend fun firstSequence(timeoutMs: Long): Long? = withContext(Dispatchers.IO) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            synchronized(lock) {
+                while (fragments.isEmpty() && !isComplete && !isFailed) {
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (remaining <= 0) break
+                    try {
+                        lock.wait(remaining)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }
+            if (fragments.isEmpty()) null else fragments.firstKey()
+        }
+
+        suspend fun getOrWaitFragment(seq: Long, timeoutMs: Long): Pair<Long, ByteArray>? = withContext(Dispatchers.IO) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            synchronized(lock) {
+                while (!fragments.containsKey(seq) && !isComplete && !isFailed) {
+                    val hasLater = fragments.keys.any { it > seq }
+                    val remaining = deadline - System.currentTimeMillis()
+                    if (hasLater && remaining <= (timeoutMs / 2)) {
+                        break
+                    }
+                    if (remaining <= 0) break
+                    try {
+                        lock.wait(remaining.coerceAtLeast(50L))
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }
+            val exact = fragments[seq]
+            if (exact != null) {
+                seq to exact
+            } else {
+                val nextKey = fragments.keys.firstOrNull { it > seq }
+                if (nextKey != null) {
+                    nextKey to fragments[nextKey]!!
+                } else null
             }
         }
 

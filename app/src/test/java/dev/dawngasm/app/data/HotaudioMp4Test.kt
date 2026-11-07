@@ -116,4 +116,31 @@ class HotaudioMp4Test {
         val expected = init + frag1 + frag2 + frag3
         assertArrayEquals(expected, outFile.readBytes())
     }
+
+    @Test
+    fun partStoreStreamsProgressively() = kotlinx.coroutines.test.runTest {
+        val store = HotaudioMp4.PartStore()
+        val init = makeBox("ftyp", ByteArray(8))
+        val frag1 = makeBox("moof", makeMfhdBox(1L))
+        val frag2 = makeBox("moof", makeMfhdBox(2L))
+
+        store.add(init)
+        val waitedInit = store.waitForInit(500)
+        assertArrayEquals(init, waitedInit)
+
+        store.add(frag1)
+        val firstSeq = store.firstSequence(500)
+        assertEquals(1L, firstSeq)
+
+        val pair1 = store.getOrWaitFragment(1L, 500)
+        assertNotNull(pair1)
+        assertEquals(1L, pair1!!.first)
+        assertArrayEquals(frag1, pair1.second)
+
+        store.add(frag2)
+        val pair2 = store.getOrWaitFragment(2L, 500)
+        assertNotNull(pair2)
+        assertEquals(2L, pair2!!.first)
+        assertArrayEquals(frag2, pair2.second)
+    }
 }
