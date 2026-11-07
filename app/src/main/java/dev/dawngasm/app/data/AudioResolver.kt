@@ -160,6 +160,17 @@ class AudioResolver(private val context: Context? = null) {
             text.contains("network is unreachable", ignoreCase = true)
     }
 
+    private fun isRateLimitError(error: Throwable): Boolean {
+        val detail = when (error) {
+            is net.hotaudio.extractor.FfiException.Failed -> error.detail
+            is net.hotaudio.extractor.FfiException.Panic -> error.detail
+            else -> error.message.orEmpty()
+        }
+        val text = "${error.message.orEmpty()} $detail"
+        return text.contains("429", ignoreCase = true) ||
+            text.contains("too many requests", ignoreCase = true)
+    }
+
     private fun warmDns(host: String): Boolean {
         return try {
             val addrs = InetAddress.getAllByName(host)
@@ -227,7 +238,7 @@ class AudioResolver(private val context: Context? = null) {
                             val options = net.hotaudio.extractor.DownloadOptions(
                                 trackId = null,
                                 apiBase = endpoint.apiBase,
-                                delayMs = 0u,
+                                delayMs = 400u,
                                 initialKeysJson = null,
                             )
                             net.hotaudio.extractor.downloadToFile(
@@ -251,9 +262,23 @@ class AudioResolver(private val context: Context? = null) {
                             lastError = error
                             val isDnsOrNetwork = isDnsOrTransientNetworkError(error)
                             val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
+                            val isRateLimit = isRateLimitError(error)
 
                             if (isChallenge) {
                                 // Clearance rejected by Cloudflare — could be IP mismatch, try next IP family
+                                break
+                            }
+
+                            if (isRateLimit) {
+                                if (attempt < 2) {
+                                    try {
+                                        Thread.sleep(2500)
+                                    } catch (_: InterruptedException) {}
+                                    continue
+                                }
+                                try {
+                                    Thread.sleep(1500)
+                                } catch (_: InterruptedException) {}
                                 break
                             }
 
@@ -265,7 +290,7 @@ class AudioResolver(private val context: Context? = null) {
                                     continue
                                 }
                             } else {
-                                // Non-network / non-challenge fatal error
+                                // Non-network / non-challenge / non-rate-limit fatal error
                                 break@familyLoop
                             }
                         }
@@ -275,26 +300,22 @@ class AudioResolver(private val context: Context? = null) {
 
             if (!succeeded) {
                 val err = lastError
-                val message = when (err) {
-                    is net.hotaudio.extractor.FfiException.Failed -> {
-                        if (err.code == "challenge") {
-                            "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
-                        } else if (isDnsOrTransientNetworkError(err)) {
-                            "hotaudio DNS resolution failed (${err.detail}). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
-                        } else {
-                            "hotaudio error (${err.code}): ${err.detail}"
-                        }
+                val message = when {
+                    err is net.hotaudio.extractor.FfiException.Failed && err.code == "challenge" -> {
+                        "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
                     }
-                    is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${err.detail}"
-                    null -> "hotaudio extraction failed"
-                    else -> {
-                        val errText = err.message ?: err.toString()
-                        if (isDnsOrTransientNetworkError(err)) {
-                            "hotaudio DNS resolution failed ($errText). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
-                        } else {
-                            errText
-                        }
+                    err != null && isRateLimitError(err) -> {
+                        "hotaudio rate limit reached (too many requests) — please wait a few seconds and try again"
                     }
+                    err != null && isDnsOrTransientNetworkError(err) -> {
+                        val detail = (err as? net.hotaudio.extractor.FfiException.Failed)?.detail
+                            ?: err.message ?: err.toString()
+                        "hotaudio DNS resolution failed ($detail). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
+                    }
+                    err is net.hotaudio.extractor.FfiException.Failed -> "hotaudio error (${err.code}): ${err.detail}"
+                    err is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${err.detail}"
+                    err != null -> err.message ?: err.toString()
+                    else -> "hotaudio extraction failed"
                 }
                 throw ResolveException(message)
             }
