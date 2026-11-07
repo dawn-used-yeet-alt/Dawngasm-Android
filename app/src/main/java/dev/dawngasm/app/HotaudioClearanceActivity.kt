@@ -3,7 +3,10 @@ package dev.dawngasm.app
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -46,8 +49,8 @@ import dev.dawngasm.app.ui.theme.DawngasmTheme
 /**
  * Opens hotaudio.net in a real WebView so the user can pass Cloudflare's
  * challenge. The resulting `cf_clearance` cookie is bound to the WebView's
- * User-Agent, so both are saved together and later handed to the native
- * extractor.
+ * User-Agent and client IP family (IPv4 vs IPv6), so both are saved together
+ * and handed to the native extractor.
  */
 class HotaudioClearanceActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,14 +60,14 @@ class HotaudioClearanceActivity : ComponentActivity() {
         setContent {
             DawngasmTheme {
                 HotaudioClearanceScreen(
-                    onCapture = { webView -> captureClearance(webView) },
+                    onCapture = { webView, ip, family -> captureClearance(webView, ip, family) },
                     onClose = { finish() },
                 )
             }
         }
     }
 
-    private fun captureClearance(webView: WebView?): Boolean {
+    private fun captureClearance(webView: WebView?, ip: String?, family: String?): Boolean {
         val cookieManager = CookieManager.getInstance()
         val cookieApex = cookieManager.getCookie(HOTAUDIO_URL).orEmpty()
         val cookieWww = cookieManager.getCookie(HOTAUDIO_WWW_URL).orEmpty()
@@ -76,7 +79,13 @@ class HotaudioClearanceActivity : ComponentActivity() {
         if (!rawCookie.contains("cf_clearance", ignoreCase = true)) return false
         val userAgent = webView?.settings?.userAgentString
             ?: WebSettings.getDefaultUserAgent(this)
-        AppPreferences(this).saveHotaudioClearance(rawCookie, userAgent)
+        val prefs = AppPreferences(this)
+        prefs.saveHotaudioClearance(rawCookie, userAgent)
+        if (family != null) {
+            prefs.saveHotaudioIpFamily(family, ip)
+            runCatching { net.hotaudio.extractor.setIpFamily(family) }
+            runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", family, true) }
+        }
         runCatching {
             net.hotaudio.extractor.setClearance(rawCookie, userAgent)
         }
@@ -93,15 +102,26 @@ class HotaudioClearanceActivity : ComponentActivity() {
     }
 }
 
+private class ClearanceBridge(
+    private val onTrace: (String) -> Unit,
+) {
+    @JavascriptInterface
+    fun reportTrace(text: String) {
+        onTrace(text)
+    }
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun HotaudioClearanceScreen(
-    onCapture: (WebView?) -> Boolean,
+    onCapture: (WebView?, String?, String?) -> Boolean,
     onClose: () -> Unit,
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var loading by remember { mutableStateOf(true) }
     var connected by remember { mutableStateOf(false) }
+    var detectedIp by remember { mutableStateOf<String?>(null) }
+    var detectedFamily by remember { mutableStateOf<String?>(null) }
 
     fun refreshStatus() {
         val cookieManager = CookieManager.getInstance()
@@ -109,6 +129,23 @@ private fun HotaudioClearanceScreen(
         val cookieWww = cookieManager.getCookie("https://www.hotaudio.net/").orEmpty()
         connected = cookieApex.contains("cf_clearance", ignoreCase = true) ||
             cookieWww.contains("cf_clearance", ignoreCase = true)
+    }
+
+    val handler = remember { Handler(Looper.getMainLooper()) }
+    val bridge = remember {
+        ClearanceBridge { trace ->
+            val ip = trace.lineSequence()
+                .firstOrNull { it.startsWith("ip=") }
+                ?.substringAfter("ip=")
+                ?.trim()
+            if (!ip.isNullOrBlank()) {
+                val fam = if (ip.contains(":")) "ipv6" else "ipv4"
+                handler.post {
+                    detectedIp = ip
+                    detectedFamily = fam
+                }
+            }
+        }
     }
 
     BackHandler {
@@ -136,7 +173,8 @@ private fun HotaudioClearanceScreen(
                 )
                 Text(
                     text = if (connected) {
-                        "Verified — tap Done to save"
+                        val ipInfo = detectedIp?.let { " (${detectedFamily?.uppercase() ?: "IP"}: $it)" }.orEmpty()
+                        "Verified$ipInfo — tap Done to save"
                     } else {
                         "Pass the Cloudflare check, then tap Done"
                     },
@@ -146,7 +184,7 @@ private fun HotaudioClearanceScreen(
             }
             TextButton(
                 onClick = {
-                    if (!onCapture(webView)) {
+                    if (!onCapture(webView, detectedIp, detectedFamily)) {
                         connected = false
                         Toast.makeText(
                             webView?.context,
@@ -175,6 +213,7 @@ private fun HotaudioClearanceScreen(
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.cacheMode = WebSettings.LOAD_DEFAULT
+                        addJavascriptInterface(bridge, "ClearanceBridge")
                         CookieManager.getInstance().setAcceptCookie(true)
                         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                         webViewClient = object : WebViewClient() {
@@ -189,6 +228,23 @@ private fun HotaudioClearanceScreen(
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 loading = false
                                 refreshStatus()
+                                view?.evaluateJavascript(
+                                    """
+                                    (function() {
+                                        try {
+                                            fetch('/cdn-cgi/trace')
+                                                .then(function(r) { return r.text(); })
+                                                .then(function(t) {
+                                                    if (window.ClearanceBridge) {
+                                                        window.ClearanceBridge.reportTrace(t);
+                                                    }
+                                                })
+                                                .catch(function(e) {});
+                                        } catch(e) {}
+                                    })();
+                                    """.trimIndent(),
+                                    null,
+                                )
                             }
 
                             override fun onReceivedError(

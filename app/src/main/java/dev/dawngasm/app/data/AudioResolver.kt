@@ -170,12 +170,13 @@ class AudioResolver(private val context: Context? = null) {
     }
 
     private fun hotaudio(track: Track): ResolvedAudio {
+        val prefs = context?.let { AppPreferences(it) }
         // Ensure clearance from preferences is passed down to native FFI if available
-        context?.let { ctx ->
-            AppPreferences(ctx).hotaudioClearance()?.let { (cookie, ua) ->
-                runCatching { net.hotaudio.extractor.setClearance(cookie, ua) }
-            }
+        prefs?.hotaudioClearance()?.let { (cookie, ua) ->
+            runCatching { net.hotaudio.extractor.setClearance(cookie, ua) }
         }
+
+        val savedFamily = prefs?.hotaudioIpFamily()?.lowercase()?.takeIf { it == "ipv4" || it == "ipv6" }
 
         val cacheRoot = context?.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
         val hotaudioDir = File(cacheRoot, "hotaudio").apply { mkdirs() }
@@ -205,49 +206,71 @@ class AudioResolver(private val context: Context? = null) {
                 candidates.add(HotaudioEndpoint(normalizedUrl.replace("://hotaudio.net", "://www.hotaudio.net"), "https://www.hotaudio.net"))
             }
 
+            // Dual-stack IP family matching: try preferred family first, then fallback
+            val ipFamilies = listOfNotNull(
+                savedFamily,
+                if (savedFamily == "ipv4") "ipv6" else "ipv4",
+                "any",
+            ).distinct()
+
             var lastError: Throwable? = null
             var succeeded = false
 
-            for (endpoint in candidates) {
-                for (attempt in 1..2) {
-                    tempFile.delete()
-                    try {
-                        val options = net.hotaudio.extractor.DownloadOptions(
-                            trackId = null,
-                            apiBase = endpoint.apiBase,
-                            delayMs = 0u,
-                            initialKeysJson = null,
-                        )
-                        net.hotaudio.extractor.downloadToFile(
-                            pageUrl = endpoint.pageUrl,
-                            path = tempFile.absolutePath,
-                            options = options,
-                            progress = null,
-                            cancel = null,
-                        )
-                        if (!tempFile.renameTo(targetFile)) {
-                            tempFile.copyTo(targetFile, overwrite = true)
-                            tempFile.delete()
-                        }
-                        succeeded = true
-                        break
-                    } catch (error: Throwable) {
+            familyLoop@ for (family in ipFamilies) {
+                runCatching { net.hotaudio.extractor.setIpFamily(family) }
+                runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", family, true) }
+
+                for (endpoint in candidates) {
+                    for (attempt in 1..2) {
                         tempFile.delete()
-                        lastError = error
-                        val isDnsOrNetwork = isDnsOrTransientNetworkError(error)
-                        if (isDnsOrNetwork && attempt < 2) {
-                            try {
-                                Thread.sleep(750)
-                            } catch (_: InterruptedException) {}
-                            continue
-                        }
-                        if (!isDnsOrNetwork) {
-                            // Non-network error (e.g. Cloudflare challenge or cancelled) — don't retry candidate
-                            break
+                        try {
+                            val options = net.hotaudio.extractor.DownloadOptions(
+                                trackId = null,
+                                apiBase = endpoint.apiBase,
+                                delayMs = 0u,
+                                initialKeysJson = null,
+                            )
+                            net.hotaudio.extractor.downloadToFile(
+                                pageUrl = endpoint.pageUrl,
+                                path = tempFile.absolutePath,
+                                options = options,
+                                progress = null,
+                                cancel = null,
+                            )
+                            if (!tempFile.renameTo(targetFile)) {
+                                tempFile.copyTo(targetFile, overwrite = true)
+                                tempFile.delete()
+                            }
+                            succeeded = true
+                            if (family != "any") {
+                                prefs?.saveHotaudioIpFamily(family)
+                            }
+                            break@familyLoop
+                        } catch (error: Throwable) {
+                            tempFile.delete()
+                            lastError = error
+                            val isDnsOrNetwork = isDnsOrTransientNetworkError(error)
+                            val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
+
+                            if (isChallenge) {
+                                // Clearance rejected by Cloudflare — could be IP mismatch, try next IP family
+                                break
+                            }
+
+                            if (isDnsOrNetwork) {
+                                if (attempt < 2) {
+                                    try {
+                                        Thread.sleep(500)
+                                    } catch (_: InterruptedException) {}
+                                    continue
+                                }
+                            } else {
+                                // Non-network / non-challenge fatal error
+                                break@familyLoop
+                            }
                         }
                     }
                 }
-                if (succeeded) break
             }
 
             if (!succeeded) {

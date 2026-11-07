@@ -62,6 +62,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.BuildConfig
 import dev.dawngasm.app.HotaudioClearanceActivity
+import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.util.compactScore
@@ -92,6 +93,13 @@ fun SettingsScreen(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
+    }
+    val prefs = remember { AppPreferences(context) }
+    val clearanceIp = remember(hotaudioConnected) {
+        if (hotaudioConnected) prefs.hotaudioClientIp() else null
+    }
+    val clearanceFamily = remember(hotaudioConnected) {
+        if (hotaudioConnected) prefs.hotaudioIpFamily()?.uppercase() else null
     }
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
@@ -361,8 +369,23 @@ fun SettingsScreen(
                 subtitle = "hotaudio hides its audio behind a Cloudflare check. Open the site in the app, pass the check, and the clearance is saved for playback and downloads.",
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val clearanceStatus = if (hotaudioConnected) {
+                        buildString {
+                            append("Clearance saved")
+                            if (!clearanceIp.isNullOrBlank()) {
+                                append(" (")
+                                if (!clearanceFamily.isNullOrBlank()) append("$clearanceFamily: ")
+                                append(clearanceIp)
+                                append(")")
+                            } else if (!clearanceFamily.isNullOrBlank()) {
+                                append(" ($clearanceFamily)")
+                            }
+                        }
+                    } else {
+                        "No clearance saved"
+                    }
                     Text(
-                        text = if (hotaudioConnected) "Clearance saved" else "No clearance saved",
+                        text = clearanceStatus,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (hotaudioConnected) {
                             MaterialTheme.colorScheme.primary

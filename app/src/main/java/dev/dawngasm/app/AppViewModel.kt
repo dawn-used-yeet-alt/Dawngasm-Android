@@ -123,6 +123,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             prefs.hotaudioClearance()?.let { (cookie, ua) ->
                 net.hotaudio.extractor.setClearance(cookie, ua)
             }
+            prefs.hotaudioIpFamily()?.let { fam ->
+                net.hotaudio.extractor.setIpFamily(fam)
+                android.system.Os.setenv("HOTAUDIO_IP_FAMILY", fam, true)
+            }
         }
     }
 
@@ -352,6 +356,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val clearance = prefs.hotaudioClearance()
         if (clearance != null) {
             runCatching { net.hotaudio.extractor.setClearance(clearance.first, clearance.second) }
+            prefs.hotaudioIpFamily()?.let { fam ->
+                runCatching { net.hotaudio.extractor.setIpFamily(fam) }
+                runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", fam, true) }
+            }
         } else {
             runCatching { net.hotaudio.extractor.clearClearance() }
         }
@@ -361,6 +369,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun clearHotaudioClearance() {
         prefs.clearHotaudioClearance()
         runCatching { net.hotaudio.extractor.clearClearance() }
+        runCatching { net.hotaudio.extractor.setIpFamily("any") }
+        runCatching { android.system.Os.unsetenv("HOTAUDIO_IP_FAMILY") }
         _uiState.update { it.copy(hotaudioConnected = false) }
     }
 
