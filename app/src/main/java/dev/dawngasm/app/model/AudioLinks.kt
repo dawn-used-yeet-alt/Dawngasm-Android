@@ -17,7 +17,10 @@ object AudioLinks {
     private val audiochan = Regex(
         """(?i)https?://(?:www\.)?audiochan\.com/(?:embed/)?(?:a|s)/([a-zA-Z0-9_-]+)""",
     )
-    private val patterns = listOf(soundgasm, whyp, audiochan)
+    private val hotaudio = Regex(
+        """(?i)https?://(?:www\.)?hotaudio\.net/u/[a-zA-Z0-9_%~.-]+/[a-zA-Z0-9_%~.-]+(?:\?[^"'\s<>)\]]*)?""",
+    )
+    private val patterns = listOf(soundgasm, whyp, audiochan, hotaudio)
 
     private val tagPattern = Regex("""\[([^\]]{1,48})]""")
 
@@ -66,6 +69,7 @@ object AudioLinks {
                 lower.contains("audiochan.com/embed/a/") ||
                 lower.contains("audiochan.com/s/") ||
                 lower.contains("audiochan.com/embed/s/") -> AudioHost.AUDIOCHAN
+            lower.contains("hotaudio.net/u/") -> AudioHost.HOTAUDIO
             else -> AudioHost.UNKNOWN
         }
     }

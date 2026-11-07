@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
-    private val resolver = AudioResolver()
+    private val resolver = AudioResolver(application)
     private val downloader = TrackDownloader(application)
     private val headerFactory = HeaderDataSourceFactory(application, Network.client)
 
@@ -129,6 +129,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             blockedTags = blocked,
             downloadTreeUri = tree,
             downloadFolderLabel = downloader.folderLabel(tree),
+            hotaudioConnected = prefs.hotaudioClearance() != null,
         )
     }
 
@@ -333,6 +334,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 downloadFolderLabel = downloader.folderLabel(uri),
             )
         }
+    }
+
+    fun refreshHotaudioClearance() {
+        _uiState.update { it.copy(hotaudioConnected = prefs.hotaudioClearance() != null) }
+    }
+
+    fun clearHotaudioClearance() {
+        prefs.clearHotaudioClearance()
+        _uiState.update { it.copy(hotaudioConnected = false) }
     }
 
     // --- playback -----------------------------------------------------------

@@ -1,7 +1,10 @@
 package dev.dawngasm.app.data
 
+import android.content.Context
+import android.net.Uri
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,7 +28,9 @@ data class ResolvedAudio(
  * cookie-gated play intent followed by a signed stream URL; the shared
  * [Network] cookie jar carries the cookie to the media requests.
  */
-class AudioResolver {
+class AudioResolver(
+    private val context: Context? = null,
+) {
     private data class CacheEntry(val audio: ResolvedAudio, val createdAt: Long)
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
@@ -39,6 +44,7 @@ class AudioResolver {
             AudioHost.SOUNDGASM -> soundgasm(track)
             AudioHost.WHYP -> whyp(track)
             AudioHost.AUDIOCHAN -> audiochan(track)
+            AudioHost.HOTAUDIO -> hotaudio(track)
             AudioHost.UNKNOWN -> throw ResolveException("Unsupported audio host")
         }
         cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
@@ -46,6 +52,29 @@ class AudioResolver {
     }
 
     fun clearCache() = cache.clear()
+
+    private suspend fun hotaudio(track: Track): ResolvedAudio {
+        val ctx = context ?: throw ResolveException("Application context is required to resolve hotaudio tracks")
+        val cacheDir = File(ctx.cacheDir, "hotaudio_captures").apply { mkdirs() }
+        val safeId = track.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val cachedFile = File(cacheDir, "$safeId.m4a")
+
+        if (cachedFile.exists() && cachedFile.length() > 32 * 1024) {
+            return ResolvedAudio(
+                url = Uri.fromFile(cachedFile).toString(),
+                headers = emptyMap(),
+                extension = "m4a",
+            )
+        }
+
+        val capture = HotaudioWebViewCapture(ctx)
+        val capturedFile = capture.captureToFile(track.pageUrl, cachedFile)
+        return ResolvedAudio(
+            url = Uri.fromFile(capturedFile).toString(),
+            headers = emptyMap(),
+            extension = "m4a",
+        )
+    }
 
     private fun soundgasm(track: Track): ResolvedAudio {
         val html = get(track.pageUrl)

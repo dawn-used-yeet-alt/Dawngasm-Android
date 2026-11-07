@@ -31,21 +31,36 @@ class TrackDownloader(
         treeUri: String?,
     ): SavedDownload = withContext(Dispatchers.IO) {
         val fileName = buildFileName(track, audio.extension)
-        val request = Request.Builder()
-            .url(audio.url)
-            .apply { audio.headers.forEach { (name, value) -> header(name, value) } }
-            .header("User-Agent", Network.BROWSER_USER_AGENT)
-            .build()
-
-        Network.client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw DownloadException("server returned HTTP ${response.code}")
+        val audioUri = runCatching { Uri.parse(audio.url) }.getOrNull()
+        if (audioUri?.scheme == "file") {
+            val localFile = File(audioUri.path ?: "")
+            if (!localFile.exists() || localFile.length() == 0L) {
+                throw DownloadException("local audio file not found")
             }
-            val body = response.body ?: throw DownloadException("the server sent an empty file")
-            if (treeUri != null) {
-                saveToTree(treeUri, fileName, audio.extension, body.byteStream())
-            } else {
-                saveToAppStorage(fileName, body.byteStream())
+            localFile.inputStream().use { input ->
+                if (treeUri != null) {
+                    saveToTree(treeUri, fileName, audio.extension, input)
+                } else {
+                    saveToAppStorage(fileName, input)
+                }
+            }
+        } else {
+            val request = Request.Builder()
+                .url(audio.url)
+                .apply { audio.headers.forEach { (name, value) -> header(name, value) } }
+                .header("User-Agent", Network.BROWSER_USER_AGENT)
+                .build()
+
+            Network.client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw DownloadException("server returned HTTP ${response.code}")
+                }
+                val body = response.body ?: throw DownloadException("the server sent an empty file")
+                if (treeUri != null) {
+                    saveToTree(treeUri, fileName, audio.extension, body.byteStream())
+                } else {
+                    saveToAppStorage(fileName, body.byteStream())
+                }
             }
         }
     }

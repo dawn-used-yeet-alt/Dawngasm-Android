@@ -91,7 +91,26 @@ class AudioLinksTest {
         assertEquals(AudioHost.SOUNDGASM, AudioLinks.hostOf("HTTPS://SOUNDGASM.NET/u/A/B"))
         assertEquals(AudioHost.WHYP, AudioLinks.hostOf("https://WHYP.IT/tracks/ab12"))
         assertEquals(AudioHost.AUDIOCHAN, AudioLinks.hostOf("https://AudioChan.com/a/abc"))
+        assertEquals(AudioHost.HOTAUDIO, AudioLinks.hostOf("https://HOTAUDIO.NET/u/author/track"))
         assertEquals(AudioHost.UNKNOWN, AudioLinks.hostOf("https://example.com"))
         assertTrue(AudioLinks.hostOf("https://soundgasm.net/u/a/b") == AudioHost.SOUNDGASM)
+    }
+
+    @Test
+    fun findsHotaudioLink() {
+        val result = AudioLinks.find(
+            postUrl = "",
+            selftext = "Audio: https://hotaudio.net/u/creator/whisper-night?key=123",
+        )
+        assertEquals(AudioHost.HOTAUDIO, result?.first)
+        assertEquals("https://hotaudio.net/u/creator/whisper-night?key=123", result?.second)
+    }
+
+    @Test
+    fun findsHotaudioWithWww() {
+        assertEquals(
+            AudioHost.HOTAUDIO,
+            AudioLinks.hostOf("https://www.hotaudio.net/u/someone/gentle-breeze"),
+        )
     }
 }

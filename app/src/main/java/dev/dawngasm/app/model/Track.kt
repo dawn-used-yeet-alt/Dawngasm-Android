@@ -8,6 +8,7 @@ enum class AudioHost(val label: String) {
     SOUNDGASM("soundgasm"),
     WHYP("whyp"),
     AUDIOCHAN("audiochan"),
+    HOTAUDIO("hotaudio"),
     UNKNOWN("audio");
 
     companion object {

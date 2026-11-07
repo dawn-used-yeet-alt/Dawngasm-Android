@@ -1,5 +1,6 @@
 package dev.dawngasm.app.ui.screens
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +61,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.BuildConfig
+import dev.dawngasm.app.HotaudioClearanceActivity
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.util.compactScore
@@ -75,6 +78,9 @@ fun SettingsScreen(
     downloadFolderLabel: String,
     downloadTreeUri: String?,
     tagLookup: suspend (String) -> List<TagSuggestion>,
+    hotaudioConnected: Boolean,
+    onHotaudioClearanceChanged: () -> Unit,
+    onClearHotaudioClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
@@ -82,6 +88,11 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val clearanceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
+    }
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
@@ -345,13 +356,50 @@ fun SettingsScreen(
 
         item {
             SectionCard(
+                icon = Icons.Outlined.Language,
+                title = "hotaudio",
+                subtitle = "hotaudio audio is protected by Cloudflare. Open the check in the app, complete the Turnstile prompt, and your clearance is saved for background playback.",
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = if (hotaudioConnected) "Clearance active" else "No clearance saved",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (hotaudioConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                clearanceLauncher.launch(
+                                    Intent(context, HotaudioClearanceActivity::class.java),
+                                )
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Text(if (hotaudioConnected) "Check again" else "Open hotaudio check")
+                        }
+                        if (hotaudioConnected) {
+                            TextButton(onClick = onClearHotaudioClearance) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            SectionCard(
                 icon = Icons.Outlined.Info,
                 title = "About",
                 subtitle = "Version ${BuildConfig.VERSION_NAME}",
             ) {
                 Text(
                     text = "A native Material 3 Expressive client for the Dawngasm audio index. " +
-                        "Playback and downloads support soundgasm, audiochan, and whyp.",
+                        "Playback and downloads support soundgasm, audiochan, whyp, and hotaudio.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
