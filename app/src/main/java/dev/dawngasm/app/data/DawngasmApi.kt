@@ -337,9 +337,6 @@ class DawngasmApi(
                 if (excludedHostsList.isNotEmpty()) addQueryParameter("excludeHosts", excludedHostsList)
             }
             .build()
-        const val TAG_LIMIT = 12
-        private const val TAG_CACHE_TTL_MS = 10 * 60 * 1000L
-        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
         fun parseTags(body: String): List<TagSuggestion> {
             val root = runCatching { JSONObject(body) }.getOrNull() ?: return emptyList()
