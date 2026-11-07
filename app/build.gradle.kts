@@ -157,12 +157,14 @@ abstract class GenerateHotaudioBindingsTask : DefaultTask() {
             }
 
             println("Building bindings with scripts/build-bindings.sh...")
-            val buildProc = ProcessBuilder("bash", "scripts/build-bindings.sh", "--release")
+            val pb = ProcessBuilder("bash", "scripts/build-bindings.sh", "--release")
                 .directory(tempDir)
-                .inheritIO()
-                .start()
-            if (buildProc.waitFor() != 0) {
-                throw GradleException("Failed to build bindings")
+                .redirectErrorStream(true)
+            val buildProc = pb.start()
+            buildProc.inputStream.bufferedReader().forEachLine { println(it) }
+            val exit = buildProc.waitFor()
+            if (exit != 0) {
+                throw GradleException("Failed to build bindings (exit $exit)")
             }
 
             val generated = File(tempDir, "bindings/out/net/hotaudio/extractor/hotaudio_ffi.kt")
