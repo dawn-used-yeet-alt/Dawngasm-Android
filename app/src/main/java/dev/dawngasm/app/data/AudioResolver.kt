@@ -30,17 +30,14 @@ data class ResolvedAudio(
  */
 class AudioResolver(
     private val context: Context? = null,
+    private val capture: HotaudioWebViewCapture? = null,
 ) {
     private data class CacheEntry(val audio: ResolvedAudio, val createdAt: Long)
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
-    @Volatile
-    private var activeCapture: HotaudioWebViewCapture? = null
-
     fun cancelActiveCapture() {
-        activeCapture?.cancel()
-        activeCapture = null
+        capture?.cancel()
     }
 
     suspend fun resolve(track: Track): ResolvedAudio = withContext(Dispatchers.IO) {
@@ -63,6 +60,7 @@ class AudioResolver(
 
     private suspend fun hotaudio(track: Track): ResolvedAudio {
         val ctx = context ?: throw ResolveException("Application context is required to resolve hotaudio tracks")
+        val cap = capture ?: throw ResolveException("Attached WebView capture manager is required for hotaudio")
         val cacheDir = File(ctx.cacheDir, "hotaudio_captures").apply { mkdirs() }
         val safeId = track.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
         val cachedFile = File(cacheDir, "$safeId.m4a")
@@ -75,10 +73,8 @@ class AudioResolver(
             )
         }
 
-        cancelActiveCapture()
-        val capture = HotaudioWebViewCapture(ctx)
-        activeCapture = capture
-        val streamUrl = capture.startStreaming(track.pageUrl, cachedFile)
+        cap.cancel()
+        val streamUrl = cap.startStreaming(track.pageUrl, cachedFile)
         return ResolvedAudio(
             url = streamUrl,
             headers = emptyMap(),

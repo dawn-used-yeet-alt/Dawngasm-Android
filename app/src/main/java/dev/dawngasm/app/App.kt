@@ -10,13 +10,25 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,9 +38,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.dawngasm.app.model.AudioHost
@@ -176,6 +190,11 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                 onDismiss = viewModel::dismissPlayer,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
+
+            // Attached WebView media capture engine for hotaudio
+            HotaudioCaptureHost(
+                capture = viewModel.hotaudioCapture,
+            )
         }
     }
 
@@ -193,6 +212,60 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                 searchOpen = false
             },
         )
+    }
+}
+
+@Composable
+private fun HotaudioCaptureHost(
+    capture: dev.dawngasm.app.data.HotaudioWebViewCapture,
+    modifier: Modifier = Modifier,
+) {
+    val challengeUrl by capture.challengeUrl.collectAsStateWithLifecycle()
+
+    Box(
+        modifier = if (challengeUrl != null) {
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .systemBarsPadding()
+        } else {
+            modifier
+                .size(2.dp)
+                .alpha(0.01f)
+        },
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (challengeUrl != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Cloudflare Verification",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = "Complete the check to start playing",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { capture.dismissChallenge() }) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close")
+                    }
+                }
+            }
+            Box(modifier = Modifier.weight(1f, fill = challengeUrl != null)) {
+                AndroidView(
+                    factory = { capture.getOrCreateWebView(it) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
     }
 }
 

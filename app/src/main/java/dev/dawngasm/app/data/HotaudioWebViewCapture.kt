@@ -14,24 +14,26 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Background WebView-assisted audio streaming and capture for hotaudio.net.
+ * Attached WebView media capture and streaming engine for hotaudio.net.
  *
- * Runs the site's official web player in an off-screen WebView, transparently
- * passing Cloudflare and executing the player's native WebAssembly/JS decryptor.
- * Intercepts the decrypted ISO BMFF (fMP4) chunks from SourceBuffer.prototype.appendBuffer,
- * accelerates playback in silence at 2x, streams chunks progressively to ExoPlayer via
- * [HotaudioStreamServer] for instant playback, and concurrently assembles the full track
- * into a cached .m4a file.
+ * Hosted directly in the [MainActivity] view hierarchy so Chromium treats it
+ * as an active, visible window without timer throttling or autoplay blocking.
+ * Disables AudioContext and sets autoplay to true before site scripts load,
+ * captures decrypted fMP4 chunks via SourceBuffer hooks, and streams them
+ * progressively through [HotaudioStreamServer] at 2x speed.
  */
 class HotaudioWebViewCapture(private val context: Context) {
 
@@ -43,6 +45,33 @@ class HotaudioWebViewCapture(private val context: Context) {
             (function() {
                 if (window.__dawngasm_capture_hooked) return;
                 window.__dawngasm_capture_hooked = true;
+
+                // 1. Disable AudioContext so nozzle.js falls back to direct HTML5 Audio
+                // without getting blocked by WebAudio autoplay policy
+                try {
+                    window.AudioContext = undefined;
+                    window.webkitAudioContext = undefined;
+                } catch(e) {}
+
+                // 2. Prevent background throttling of timers and MediaSource
+                try {
+                    Object.defineProperty(document, 'hidden', { get: function() { return false; }, configurable: true });
+                    Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; }, configurable: true });
+                } catch(e) {}
+
+                // 3. Hook window.__HAL so nozzle.js automatically autoplays when initialized
+                var _origHAL = window.__HAL;
+                try {
+                    Object.defineProperty(window, '__HAL', {
+                        get: function() { return _origHAL; },
+                        set: function(fn) {
+                            _origHAL = function(w, v, A, M, L) {
+                                return fn(true, v, A, M, L);
+                            };
+                        },
+                        configurable: true
+                    });
+                } catch(e) {}
 
                 function send(sink, buf) {
                     try {
@@ -76,7 +105,7 @@ class HotaudioWebViewCapture(private val context: Context) {
                     }
                 }
 
-                // 1. Hook SourceBuffer.prototype.appendBuffer
+                // 4. Hook SourceBuffer.prototype.appendBuffer
                 if (typeof SourceBuffer !== 'undefined' && SourceBuffer.prototype && SourceBuffer.prototype.appendBuffer) {
                     var origAppend = SourceBuffer.prototype.appendBuffer;
                     SourceBuffer.prototype.appendBuffer = function(buf) {
@@ -85,7 +114,7 @@ class HotaudioWebViewCapture(private val context: Context) {
                     };
                 }
 
-                // 2. Hook MediaSource.prototype.addSourceBuffer instance attachment
+                // 5. Hook MediaSource.prototype.addSourceBuffer
                 if (typeof MediaSource !== 'undefined' && MediaSource.prototype && MediaSource.prototype.addSourceBuffer) {
                     var origAddSourceBuffer = MediaSource.prototype.addSourceBuffer;
                     MediaSource.prototype.addSourceBuffer = function() {
@@ -102,7 +131,7 @@ class HotaudioWebViewCapture(private val context: Context) {
                     };
                 }
 
-                // 3. Hook ManagedSourceBuffer if present
+                // 6. Hook ManagedSourceBuffer if present
                 if (typeof ManagedSourceBuffer !== 'undefined' && ManagedSourceBuffer.prototype && ManagedSourceBuffer.prototype.appendBuffer) {
                     var origManaged = ManagedSourceBuffer.prototype.appendBuffer;
                     ManagedSourceBuffer.prototype.appendBuffer = function(buf) {
@@ -111,30 +140,14 @@ class HotaudioWebViewCapture(private val context: Context) {
                     };
                 }
 
-                // 4. Hook AudioDecoder if present
-                if (typeof AudioDecoder !== 'undefined' && AudioDecoder.prototype && AudioDecoder.prototype.decode) {
-                    var origDecode = AudioDecoder.prototype.decode;
-                    AudioDecoder.prototype.decode = function(chunk) {
-                        try {
-                            if (chunk && chunk.copyTo && chunk.byteLength) {
-                                var u = new Uint8Array(chunk.byteLength);
-                                chunk.copyTo(u);
-                                send('AudioDecoder', u);
-                            }
-                        } catch (e) {}
-                        return origDecode.apply(this, arguments);
-                    };
-                }
-
-                // 5. Audio acceleration and silence (max 2x to avoid CDN throttling)
+                // 7. Audio acceleration (max 2.0x to avoid CDN throttling) and silence
                 function accelerate(media) {
                     if (!media) return;
                     try {
                         media.muted = true;
                         media.volume = 0;
-                        var target = 2.0;
-                        if (media.playbackRate !== target) {
-                            media.playbackRate = target;
+                        if (media.playbackRate !== 2.0) {
+                            media.playbackRate = 2.0;
                         }
                     } catch (e) {}
                 }
@@ -147,16 +160,28 @@ class HotaudioWebViewCapture(private val context: Context) {
                     };
                 }
 
-                // 6. Periodic watcher for play button, rate control, and end of playback
+                // 8. Hook Audio constructor to capture new Audio()
+                if (typeof window.Audio !== 'undefined') {
+                    var OrigAudio = window.Audio;
+                    window.Audio = function() {
+                        var a = new OrigAudio();
+                        accelerate(a);
+                        return a;
+                    };
+                    window.Audio.prototype = OrigAudio.prototype;
+                }
+
+                // 9. Periodic watcher for challenge and play button
                 setInterval(function() {
-                    // Check Cloudflare challenge
-                    if (document.title && document.title.indexOf('Just a moment') !== -1) {
-                        if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onChallenge) {
-                            window.$BRIDGE_NAME.onChallenge();
-                        }
+                    // Check Cloudflare
+                    var isChallenge = (document.title && document.title.indexOf('Just a moment') !== -1) ||
+                                      document.getElementById('challenge-running') !== null ||
+                                      document.querySelector('.cf-turnstile') !== null;
+                    if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onChallenge) {
+                        window.$BRIDGE_NAME.onChallenge(isChallenge);
                     }
 
-                    // Auto-click paused button
+                    // Auto-click paused play button
                     var playSelectors = ['#player-playpause', '.player-playpause', 'button[aria-label*="Play" i]', '.play-btn', 'button.play', '#play'];
                     for (var s = 0; s < playSelectors.length; s++) {
                         var btn = document.querySelector(playSelectors[s]);
@@ -165,17 +190,11 @@ class HotaudioWebViewCapture(private val context: Context) {
                         }
                     }
 
-                    // Accelerate and play all media elements
+                    // Progress update
                     var audios = document.querySelectorAll('audio, video');
                     for (var i = 0; i < audios.length; i++) {
                         var a = audios[i];
                         accelerate(a);
-                        if (a.paused) {
-                            try {
-                                var p = a.play();
-                                if (p && p.catch) p.catch(function() {});
-                            } catch (e) {}
-                        }
                         if (a.duration && a.duration > 0) {
                             if (window.$BRIDGE_NAME && window.$BRIDGE_NAME.onProgress) {
                                 window.$BRIDGE_NAME.onProgress(a.currentTime, a.duration);
@@ -187,21 +206,17 @@ class HotaudioWebViewCapture(private val context: Context) {
                             }
                         }
                     }
-
-                    // Read progress display if any
-                    var prog = document.getElementById('player-progress-text');
-                    if (prog && prog.innerText) {
-                        var parts = prog.innerText.split('/');
-                        if (parts.length === 2 && window.$BRIDGE_NAME && window.$BRIDGE_NAME.onProgressText) {
-                            window.$BRIDGE_NAME.onProgressText(parts[0].trim(), parts[1].trim());
-                        }
-                    }
-                }, 300);
+                }, 250);
             })();
         """.trimIndent()
     }
 
-    val store = HotaudioMp4.PartStore()
+    var store = HotaudioMp4.PartStore()
+        private set
+
+    private val _challengeUrl = MutableStateFlow<String?>(null)
+    val challengeUrl: StateFlow<String?> = _challengeUrl.asStateFlow()
+
     private var streamServer: HotaudioStreamServer? = null
     private var webView: WebView? = null
     private var watchdog: Runnable? = null
@@ -217,180 +232,36 @@ class HotaudioWebViewCapture(private val context: Context) {
     private var totalDuration = -1.0
     @Volatile
     private var currentPosition = -1.0
+    @Volatile
+    private var currentTrackUrl: String? = null
 
-    /**
-     * Starts progressive streaming for [pageUrl].
-     *
-     * Launches the local stream server and the background WebView, waits for the
-     * init segment (typically 1-2 seconds), and returns a local HTTP URL
-     * (`http://127.0.0.1:<port>/stream.m4a`) that ExoPlayer can play immediately.
-     */
-    suspend fun startStreaming(pageUrl: String, targetFile: File): String {
-        val server = HotaudioStreamServer(store)
-        val port = server.start()
-        streamServer = server
-
-        withContext(Dispatchers.Main) {
-            setupWebView(pageUrl, targetFile)
-        }
-
-        // Wait up to 25s for the initialization segment (ftyp/moov)
-        val init = store.waitForInit(timeoutMs = 25_000)
-        if (init == null) {
-            cancel()
-            if (isChallengeDetected) {
-                throw ResolveException("hotaudio Cloudflare clearance expired or invalid — refresh in Settings")
-            }
-            throw ResolveException("hotaudio stream timed out waiting for audio initialization")
-        }
-
-        return "http://127.0.0.1:$port/stream.m4a"
+    fun dismissChallenge() {
+        _challengeUrl.value = null
+        cancel()
     }
 
-    /**
-     * Resolves and downloads audio for [pageUrl] into [targetFile], waiting until
-     * the complete file is assembled.
-     */
-    suspend fun captureToFile(pageUrl: String, targetFile: File): File =
-        withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { continuation ->
-                setupWebView(pageUrl, targetFile, onComplete = { file ->
-                    continuation.resume(file)
-                }, onError = { message ->
-                    continuation.resumeWithException(ResolveException(message))
-                })
-
-                continuation.invokeOnCancellation {
-                    cancel()
-                }
-            }
-        }
-
     @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView(
-        pageUrl: String,
-        targetFile: File,
-        onComplete: ((File) -> Unit)? = null,
-        onError: ((String) -> Unit)? = null,
-    ) {
-        lastFragmentTime = System.currentTimeMillis()
+    fun getOrCreateWebView(activityContext: Context): WebView {
+        webView?.let { return it }
 
-        fun finishSuccess() {
-            if (finished) return
-            finished = true
-            store.markComplete()
-            val result = store.assemble(targetFile)
-            cleanupWebView()
-            if (result.success && targetFile.exists() && targetFile.length() > 0) {
-                Log.i(TAG, "Successfully assembled ${result.fragmentCount} fragments into ${targetFile.length()} bytes")
-                onComplete?.invoke(targetFile)
-            } else {
-                onComplete?.invoke(targetFile)
-            }
-        }
-
-        fun finishError(message: String) {
-            if (finished) return
-            finished = true
-            store.markFailed()
-            cleanupWebView()
-            streamServer?.stop()
-            onError?.invoke(message)
-        }
-
-        watchdog = object : Runnable {
-            override fun run() {
-                if (finished) return
-                val now = System.currentTimeMillis()
-                val idleMs = now - lastFragmentTime
-
-                // Check challenge
-                if (isChallengeDetected && idleMs > 5000 && store.fragmentCount() == 0) {
-                    finishError("hotaudio Cloudflare clearance expired or invalid — refresh in Settings")
-                    return
-                }
-
-                // Check if playback ended by duration or idle completion
-                if (store.hasInit() && store.fragmentCount() > 0) {
-                    val isEndedByTime = totalDuration > 0 && currentPosition >= totalDuration - 0.5
-                    val isEndedByIdle = idleMs > 8000 && store.checkGaps().isEmpty()
-                    if (isEndedByTime || isEndedByIdle) {
-                        finishSuccess()
-                        return
-                    }
-                }
-
-                // Stall detection
-                if (store.fragmentCount() > 0 && idleMs > 45_000) {
-                    if (store.checkGaps().isEmpty()) {
-                        finishSuccess()
-                    } else {
-                        finishError("hotaudio stream stalled — please check your internet connection")
-                    }
-                    return
-                }
-
-                handler.postDelayed(this, 1000)
-            }
-        }
-        handler.postDelayed(watchdog!!, 1000)
-
-        class CaptureBridge {
-            @JavascriptInterface
-            fun onBuffer(sink: String, base64Data: String) {
-                try {
-                    val bytes = Base64.decode(base64Data, Base64.DEFAULT)
-                    if (store.add(bytes)) {
-                        lastFragmentTime = System.currentTimeMillis()
-                        Log.d(TAG, "Captured $sink buffer: ${bytes.size}B, total fragments=${store.fragmentCount()}")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error decoding buffer", e)
-                }
-            }
-
-            @JavascriptInterface
-            fun onProgress(current: Double, duration: Double) {
-                currentPosition = current
-                totalDuration = duration
-            }
-
-            @JavascriptInterface
-            fun onProgressText(cur: String, tot: String) {
-                Log.v(TAG, "Progress text: $cur / $tot")
-            }
-
-            @JavascriptInterface
-            fun onEnded() {
-                Log.i(TAG, "Playback ended event received from page")
-                if (store.hasInit() && store.fragmentCount() > 0 && store.checkGaps().isEmpty()) {
-                    handler.post { finishSuccess() }
-                }
-            }
-
-            @JavascriptInterface
-            fun onChallenge() {
-                isChallengeDetected = true
-            }
-
-            @JavascriptInterface
-            fun onLog(msg: String) {
-                Log.d(TAG, "Page log: $msg")
-            }
-        }
-
-        val wv = WebView(context).apply {
+        val wv = WebView(activityContext).apply {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 mediaPlaybackRequiresUserGesture = false
                 databaseEnabled = true
+                cacheMode = WebSettings.LOAD_DEFAULT
                 val savedUa = AppPreferences(context).hotaudioClearance()?.second
                 userAgentString = savedUa ?: WebSettings.getDefaultUserAgent(context)
             }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             addJavascriptInterface(CaptureBridge(), BRIDGE_NAME)
+
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                WebViewCompat.addDocumentStartJavaScript(this, HOOK_SCRIPT, setOf("*"))
+            }
+
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
@@ -400,69 +271,193 @@ class HotaudioWebViewCapture(private val context: Context) {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     view?.evaluateJavascript(HOOK_SCRIPT, null)
+                    checkClearance()
                     if (view?.title?.contains("Just a moment", ignoreCase = true) == true) {
                         isChallengeDetected = true
+                        _challengeUrl.value = currentTrackUrl
                     }
                 }
 
-                override fun onReceivedError(
-                    view: WebView?,
-                    errorCode: Int,
-                    description: String?,
-                    failingUrl: String?,
-                ) {
+                override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                     super.onReceivedError(view, errorCode, description, failingUrl)
                     Log.w(TAG, "WebView error $errorCode: $description for $failingUrl")
                 }
 
-                override fun onReceivedHttpError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    errorResponse: WebResourceResponse?,
-                ) {
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
                     super.onReceivedHttpError(view, request, errorResponse)
                     val code = errorResponse?.statusCode ?: 0
                     if (code == 429) {
                         Log.w(TAG, "HTTP 429 received in WebView")
                     } else if (code == 403) {
                         Log.w(TAG, "HTTP 403 received in WebView")
+                        if (request?.isForMainFrame == true) {
+                            isChallengeDetected = true
+                            _challengeUrl.value = currentTrackUrl
+                        }
                     }
                 }
             }
         }
         webView = wv
-
-        var cleanUrl = pageUrl.trim()
-        if (cleanUrl.startsWith("http://", ignoreCase = true)) {
-            cleanUrl = "https" + cleanUrl.substring(4)
-        }
-        cleanUrl = cleanUrl.replace("://www.hotaudio.net", "://hotaudio.net")
-
-        Log.i(TAG, "Loading hotaudio track in background WebView: $cleanUrl")
-        wv.loadUrl(cleanUrl)
+        return wv
     }
 
-    private fun cleanupWebView() {
-        watchdog?.let { handler.removeCallbacks(it) }
-        watchdog = null
-        try {
-            webView?.apply {
-                stopLoading()
-                loadUrl("about:blank")
-                removeJavascriptInterface(BRIDGE_NAME)
-                destroy()
+    private fun checkClearance() {
+        val cm = CookieManager.getInstance()
+        val apex = cm.getCookie("https://hotaudio.net/").orEmpty()
+        val www = cm.getCookie("https://www.hotaudio.net/").orEmpty()
+        val raw = "$apex; $www"
+        if (raw.contains("cf_clearance", ignoreCase = true)) {
+            val ua = webView?.settings?.userAgentString ?: WebSettings.getDefaultUserAgent(context)
+            AppPreferences(context).saveHotaudioClearance(raw, ua)
+            cm.flush()
+            if (isChallengeDetected) {
+                isChallengeDetected = false
+                _challengeUrl.value = null
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "WebView cleanup error", e)
         }
-        webView = null
+    }
+
+    /**
+     * Starts progressive streaming for [pageUrl] using the attached WebView.
+     */
+    suspend fun startStreaming(pageUrl: String, targetFile: File): String {
+        cancel()
+        finished = false
+        store = HotaudioMp4.PartStore()
+        lastFragmentTime = System.currentTimeMillis()
+        totalDuration = -1.0
+        currentPosition = -1.0
+        currentTrackUrl = pageUrl
+
+        val server = HotaudioStreamServer(store)
+        val port = server.start()
+        streamServer = server
+
+        withContext(Dispatchers.Main) {
+            val wv = getOrCreateWebView(context)
+            setupWatchdog(targetFile)
+
+            var cleanUrl = pageUrl.trim()
+            if (cleanUrl.startsWith("http://", ignoreCase = true)) {
+                cleanUrl = "https" + cleanUrl.substring(4)
+            }
+            cleanUrl = cleanUrl.replace("://www.hotaudio.net", "://hotaudio.net")
+
+            Log.i(TAG, "Loading hotaudio track in attached WebView: $cleanUrl")
+            wv.loadUrl(cleanUrl)
+        }
+
+        val init = store.waitForInit(timeoutMs = 30_000)
+        if (init == null) {
+            if (isChallengeDetected) {
+                _challengeUrl.value = currentTrackUrl
+                throw ResolveException("hotaudio Cloudflare verification required — complete the check on screen")
+            }
+            cancel()
+            throw ResolveException("hotaudio stream timed out waiting for audio initialization")
+        }
+
+        // Init arrived, ensure challenge dialog is dismissed
+        _challengeUrl.value = null
+        return "http://127.0.0.1:$port/stream.m4a"
+    }
+
+    private fun setupWatchdog(targetFile: File) {
+        watchdog?.let { handler.removeCallbacks(it) }
+
+        fun finishSuccess() {
+            if (finished) return
+            finished = true
+            store.markComplete()
+            val result = store.assemble(targetFile)
+            _challengeUrl.value = null
+            if (result.success && targetFile.exists() && targetFile.length() > 0) {
+                Log.i(TAG, "Assembled complete cache file: ${targetFile.length()} bytes (${result.fragmentCount} fragments)")
+            }
+        }
+
+        watchdog = object : Runnable {
+            override fun run() {
+                if (finished) return
+                val now = System.currentTimeMillis()
+                val idleMs = now - lastFragmentTime
+
+                if (store.hasInit() && store.fragmentCount() > 0) {
+                    val isEndedByTime = totalDuration > 0 && currentPosition >= totalDuration - 0.5
+                    val isEndedByIdle = idleMs > 8000 && store.checkGaps().isEmpty()
+                    if (isEndedByTime || isEndedByIdle) {
+                        finishSuccess()
+                        return
+                    }
+                }
+
+                if (store.fragmentCount() > 0 && idleMs > 45_000) {
+                    if (store.checkGaps().isEmpty()) {
+                        finishSuccess()
+                    } else {
+                        Log.w(TAG, "Stream stalled after 45s idle")
+                    }
+                    return
+                }
+
+                handler.postDelayed(this, 1000)
+            }
+        }
+        handler.postDelayed(watchdog!!, 1000)
+    }
+
+    private inner class CaptureBridge {
+        @JavascriptInterface
+        fun onBuffer(sink: String, base64Data: String) {
+            try {
+                val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                if (store.add(bytes)) {
+                    lastFragmentTime = System.currentTimeMillis()
+                    Log.d(TAG, "Captured $sink buffer: ${bytes.size}B, total fragments=${store.fragmentCount()}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error decoding buffer", e)
+            }
+        }
+
+        @JavascriptInterface
+        fun onProgress(current: Double, duration: Double) {
+            currentPosition = current
+            totalDuration = duration
+        }
+
+        @JavascriptInterface
+        fun onEnded() {
+            Log.i(TAG, "Playback ended event from page")
+        }
+
+        @JavascriptInterface
+        fun onChallenge(challengeActive: Boolean) {
+            isChallengeDetected = challengeActive
+            if (challengeActive) {
+                _challengeUrl.value = currentTrackUrl
+            } else {
+                checkClearance()
+            }
+        }
+
+        @JavascriptInterface
+        fun onLog(msg: String) {
+            Log.d(TAG, "Page log: $msg")
+        }
     }
 
     fun cancel() {
         finished = true
         store.markFailed()
-        cleanupWebView()
+        watchdog?.let { handler.removeCallbacks(it) }
+        watchdog = null
         streamServer?.stop()
         streamServer = null
+        handler.post {
+            webView?.stopLoading()
+            webView?.loadUrl("about:blank")
+        }
     }
 }

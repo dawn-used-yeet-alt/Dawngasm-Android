@@ -45,7 +45,8 @@ import kotlinx.coroutines.launch
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
-    private val resolver = AudioResolver(application)
+    val hotaudioCapture = HotaudioWebViewCapture(application)
+    private val resolver = AudioResolver(application, hotaudioCapture)
     private val downloader = TrackDownloader(application)
     private val headerFactory = HeaderDataSourceFactory(application, Network.client)
 
