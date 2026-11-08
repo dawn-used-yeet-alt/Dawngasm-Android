@@ -37,10 +37,13 @@ jobs:
           requireScope: false
           subjectPattern: ^(?![A-Z]).+$
           subjectPatternError: 'The PR title subject must not start with an uppercase letter.'
+          ignoreLabels: |
+            dependencies
 
   validate-description:
     name: Validate PR Description
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Ensure description is provided
         shell: bash
