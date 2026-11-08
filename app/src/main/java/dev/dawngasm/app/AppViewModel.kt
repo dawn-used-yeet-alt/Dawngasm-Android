@@ -112,7 +112,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     Player.STATE_ENDED -> {
                         _progress.value = PlaybackProgress()
-                        if (queue.isNotEmpty()) {
+                        val endedTrackId = player.currentMediaItem?.mediaId
+                        val streamFailure = endedTrackId
+                            ?.let { HotaudioStreamer.stateFor(it, null)?.error }
+                        if (streamFailure != null) {
+                            // The source ended because the download died, not
+                            // because the track finished. Do not skip ahead.
+                            HotaudioLog.w(
+                                "playback ended early track=$endedTrackId: " +
+                                    "${streamFailure.message}",
+                            )
+                            updatePlayer { copy(isPlaying = false, isLoading = false) }
+                            emitMessage(
+                                "Playback stopped before the end: ${streamFailure.message}",
+                                isError = true,
+                            )
+                        } else if (queue.isNotEmpty()) {
                             nextTrack()
                         } else {
                             updatePlayer { copy(isPlaying = false) }
@@ -123,6 +138,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val failedTrackId = player.currentMediaItem?.mediaId
+                val currentTrackId = _uiState.value.player.currentTrack?.id
+                if (player.currentMediaItem == null ||
+                    (failedTrackId != null && currentTrackId != null &&
+                        failedTrackId != currentTrackId)
+                ) {
+                    HotaudioLog.w(
+                        "ignoring stale player error track=$failedTrackId " +
+                            "current=$currentTrackId code=${error.errorCodeName}",
+                    )
+                    return
+                }
                 val message = error.message ?: error.errorCodeName
                 HotaudioLog.e(
                     "player error code=${error.errorCode} name=${error.errorCodeName} " +
@@ -411,6 +438,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "page=${track.pageUrl} localUri=${track.localUri}",
         )
         val previous = _uiState.value.player.currentTrack
+
+        // Tear down the old source before resolving the new one. Otherwise a
+        // late error/retry from the previous media item can clobber the new
+        // track's state or be attributed to it.
+        val generation = playGeneration.incrementAndGet()
+        playJob?.cancel()
+        player.stop()
+        player.clearMediaItems()
+
         if (previous != null && previous.id != track.id &&
             previous.id !in _uiState.value.downloadingIds
         ) {
@@ -424,14 +460,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val localUri = track.localUri
         if (localUri != null && downloader.exists(localUri)) {
             HotaudioLog.i("play local file track=${track.id} uri=$localUri")
-            playGeneration.incrementAndGet()
-            playJob?.cancel()
             startPlayback(track, Uri.parse(localUri), emptyMap(), playWhenReady = true)
             return
         }
 
-        val generation = playGeneration.incrementAndGet()
-        playJob?.cancel()
         _uiState.update {
             it.copy(
                 player = PlayerUiState(
@@ -487,14 +519,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "headers=${headers.keys} playWhenReady=$playWhenReady",
         )
         headerFactory.headers = headers + ("User-Agent" to Network.BROWSER_USER_AGENT)
-        val mediaItem = if (uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
-            MediaItem.Builder()
-                .setUri(uri)
-                .setMimeType(MimeTypes.AUDIO_MP4)
-                .build()
-        } else {
-            MediaItem.fromUri(uri)
+        val builder = MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(track.id)
+        if (uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
+            builder.setMimeType(MimeTypes.AUDIO_MP4)
         }
+        val mediaItem = builder.build()
         player.setMediaItem(mediaItem)
         player.prepare()
         player.playWhenReady = playWhenReady

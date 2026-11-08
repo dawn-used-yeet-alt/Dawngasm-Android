@@ -57,6 +57,11 @@ object HotaudioStreamer {
     private const val FIRST_BYTES_TIMEOUT_MS = 120_000L
     private const val COMPLETE_TIMEOUT_MS = 15 * 60_000L
 
+    /** DNS/connection hiccups are usually short; retry the same family first. */
+    private const val TRANSIENT_ATTEMPTS = 3
+    private const val TRANSIENT_BACKOFF_START_MS = 1_500L
+    private const val TRANSIENT_BACKOFF_MAX_MS = 9_000L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val states = ConcurrentHashMap<String, HotaudioStreamState>()
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -160,151 +165,175 @@ object HotaudioStreamer {
         HotaudioLog.i("download begin track=${spec.trackId} families=$families")
         var lastError: Throwable? = null
 
-        for ((index, family) in families.withIndex()) {
-            if (!currentCoroutineContext().isActive) {
-                HotaudioLog.w("download cancelled before attempt track=${spec.trackId} family=$family")
-                return
-            }
-
+        for ((familyIndex, family) in families.withIndex()) {
             state.family = family
-            state.generation += 1
-            HotaudioLog.i(
-                "attempt ${index + 1}/${families.size} track=${spec.trackId} " +
-                    "family=$family generation=${state.generation}",
-            )
+            var attempt = 1
 
-            try {
-                net.hotaudio.extractor.setIpFamily(family)
-                HotaudioLog.d("setIpFamily($family) OK")
-            } catch (error: Throwable) {
-                HotaudioLog.e("setIpFamily($family) failed", error)
-            }
-
-            spec.file.delete()
-            markerFor(spec).delete()
-            state.bytesWritten = 0L
-            state.firstByteAt = 0L
-
-            val token = CancellationToken()
-            tokens[spec.trackId] = token
-
-            val poller = scope.launch {
-                while (currentCoroutineContext().isActive) {
-                    val length = if (spec.file.exists()) spec.file.length() else 0L
-                    if (length != state.bytesWritten) {
-                        if (state.bytesWritten == 0L && length > 0L) {
-                            state.firstByteAt = System.currentTimeMillis()
-                            HotaudioLog.i(
-                                "first bytes track=${spec.trackId} bytes=$length " +
-                                    "after=${state.firstByteAt - state.startedAt}ms family=$family",
-                            )
-                        } else {
-                            HotaudioLog.d(
-                                "bytes track=${spec.trackId} $length family=$family",
-                            )
-                        }
-                        state.bytesWritten = length
-                    }
-                    if (state.done) break
-                    delay(POLL_MS)
-                }
-            }
-
-            try {
-                val options = DownloadOptions(
-                    trackId = null,
-                    apiBase = "https://hotaudio.net",
-                    delayMs = 250u,
-                    initialKeysJson = null,
-                )
-                val listener = object : ProgressListener {
-                    override fun onProgress(progress: Progress) {
-                        state.progressPhase = progress.phase
-                        state.progressLoaded = progress.loaded.toLong()
-                        state.progressTotal = progress.total.toLong()
-                        HotaudioLog.d(
-                            "progress track=${spec.trackId} phase=${progress.phase} " +
-                                "${progress.loaded}/${progress.total} file=${state.bytesWritten}",
-                        )
-                    }
-                }
-
-                HotaudioLog.i(
-                    "calling downloadToFile track=${spec.trackId} page=${spec.pageUrl} " +
-                        "family=$family",
-                )
-                downloadToFile(
-                    pageUrl = spec.pageUrl,
-                    path = spec.file.absolutePath,
-                    options = options,
-                    progress = listener,
-                    cancel = token,
-                )
-
-                state.bytesWritten = spec.file.length()
-                state.done = true
-                state.error = null
-                runCatching { markerFor(spec).writeText(state.bytesWritten.toString()) }
-                    .onFailure { HotaudioLog.w("could not write done marker", it) }
-                if (family != "any") prefs?.saveHotaudioIpFamily(family)
-                HotaudioLog.i(
-                    "download complete track=${spec.trackId} bytes=${state.bytesWritten} " +
-                        "family=$family elapsed=${System.currentTimeMillis() - state.startedAt}ms",
-                )
-                return
-            } catch (error: Throwable) {
-                lastError = error
-                state.bytesWritten = if (spec.file.exists()) spec.file.length() else 0L
-
-                if (!currentCoroutineContext().isActive || token.isCancelled()) {
-                    HotaudioLog.w(
-                        "download cancelled track=${spec.trackId} family=$family: ${error.message}",
-                    )
-                    spec.file.delete()
-                    markerFor(spec).delete()
+            while (true) {
+                if (!currentCoroutineContext().isActive) {
+                    HotaudioLog.w("download cancelled before attempt track=${spec.trackId} family=$family")
                     return
                 }
 
-                HotaudioLog.e(
-                    "attempt failed track=${spec.trackId} family=$family " +
-                        "challenge=${HotaudioErrors.isChallenge(error)} " +
-                        "rateLimit=${HotaudioErrors.isRateLimit(error)} " +
-                        "dnsOrTransient=${HotaudioErrors.isDnsOrTransient(error)}",
-                    error,
+                state.generation += 1
+                HotaudioLog.i(
+                    "attempt ${familyIndex + 1}/${families.size} #$attempt " +
+                        "track=${spec.trackId} family=$family generation=${state.generation}",
                 )
 
-                spec.file.delete()
-                markerFor(spec).delete()
-                state.bytesWritten = 0L
+                try {
+                    net.hotaudio.extractor.setIpFamily(family)
+                    HotaudioLog.d("setIpFamily($family) OK")
+                } catch (error: Throwable) {
+                    HotaudioLog.e("setIpFamily($family) failed", error)
+                }
 
-                if (index < families.lastIndex) {
-                    when {
-                        HotaudioErrors.isRateLimit(error) -> {
-                            HotaudioLog.w("rate limited; waiting 2500ms before next family")
-                            try {
-                                delay(2500)
-                            } catch (cancelled: CancellationException) {
-                                HotaudioLog.w("cancelled while backing off")
-                                return
+                // Keep the partial file: downloadToFile truncates it itself, and
+                // leaving it in place lets a reader at an earlier position keep
+                // reading instead of hitting a file-not-found gap.
+                markerFor(spec).delete()
+
+                val token = CancellationToken()
+                tokens[spec.trackId] = token
+
+                val poller = scope.launch {
+                    while (currentCoroutineContext().isActive) {
+                        val length = if (spec.file.exists()) spec.file.length() else 0L
+                        if (length != state.bytesWritten) {
+                            if (state.firstByteAt == 0L && length > 0L) {
+                                state.firstByteAt = System.currentTimeMillis()
+                                HotaudioLog.i(
+                                    "first bytes track=${spec.trackId} bytes=$length " +
+                                        "after=${state.firstByteAt - state.startedAt}ms family=$family",
+                                )
+                            } else {
+                                HotaudioLog.d(
+                                    "bytes track=${spec.trackId} $length family=$family",
+                                )
                             }
+                            state.bytesWritten = length
                         }
-                        HotaudioErrors.isChallenge(error) -> {
-                            HotaudioLog.w("challenge on family=$family; trying next family")
-                        }
-                        HotaudioErrors.isDnsOrTransient(error) -> {
-                            HotaudioLog.w(
-                                "transient/DNS failure on family=$family; trying next family",
-                            )
-                        }
-                        else -> {
-                            HotaudioLog.w("fatal error on family=$family; stopping")
-                            break
-                        }
+                        if (state.done) break
+                        delay(POLL_MS)
                     }
                 }
-            } finally {
-                poller.cancel()
-                tokens.remove(spec.trackId, token)
+
+                var retrySameFamily = false
+                try {
+                    val options = DownloadOptions(
+                        trackId = null,
+                        apiBase = "https://hotaudio.net",
+                        delayMs = 250u,
+                        initialKeysJson = null,
+                    )
+                    val listener = object : ProgressListener {
+                        override fun onProgress(progress: Progress) {
+                            state.progressPhase = progress.phase
+                            state.progressLoaded = progress.loaded.toLong()
+                            state.progressTotal = progress.total.toLong()
+                            HotaudioLog.d(
+                                "progress track=${spec.trackId} phase=${progress.phase} " +
+                                    "${progress.loaded}/${progress.total} file=${state.bytesWritten}",
+                            )
+                        }
+                    }
+
+                    HotaudioLog.i(
+                        "calling downloadToFile track=${spec.trackId} page=${spec.pageUrl} " +
+                            "family=$family attempt=$attempt",
+                    )
+                    downloadToFile(
+                        pageUrl = spec.pageUrl,
+                        path = spec.file.absolutePath,
+                        options = options,
+                        progress = listener,
+                        cancel = token,
+                    )
+
+                    state.bytesWritten = spec.file.length()
+                    state.done = true
+                    state.error = null
+                    runCatching { markerFor(spec).writeText(state.bytesWritten.toString()) }
+                        .onFailure { HotaudioLog.w("could not write done marker", it) }
+                    if (family != "any") prefs?.saveHotaudioIpFamily(family)
+                    HotaudioLog.i(
+                        "download complete track=${spec.trackId} bytes=${state.bytesWritten} " +
+                            "family=$family elapsed=${System.currentTimeMillis() - state.startedAt}ms",
+                    )
+                    return
+                } catch (error: Throwable) {
+                    lastError = error
+                    state.bytesWritten = if (spec.file.exists()) spec.file.length() else 0L
+
+                    if (!currentCoroutineContext().isActive || token.isCancelled()) {
+                        HotaudioLog.w(
+                            "download cancelled track=${spec.trackId} family=$family: ${error.message}",
+                        )
+                        spec.file.delete()
+                        markerFor(spec).delete()
+                        return
+                    }
+
+                    HotaudioLog.e(
+                        "attempt failed track=${spec.trackId} family=$family attempt=$attempt " +
+                            "challenge=${HotaudioErrors.isChallenge(error)} " +
+                            "rateLimit=${HotaudioErrors.isRateLimit(error)} " +
+                            "dnsOrTransient=${HotaudioErrors.isDnsOrTransient(error)} " +
+                            "bytes=${state.bytesWritten}",
+                        error,
+                    )
+
+                    if (HotaudioErrors.isDnsOrTransient(error) && attempt < TRANSIENT_ATTEMPTS) {
+                        val backoff = (TRANSIENT_BACKOFF_START_MS shl (attempt - 1))
+                            .coerceAtMost(TRANSIENT_BACKOFF_MAX_MS)
+                        HotaudioLog.w(
+                            "transient/DNS failure on family=$family; retrying same family " +
+                                "in ${backoff}ms (attempt ${attempt + 1}/$TRANSIENT_ATTEMPTS)",
+                        )
+                        try {
+                            delay(backoff)
+                        } catch (cancelled: CancellationException) {
+                            HotaudioLog.w("cancelled while backing off")
+                            return
+                        }
+                        attempt += 1
+                        retrySameFamily = true
+                    }
+                } finally {
+                    poller.cancel()
+                    tokens.remove(spec.trackId, token)
+                }
+
+                if (retrySameFamily) continue
+                break
+            }
+
+            if (familyIndex < families.lastIndex) {
+                val failure = lastError
+                when {
+                    failure == null -> Unit
+                    HotaudioErrors.isRateLimit(failure) -> {
+                        HotaudioLog.w("rate limited; waiting 2500ms before next family")
+                        try {
+                            delay(2500)
+                        } catch (cancelled: CancellationException) {
+                            HotaudioLog.w("cancelled while backing off")
+                            return
+                        }
+                    }
+                    HotaudioErrors.isChallenge(failure) -> {
+                        HotaudioLog.w("challenge on family=$family; trying next family")
+                    }
+                    HotaudioErrors.isDnsOrTransient(failure) -> {
+                        HotaudioLog.w(
+                            "transient/DNS failure on family=$family; trying next family",
+                        )
+                    }
+                    else -> {
+                        HotaudioLog.w("fatal error on family=$family; stopping")
+                        break
+                    }
+                }
             }
         }
 

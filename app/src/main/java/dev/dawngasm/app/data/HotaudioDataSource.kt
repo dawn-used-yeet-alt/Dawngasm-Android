@@ -45,11 +45,21 @@ class HotaudioDataSource(private val context: Context) : DataSource {
         state = stream
         position = dataSpec.position
 
-        // A retry can delete the file for a moment while the next family starts.
+        // A retry can truncate the file while the next attempt starts.
         var waitedMs = 0L
         while (!stream.spec.file.exists()) {
-            stream.error?.let {
-                throw IOException("hotaudio stream failed: ${it.message}", it)
+            stream.error?.let { failure ->
+                if (position > 0L) {
+                    // Part of the track already played; end it cleanly instead of
+                    // surfacing a source error to the player.
+                    HotaudioLog.w(
+                        "datasource open after failure track=$trackId position=$position; " +
+                            "ending playback: ${failure.message}",
+                    )
+                    listeners.forEach { it.onTransferStart(this, dataSpec, false) }
+                    return C.LENGTH_UNSET.toLong()
+                }
+                throw IOException("hotaudio stream failed: ${failure.message}", failure)
             }
             if (stream.done) {
                 throw IOException("hotaudio stream $trackId finished without a file")
@@ -84,8 +94,8 @@ class HotaudioDataSource(private val context: Context) : DataSource {
                 return C.RESULT_END_OF_INPUT
             }
 
-            // The downloader deletes and recreates the file between IP-family
-            // attempts, so reopen whenever the generation changes.
+            // The downloader truncates the file when a new attempt starts, so
+            // reopen whenever the generation changes.
             if (file == null || openedGeneration != stream.generation) {
                 file?.let { runCatching { it.close() } }
                 file = null
@@ -126,8 +136,18 @@ class HotaudioDataSource(private val context: Context) : DataSource {
                 }
             }
 
-            stream.error?.let {
-                throw IOException("hotaudio stream failed: ${it.message}", it)
+            stream.error?.let { failure ->
+                if (position > 0L) {
+                    // The download died mid-track. Treat it as a clean end so the
+                    // player stops instead of reporting a source error.
+                    HotaudioLog.w(
+                        "datasource ending playback after failure " +
+                            "track=${stream.spec.trackId} position=$position bytes=$available: " +
+                            "${failure.message}",
+                    )
+                    return C.RESULT_END_OF_INPUT
+                }
+                throw IOException("hotaudio stream failed: ${failure.message}", failure)
             }
             if (stream.done) {
                 HotaudioLog.i(
