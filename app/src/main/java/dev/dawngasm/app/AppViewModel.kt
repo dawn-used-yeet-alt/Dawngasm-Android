@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 import java.io.File
 import java.util.Date
 import androidx.annotation.OptIn
@@ -494,7 +495,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val localUri = track.localUri
         if (localUri != null && downloader.exists(localUri)) {
             HotaudioLog.i("play local file track=${track.id} uri=$localUri")
-            startPlayback(track, Uri.parse(localUri), emptyMap(), playWhenReady = true)
+            startPlayback(track, localUri.toUri(), emptyMap(), playWhenReady = true)
             return
         }
 
@@ -519,7 +520,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     HotaudioLog.w("play superseded track=${track.id}")
                     return@launch
                 }
-                startPlayback(track, Uri.parse(audio.url), audio.headers, playWhenReady = true)
+                startPlayback(track, audio.url.toUri(), audio.headers, playWhenReady = true)
             } catch (cancelled: CancellationException) {
                 HotaudioLog.w("play cancelled track=${track.id}")
                 throw cancelled

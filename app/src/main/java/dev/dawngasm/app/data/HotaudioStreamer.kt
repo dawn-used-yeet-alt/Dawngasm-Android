@@ -2,6 +2,7 @@ package dev.dawngasm.app.data
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -112,7 +113,7 @@ object HotaudioStreamer {
         )
     }
 
-    fun streamUri(trackId: String): Uri = Uri.parse("$SCHEME://stream/${Uri.encode(trackId)}")
+    fun streamUri(trackId: String): Uri = "$SCHEME://stream/${Uri.encode(trackId)}".toUri()
 
     fun trackIdFrom(uri: Uri): String? {
         if (!uri.scheme.equals(SCHEME, ignoreCase = true)) return null

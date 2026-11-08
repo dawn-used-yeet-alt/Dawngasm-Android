@@ -3,6 +3,7 @@ package dev.dawngasm.app.data
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
@@ -72,7 +73,7 @@ class TrackDownloader(
 
     fun folderLabel(treeUri: String?): String {
         if (treeUri == null) return "App storage (Music/Dawngasm)"
-        val uri = runCatching { Uri.parse(treeUri) }.getOrNull() ?: return "Custom folder"
+        val uri = runCatching { treeUri.toUri() }.getOrNull() ?: return "Custom folder"
         return runCatching { DocumentFile.fromTreeUri(context, uri)?.name }
             .getOrNull()
             ?.takeIf { it.isNotBlank() }
@@ -81,7 +82,7 @@ class TrackDownloader(
 
     fun exists(localUri: String?): Boolean {
         if (localUri.isNullOrBlank()) return false
-        val uri = runCatching { Uri.parse(localUri) }.getOrNull() ?: return false
+        val uri = runCatching { localUri.toUri() }.getOrNull() ?: return false
         return when (uri.scheme) {
             "file" -> uri.path?.let { File(it).exists() } == true
             "content" -> runCatching {
@@ -97,7 +98,7 @@ class TrackDownloader(
         extension: String,
         input: java.io.InputStream,
     ): SavedDownload {
-        val tree = DocumentFile.fromTreeUri(context, Uri.parse(treeUri))
+        val tree = DocumentFile.fromTreeUri(context, treeUri.toUri())
             ?: throw DownloadException("the selected folder is no longer available")
         if (!tree.canWrite()) {
             throw DownloadException("the selected folder is read-only")
