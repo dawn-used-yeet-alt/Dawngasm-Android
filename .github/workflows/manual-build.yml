@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
 
       - name: Upload Debug APK
         if: inputs.build_type == 'debug' || inputs.build_type == 'both'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dawngasm-manual-debug
           path: app/build/outputs/apk/debug/*.apk
@@ -106,7 +106,7 @@ jobs:
 
       - name: Upload Release APK
         if: inputs.build_type == 'release' || inputs.build_type == 'both'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dawngasm-manual-release
           path: app/build/outputs/apk/release/*.apk

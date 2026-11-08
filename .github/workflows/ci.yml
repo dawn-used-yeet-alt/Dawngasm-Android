@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-env
@@ -36,7 +36,7 @@ jobs:
 
       - name: Upload Lint Report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: lint-report
           path: |
@@ -53,7 +53,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -76,7 +76,7 @@ jobs:
         run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
       - name: Upload Debug APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dawngasm-debug
           path: app/build/outputs/apk/debug/*.apk
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload Test Report on Failure
         if: failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-report
           path: |
@@ -103,7 +103,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -141,7 +141,7 @@ jobs:
         run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleRelease
 
       - name: Upload Release APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dawngasm-release
           path: app/build/outputs/apk/release/*.apk
