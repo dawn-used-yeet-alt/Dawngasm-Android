@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import dev.dawngasm.app.AudiochanClearanceActivity
 import dev.dawngasm.app.BuildConfig
 import dev.dawngasm.app.HotaudioClearanceActivity
 import dev.dawngasm.app.data.AppPreferences
@@ -82,6 +83,9 @@ fun SettingsScreen(
     hotaudioConnected: Boolean,
     onHotaudioClearanceChanged: () -> Unit,
     onClearHotaudioClearance: () -> Unit,
+    audiochanConnected: Boolean,
+    onAudiochanClearanceChanged: () -> Unit,
+    onClearAudiochanClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
@@ -93,6 +97,11 @@ fun SettingsScreen(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
+    }
+    val audiochanLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) onAudiochanClearanceChanged()
     }
     val prefs = remember { AppPreferences(context) }
     val clearanceIp = remember(hotaudioConnected) {
@@ -406,6 +415,48 @@ fun SettingsScreen(
                         }
                         if (hotaudioConnected) {
                             TextButton(onClick = onClearHotaudioClearance) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                icon = Icons.Outlined.Language,
+                title = "audiochan",
+                subtitle = "audiochan protects audio streams with Cloudflare Turnstile. Open the check in the app, pass verification, and the clearance is saved for playback and downloads.",
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val clearanceStatus = if (audiochanConnected) {
+                        "Clearance saved"
+                    } else {
+                        "No clearance saved"
+                    }
+                    Text(
+                        text = clearanceStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (audiochanConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                audiochanLauncher.launch(
+                                    Intent(context, AudiochanClearanceActivity::class.java),
+                                )
+                            },
+                            shape = CircleShape,
+                        ) {
+                            Text(if (audiochanConnected) "Check again" else "Open audiochan check")
+                        }
+                        if (audiochanConnected) {
+                            TextButton(onClick = onClearAudiochanClearance) {
                                 Text("Clear")
                             }
                         }

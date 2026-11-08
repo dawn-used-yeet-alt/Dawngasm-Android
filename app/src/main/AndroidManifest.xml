@@ -37,6 +37,12 @@
             android:exported="false"
             android:label="hotaudio check"
             android:theme="@style/Theme.Dawngasm" />
+
+        <activity
+            android:name=".AudiochanClearanceActivity"
+            android:exported="false"
+            android:label="audiochan check"
+            android:theme="@style/Theme.Dawngasm" />
     </application>
 
 </manifest>

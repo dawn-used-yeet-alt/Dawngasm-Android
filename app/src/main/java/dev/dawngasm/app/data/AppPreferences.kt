@@ -81,6 +81,27 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    /** The `__Secure-audiochan_playback` cookie and the User-Agent it was issued to. */
+    fun audiochanClearance(): Pair<String, String>? {
+        val cookie = prefs.getString(KEY_AUDIOCHAN_COOKIE, null).orEmpty()
+        val userAgent = prefs.getString(KEY_AUDIOCHAN_USER_AGENT, null).orEmpty()
+        return (cookie to userAgent).takeIf { cookie.isNotBlank() }
+    }
+
+    fun saveAudiochanClearance(cookie: String, userAgent: String) {
+        prefs.edit()
+            .putString(KEY_AUDIOCHAN_COOKIE, cookie)
+            .putString(KEY_AUDIOCHAN_USER_AGENT, userAgent)
+            .apply()
+    }
+
+    fun clearAudiochanClearance() {
+        prefs.edit()
+            .remove(KEY_AUDIOCHAN_COOKIE)
+            .remove(KEY_AUDIOCHAN_USER_AGENT)
+            .apply()
+    }
+
     fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
 
     fun saveSaved(tracks: List<Track>) {
@@ -114,6 +135,8 @@ class AppPreferences(context: Context) {
         const val KEY_HOTAUDIO_USER_AGENT = "hotaudio_user_agent"
         const val KEY_HOTAUDIO_IP_FAMILY = "hotaudio_ip_family"
         const val KEY_HOTAUDIO_CLIENT_IP = "hotaudio_client_ip"
+        const val KEY_AUDIOCHAN_COOKIE = "audiochan_cookie"
+        const val KEY_AUDIOCHAN_USER_AGENT = "audiochan_user_agent"
         const val KEY_SAVED = "saved_tracks"
         const val KEY_HISTORY = "history_tracks"
         const val KEY_DOWNLOADS = "downloaded_tracks"

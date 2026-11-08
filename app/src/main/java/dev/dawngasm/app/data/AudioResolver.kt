@@ -91,15 +91,29 @@ class AudioResolver(private val context: Context? = null) {
     private fun audiochan(track: Track): ResolvedAudio {
         val slug = parseAudiochanSlug(track.pageUrl)
             ?: throw ResolveException("audiochan slug not found")
-        val apiHeaders = mapOf(
+
+        val prefs = context?.let { AppPreferences(it) }
+        val clearance = prefs?.audiochanClearance()
+        val userAgent = clearance?.second?.ifBlank { Network.BROWSER_USER_AGENT } ?: Network.BROWSER_USER_AGENT
+        val clearanceCookie = clearance?.first.orEmpty()
+
+        if (clearanceCookie.isNotBlank()) {
+            Network.syncCookie(AUDIOCHAN_ORIGIN, clearanceCookie)
+            Network.syncCookie(AUDIOCHAN_API, clearanceCookie)
+        }
+
+        val apiHeaders = mutableMapOf(
             "Origin" to AUDIOCHAN_ORIGIN,
             "Referer" to AUDIOCHAN_REFERER,
             "Accept" to "application/json",
         )
+        if (clearanceCookie.isNotBlank()) {
+            apiHeaders["Cookie"] = clearanceCookie
+        }
 
-        var (status, body) = apiCall("$AUDIOCHAN_API/audios/slug/$slug", "GET", null, apiHeaders)
+        var (status, body) = apiCall("$AUDIOCHAN_API/audios/slug/$slug", "GET", null, apiHeaders, userAgent)
         if (status == 404 || status == 405) {
-            val fallback = apiCall("$AUDIOCHAN_API/audios/slug/$slug", "POST", "", apiHeaders)
+            val fallback = apiCall("$AUDIOCHAN_API/audios/slug/$slug", "POST", "", apiHeaders, userAgent)
             status = fallback.first
             body = fallback.second
         }
@@ -119,38 +133,53 @@ class AudioResolver(private val context: Context? = null) {
 
         val audioId = parseJsonField(body, "id")
             ?: throw ResolveException("audiochan audio id not found")
+        val fileId = parseAudiochanFileId(body)
 
-        val intentResult = apiCall("$AUDIOCHAN_API/audios/$audioId/play-intent", "POST", "", apiHeaders)
+        val verificationMessage = if (clearanceCookie.isNotBlank()) {
+            "audiochan verification expired — pass the check again in Settings"
+        } else {
+            audiochanVerificationMessage
+        }
+
+        val intentBody = fileId?.let { JSONObject().put("file_id", it).toString() } ?: ""
+        val intentResult = apiCall("$AUDIOCHAN_API/audios/$audioId/play-intent", "POST", intentBody, apiHeaders, userAgent)
         val playIntent = when (intentResult.first) {
             200 -> parseJsonField(intentResult.second, "play_intent")
-            403 -> throw ResolveException(audiochanVerificationMessage)
+            403 -> throw ResolveException(verificationMessage)
             404 -> null
             else -> throw ResolveException("audiochan play intent returned HTTP ${intentResult.first}")
         }
 
-        val streamPayload = playIntent?.let {
-            JSONObject().put("play_intent", it).toString()
-        }.orEmpty()
+        val streamPayload = JSONObject().apply {
+            if (playIntent != null) put("play_intent", playIntent)
+            if (fileId != null) put("file_id", fileId)
+        }.toString()
         val streamResult = apiCall(
             "$AUDIOCHAN_API/audios/$audioId/stream-url",
             "POST",
             streamPayload,
             apiHeaders,
+            userAgent,
         )
-        if (streamResult.first == 403) throw ResolveException(audiochanVerificationMessage)
+        if (streamResult.first == 403) throw ResolveException(verificationMessage)
         if (streamResult.first != 200) {
             throw ResolveException("audiochan stream url returned HTTP ${streamResult.first}")
         }
         val streamUrl = parseJsonField(streamResult.second, "url")
             ?: throw ResolveException("audiochan stream url not found")
 
+        val mediaHeaders = mutableMapOf(
+            "User-Agent" to userAgent,
+            "Origin" to AUDIOCHAN_ORIGIN,
+            "Referer" to AUDIOCHAN_REFERER,
+        )
+        if (clearanceCookie.isNotBlank()) {
+            mediaHeaders["Cookie"] = clearanceCookie
+        }
+
         return ResolvedAudio(
             url = streamUrl,
-            headers = mapOf(
-                "User-Agent" to Network.BROWSER_USER_AGENT,
-                "Origin" to AUDIOCHAN_ORIGIN,
-                "Referer" to AUDIOCHAN_REFERER,
-            ),
+            headers = mediaHeaders,
             extension = extensionFromUrl(streamUrl, "m4a"),
         )
     }
@@ -197,8 +226,9 @@ class AudioResolver(private val context: Context? = null) {
         method: String,
         body: String?,
         headers: Map<String, String>,
+        userAgent: String = Network.BROWSER_USER_AGENT,
     ): Pair<Int, String> {
-        val builder = Request.Builder().url(url).header("User-Agent", Network.BROWSER_USER_AGENT)
+        val builder = Request.Builder().url(url).header("User-Agent", userAgent)
         headers.forEach { (name, value) -> builder.header(name, value) }
         if (method == "POST") {
             builder.post(
@@ -221,8 +251,8 @@ class AudioResolver(private val context: Context? = null) {
         private const val AUDIOCHAN_ORIGIN = "https://audiochan.com"
         private const val AUDIOCHAN_REFERER = "https://audiochan.com/"
         private const val AUDIOCHAN_API = "https://api.audiochan.com"
-        private const val audiochanVerificationMessage =
-            "audiochan needs browser verification for this track"
+        const val audiochanVerificationMessage =
+            "audiochan needs browser verification — pass the check in Settings"
 
         private val soundgasmPattern = Regex(
             """(?:m4a|mp3|ogg)\s*:\s*["']([^"']+)["']""",
@@ -257,6 +287,18 @@ class AudioResolver(private val context: Context? = null) {
 
         fun parseAudiochanSlug(text: String): String? =
             audiochanSlug.find(text)?.groupValues?.getOrNull(1)
+
+        /** Reads `audioFile.id` from the audiochan slug response when present. */
+        fun parseAudiochanFileId(json: String): String? {
+            val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
+            fun from(obj: JSONObject?): String? {
+                val file = obj?.optJSONObject("audioFile")
+                    ?: obj?.optJSONObject("audio_file")
+                    ?: return null
+                return file.optString("id").takeIf { it.isNotBlank() && it != "null" }
+            }
+            return from(root) ?: from(root.optJSONObject("data"))
+        }
 
         /** Reads `audioFile.url` from the audiochan slug response when present. */
         fun parseAudiochanFileUrl(json: String): String? {

@@ -199,6 +199,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             downloadTreeUri = tree,
             downloadFolderLabel = downloader.folderLabel(tree),
             hotaudioConnected = prefs.hotaudioClearance() != null,
+            audiochanConnected = prefs.audiochanClearance() != null,
         )
     }
 
@@ -441,6 +442,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             HotaudioLog.e("clearHotaudioClearance: native reset failed", error)
         }
         _uiState.update { it.copy(hotaudioConnected = false) }
+    }
+
+    /** Refresh the audiochan clearance status after the WebView activity. */
+    fun refreshAudiochanClearance() {
+        HotaudioLog.i("refreshAudiochanClearance")
+        val clearance = prefs.audiochanClearance()
+        if (clearance != null) {
+            Network.syncCookie("https://audiochan.com/", clearance.first)
+            Network.syncCookie("https://api.audiochan.com/", clearance.first)
+        }
+        _uiState.update { it.copy(audiochanConnected = clearance != null) }
+    }
+
+    fun clearAudiochanClearance() {
+        HotaudioLog.i("clearAudiochanClearance")
+        prefs.clearAudiochanClearance()
+        _uiState.update { it.copy(audiochanConnected = false) }
     }
 
     // --- playback -----------------------------------------------------------
