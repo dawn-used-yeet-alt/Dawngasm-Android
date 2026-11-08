@@ -48,8 +48,8 @@ fun LibraryScreen(
     downloadingIds: Set<String>,
     onTrackClick: (Track, List<Track>) -> Unit,
     onToggleDownload: (Track) -> Unit,
-    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     var selectedSubTab by rememberSaveable { mutableStateOf(LibrarySubTab.History) }
 

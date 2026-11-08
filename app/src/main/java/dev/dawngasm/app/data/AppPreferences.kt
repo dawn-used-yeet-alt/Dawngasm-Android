@@ -1,6 +1,7 @@
 package dev.dawngasm.app.data
 
 import android.content.Context
+import androidx.core.content.edit
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.Track
 
@@ -15,11 +16,11 @@ class AppPreferences(context: Context) {
         // One-time reset so existing installs pick up the new Top / Past week
         // home default instead of a previously persisted window.
         if (prefs.getInt(KEY_DEFAULTS_VERSION, 0) < 1) {
-            prefs.edit()
-                .remove(KEY_SORT)
-                .remove(KEY_WINDOW)
-                .putInt(KEY_DEFAULTS_VERSION, 1)
-                .apply()
+            prefs.edit {
+                remove(KEY_SORT)
+                remove(KEY_WINDOW)
+                putInt(KEY_DEFAULTS_VERSION, 1)
+            }
         }
     }
 
@@ -30,21 +31,26 @@ class AppPreferences(context: Context) {
         ?.takeIf { SearchSyntax.normalizeWindow(it) != null } ?: SearchSyntax.DEFAULT_WINDOW
 
     fun saveFeed(sort: String, window: String) {
-        prefs.edit().putString(KEY_SORT, sort).putString(KEY_WINDOW, window).apply()
+        prefs.edit {
+            putString(KEY_SORT, sort)
+            putString(KEY_WINDOW, window)
+        }
     }
 
     fun blockedTags(): List<String> = readTags(KEY_BLOCKED_TAGS)
 
     fun saveBlockedTags(tags: List<String>) {
-        prefs.edit().putString(KEY_BLOCKED_TAGS, tags.joinToString("\u0001")).apply()
+        prefs.edit {
+            putString(KEY_BLOCKED_TAGS, tags.joinToString("\u0001"))
+        }
     }
 
     fun downloadTreeUri(): String? = prefs.getString(KEY_DOWNLOAD_TREE, null)
 
     fun saveDownloadTreeUri(uri: String?) {
-        prefs.edit().apply {
+        prefs.edit {
             if (uri == null) remove(KEY_DOWNLOAD_TREE) else putString(KEY_DOWNLOAD_TREE, uri)
-        }.apply()
+        }
     }
 
     /** The `cf_clearance` cookie and the User-Agent it was issued to. */
@@ -55,10 +61,10 @@ class AppPreferences(context: Context) {
     }
 
     fun saveHotaudioClearance(cookie: String, userAgent: String) {
-        prefs.edit()
-            .putString(KEY_HOTAUDIO_COOKIE, cookie)
-            .putString(KEY_HOTAUDIO_USER_AGENT, userAgent)
-            .apply()
+        prefs.edit {
+            putString(KEY_HOTAUDIO_COOKIE, cookie)
+            putString(KEY_HOTAUDIO_USER_AGENT, userAgent)
+        }
     }
 
     fun hotaudioIpFamily(): String? = prefs.getString(KEY_HOTAUDIO_IP_FAMILY, null)
@@ -66,19 +72,19 @@ class AppPreferences(context: Context) {
     fun hotaudioClientIp(): String? = prefs.getString(KEY_HOTAUDIO_CLIENT_IP, null)
 
     fun saveHotaudioIpFamily(family: String?, ip: String? = null) {
-        prefs.edit().apply {
+        prefs.edit {
             if (family == null) remove(KEY_HOTAUDIO_IP_FAMILY) else putString(KEY_HOTAUDIO_IP_FAMILY, family)
             if (ip != null) putString(KEY_HOTAUDIO_CLIENT_IP, ip)
-        }.apply()
+        }
     }
 
     fun clearHotaudioClearance() {
-        prefs.edit()
-            .remove(KEY_HOTAUDIO_COOKIE)
-            .remove(KEY_HOTAUDIO_USER_AGENT)
-            .remove(KEY_HOTAUDIO_IP_FAMILY)
-            .remove(KEY_HOTAUDIO_CLIENT_IP)
-            .apply()
+        prefs.edit {
+            remove(KEY_HOTAUDIO_COOKIE)
+            remove(KEY_HOTAUDIO_USER_AGENT)
+            remove(KEY_HOTAUDIO_IP_FAMILY)
+            remove(KEY_HOTAUDIO_CLIENT_IP)
+        }
     }
 
     /** The `__Secure-audiochan_playback` cookie and the User-Agent it was issued to. */
@@ -89,35 +95,35 @@ class AppPreferences(context: Context) {
     }
 
     fun saveAudiochanClearance(cookie: String, userAgent: String) {
-        prefs.edit()
-            .putString(KEY_AUDIOCHAN_COOKIE, cookie)
-            .putString(KEY_AUDIOCHAN_USER_AGENT, userAgent)
-            .apply()
+        prefs.edit {
+            putString(KEY_AUDIOCHAN_COOKIE, cookie)
+            putString(KEY_AUDIOCHAN_USER_AGENT, userAgent)
+        }
     }
 
     fun clearAudiochanClearance() {
-        prefs.edit()
-            .remove(KEY_AUDIOCHAN_COOKIE)
-            .remove(KEY_AUDIOCHAN_USER_AGENT)
-            .apply()
+        prefs.edit {
+            remove(KEY_AUDIOCHAN_COOKIE)
+            remove(KEY_AUDIOCHAN_USER_AGENT)
+        }
     }
 
     fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
 
     fun saveSaved(tracks: List<Track>) {
-        prefs.edit().putString(KEY_SAVED, Track.listToJson(tracks)).apply()
+        prefs.edit { putString(KEY_SAVED, Track.listToJson(tracks)) }
     }
 
     fun history(): List<Track> = Track.listFromJson(prefs.getString(KEY_HISTORY, null))
 
     fun saveHistory(tracks: List<Track>) {
-        prefs.edit().putString(KEY_HISTORY, Track.listToJson(tracks)).apply()
+        prefs.edit { putString(KEY_HISTORY, Track.listToJson(tracks)) }
     }
 
     fun downloads(): List<Track> = Track.listFromJson(prefs.getString(KEY_DOWNLOADS, null))
 
     fun saveDownloads(tracks: List<Track>) {
-        prefs.edit().putString(KEY_DOWNLOADS, Track.listToJson(tracks)).apply()
+        prefs.edit { putString(KEY_DOWNLOADS, Track.listToJson(tracks)) }
     }
 
     private fun readTags(key: String): List<String> {

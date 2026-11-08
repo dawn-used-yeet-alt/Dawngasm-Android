@@ -2,7 +2,9 @@ package dev.dawngasm.app.data
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
@@ -16,6 +18,7 @@ import java.io.RandomAccessFile
  * fragment. When a read reaches the current end of the file, this source waits
  * for the downloader to append more instead of reporting end-of-input.
  */
+@OptIn(UnstableApi::class)
 class HotaudioDataSource(private val context: Context) : DataSource {
     private var state: HotaudioStreamState? = null
     private var file: RandomAccessFile? = null

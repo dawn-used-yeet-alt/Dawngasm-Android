@@ -105,13 +105,17 @@ android {
     lint {
         abortOnError = false
         checkReleaseBuilds = false
+        lintConfig = file("lint.xml")
     }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-        freeCompilerArgs.addAll("-opt-in=kotlin.RequiresOptIn")
+        freeCompilerArgs.addAll(
+            "-opt-in=kotlin.RequiresOptIn",
+            "-opt-in=androidx.media3.common.util.UnstableApi",
+        )
     }
 }
 

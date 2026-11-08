@@ -8,6 +8,7 @@ import android.net.Uri
 import android.util.Log
 import java.io.File
 import java.util.Date
+import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -16,6 +17,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
@@ -55,6 +57,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+@OptIn(UnstableApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
@@ -687,6 +690,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
  * media item. audiochan needs Origin/Referer headers; soundgasm and whyp just
  * need a browser user agent. Sharing the OkHttp client keeps the cookie jar.
  */
+@OptIn(UnstableApi::class)
 private class HeaderDataSourceFactory(
     context: Context,
     private val client: okhttp3.OkHttpClient,
@@ -707,6 +711,7 @@ private class HeaderDataSourceFactory(
  * Sends `hotaudio://stream/...` URIs to [HotaudioDataSource] and everything
  * else to Media3's default file/HTTP stack.
  */
+@OptIn(UnstableApi::class)
 private class RoutingDataSource(
     private val context: Context,
     private val fallbackFactory: DataSource.Factory,
