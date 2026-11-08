@@ -25,6 +25,7 @@ data class AppUiState(
     val blockedTags: List<String> = emptyList(),
     val downloadTreeUri: String? = null,
     val downloadFolderLabel: String = "App storage (Music/Dawngasm)",
+    val hotaudioConnected: Boolean = false,
 ) {
     val savedIds: Set<String> get() = saved.mapTo(HashSet()) { it.id }
     val downloadedIds: Set<String> get() = downloads.mapTo(HashSet()) { it.id }

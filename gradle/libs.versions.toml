@@ -13,6 +13,8 @@ json = "20240303"
 junit = "4.13.2"
 androidxJunit = "1.3.0"
 espresso = "3.7.0"
+jna = "5.17.0"
+rustlsPlatformVerifier = "0.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +39,8 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 androidx-media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "media3" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
+rustls-platform-verifier = { group = "org.rustls", name = "rustls-platform-verifier", version.ref = "rustlsPlatformVerifier" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 
