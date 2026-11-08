@@ -1,0 +1,48 @@
+'area:native':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/src/main/jniLibs/**'
+          - 'app/src/main/java/net/hotaudio/extractor/**'
+          - '**/*.rs'
+          - '**/Cargo.toml'
+          - '**/Cargo.lock'
+
+'area:ui':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/src/main/java/dev/dawngasm/app/ui/**'
+          - 'app/src/main/java/dev/dawngasm/app/*Screen*'
+          - 'app/src/main/res/**'
+
+'area:data':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/src/main/java/dev/dawngasm/app/data/**'
+          - 'app/src/main/java/dev/dawngasm/app/state/**'
+
+'area:playback':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/src/main/java/dev/dawngasm/app/player/**'
+          - 'app/src/main/java/dev/dawngasm/app/playback/**'
+          - 'app/src/main/java/dev/dawngasm/app/*Clearance*'
+
+'build':
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'gradle/**'
+          - '*.gradle.kts'
+          - 'app/build.gradle.kts'
+          - 'gradle.properties'
+          - 'gradle/libs.versions.toml'
+
+'ci':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+
+'documentation':
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'LICENSE'
