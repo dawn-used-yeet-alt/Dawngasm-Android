@@ -13,12 +13,16 @@ data class SearchRequest(
     val excludeTags: List<String> = emptyList(),
     val sort: String = SearchSyntax.DEFAULT_SORT,
     val window: String = SearchSyntax.DEFAULT_WINDOW,
+    val hosts: List<String> = emptyList(),
+    val excludeHosts: List<String> = emptyList(),
 ) {
-    /** Human-readable query, e.g. `rain [f4m] -[m4f]`. */
+    /** Human-readable query, e.g. `rain [f4m] -[m4f] host:soundgasm -host:whyp`. */
     fun summary(): String = buildList {
         text.trim().takeIf { it.isNotEmpty() }?.let(::add)
         includeTags.forEach { add("[$it]") }
         excludeTags.forEach { add("-[${it}]") }
+        hosts.forEach { add("host:$it") }
+        excludeHosts.forEach { add("-host:$it") }
     }.joinToString(" ")
 
     fun filtersLabel(): String =
@@ -27,5 +31,7 @@ data class SearchRequest(
     fun hasFilters(): Boolean =
         summary().isNotEmpty() ||
             sort != SearchSyntax.DEFAULT_SORT ||
-            window != SearchSyntax.DEFAULT_WINDOW
+            window != SearchSyntax.DEFAULT_WINDOW ||
+            hosts.isNotEmpty() ||
+            excludeHosts.isNotEmpty()
 }

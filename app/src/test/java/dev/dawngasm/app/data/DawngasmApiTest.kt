@@ -1,6 +1,8 @@
 package dev.dawngasm.app.data
 
+import dev.dawngasm.app.model.AudioHost
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -57,5 +59,67 @@ class DawngasmApiTest {
     fun ignoresBrokenTagResponses() {
         assertTrue(DawngasmApi.parseTags("not json").isEmpty())
         assertTrue(DawngasmApi.parseTags("""{"tags":[]}""").isEmpty())
+    }
+
+    @Test
+    fun parsesSearchResponseWithAudioColumn() {
+        val body = """
+            {
+                "columns": ["id", "title", "subreddit", "author", "score", "created", "created_unix", "audio"],
+                "rows": [
+                    ["post1", "Title 1", "gonewildaudio", "author1", 100, "2026-11-01", 1730419200, [
+                        {"host": "soundgasm", "url": "https://soundgasm.net/u/author1/title1"}
+                    ]],
+                    ["post2", "Script Only", "gonewildaudio", "author2", 50, "2026-11-01", 1730419200, []],
+                    ["post3", "Title 3", "gonewildaudio", "author3", 200, "2026-11-01", 1730419200, [
+                        {"host": "whyp", "url": "https://whyp.it/tracks/12345"}
+                    ]]
+                ],
+                "hasMore": true
+            }
+        """.trimIndent()
+
+        val parsed = DawngasmApi().parseSearch(body)
+        assertFalse(parsed.needsBodies)
+        assertTrue(parsed.hasMore)
+        assertEquals(2, parsed.posts.size)
+
+        assertEquals("post1", parsed.posts[0].id)
+        assertEquals(AudioHost.SOUNDGASM, parsed.posts[0].resolvedHost)
+        assertEquals("https://soundgasm.net/u/author1/title1", parsed.posts[0].resolvedAudioUrl)
+
+        assertEquals("post3", parsed.posts[1].id)
+        assertEquals(AudioHost.WHYP, parsed.posts[1].resolvedHost)
+        assertEquals("https://whyp.it/tracks/12345", parsed.posts[1].resolvedAudioUrl)
+    }
+
+    @Test
+    fun parseSearchWithoutAudioColumnNeedsBodies() {
+        val body = """
+            {
+                "columns": ["id", "title", "subreddit", "author", "score", "created", "created_unix"],
+                "rows": [
+                    ["post1", "Title 1", "gonewildaudio", "author1", 100, "2026-11-01", 1730419200]
+                ],
+                "hasMore": false
+            }
+        """.trimIndent()
+
+        val parsed = DawngasmApi().parseSearch(body)
+        assertTrue(parsed.needsBodies)
+        assertFalse(parsed.hasMore)
+        assertEquals(1, parsed.posts.size)
+        assertEquals("post1", parsed.posts[0].id)
+    }
+
+    @Test
+    fun buildSearchUrlIncludesHostsAndExcludeHosts() {
+        val url = DawngasmApi.buildSearchUrl(
+            baseUrl = "https://example.com",
+            hosts = listOf("soundgasm", "whyp"),
+            excludeHosts = listOf("audiochan"),
+        )
+        assertEquals("soundgasm,whyp", url.queryParameter("hosts"))
+        assertEquals("audiochan", url.queryParameter("excludeHosts"))
     }
 }

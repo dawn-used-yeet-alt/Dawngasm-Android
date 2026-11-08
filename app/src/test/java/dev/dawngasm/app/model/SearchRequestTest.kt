@@ -63,4 +63,15 @@ class SearchRequestTest {
         assertEquals(listOf("f4m"), SearchSyntax.parseTagList("F4M, f4m"))
         assertTrue(SearchSyntax.parseTagList(" , ").isEmpty())
     }
+
+    @Test
+    fun summaryIncludesHostsAndExcludeHosts() {
+        val request = SearchRequest(
+            text = "rain",
+            hosts = listOf("soundgasm", "whyp"),
+            excludeHosts = listOf("audiochan"),
+        )
+        assertEquals("rain host:soundgasm host:whyp -host:audiochan", request.summary())
+        assertTrue(request.hasFilters())
+    }
 }
