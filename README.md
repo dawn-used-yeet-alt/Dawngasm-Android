@@ -19,19 +19,3 @@ Instead, Dawngasm uses my own ["database"](https://dawngasm.dawnusedyeet.workers
 I don't collect any(yes any) user data, and I don't want or intend to.
 
 The only tracking you might encounter comes from third-party services, such as Cloudflare or the audio hosting platforms you connect to. Which I can't realistically do anything about.
-
-# Development status
-
-It's working and looks good, no release yet tho. It'll be made after hotaudio is done.
-
-Currently supported audio hosts:
-
-- Audiogasm
-- Whyp
-- Audiochan
-
-HotAudio PR is in the works.
-
-# If you want to try it anyway or don't care about hotaudio.net (fuck that site bro)
-
-You can download a release from the CI/Actions. The workflow builds the app every commit. 
