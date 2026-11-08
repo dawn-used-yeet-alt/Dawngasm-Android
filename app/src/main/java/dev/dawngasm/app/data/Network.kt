@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 
 /**
@@ -30,11 +31,45 @@ object Network {
             .followSslRedirects(true)
             .build()
     }
+
+    fun syncCookie(url: String, cookieHeader: String) {
+        val httpUrl = url.toHttpUrlOrNull() ?: return
+        MemoryCookieJar.syncCookie(httpUrl, cookieHeader)
+    }
 }
 
 /** Thread-safe in-memory cookie jar; nothing leaves the app process. */
 object MemoryCookieJar : CookieJar {
     private val cookies = mutableListOf<Cookie>()
+
+    fun syncCookie(url: HttpUrl, rawCookieHeader: String) {
+        if (rawCookieHeader.isBlank()) return
+        val domain = url.host.removePrefix("api.")
+        synchronized(cookies) {
+            val now = System.currentTimeMillis()
+            cookies.removeAll { it.expiresAt <= now }
+            val parts = rawCookieHeader.split(';').map { it.trim() }
+            for (part in parts) {
+                if (part.isEmpty() || !part.contains('=')) continue
+                val name = part.substringBefore('=').trim()
+                val value = part.substringAfter('=').trim()
+                if (name.isEmpty()) continue
+                try {
+                    val cookie = Cookie.Builder()
+                        .name(name)
+                        .value(value)
+                        .domain(domain)
+                        .path("/")
+                        .secure()
+                        .build()
+                    cookies.removeAll {
+                        it.name == cookie.name && it.domain == cookie.domain && it.path == cookie.path
+                    }
+                    cookies.add(cookie)
+                } catch (_: Exception) {}
+            }
+        }
+    }
 
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         synchronized(this.cookies) {

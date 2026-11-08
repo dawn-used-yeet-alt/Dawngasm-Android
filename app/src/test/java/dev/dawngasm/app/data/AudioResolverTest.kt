@@ -64,6 +64,16 @@ class AudioResolverTest {
     }
 
     @Test
+    fun readsAudiochanFileId() {
+        val json = """{"audioFile":{"id":"file_123","url":null}}"""
+        assertEquals("file_123", AudioResolver.parseAudiochanFileId(json))
+        val snakeCase = """{"audio_file":{"id":"file_456"}}"""
+        assertEquals("file_456", AudioResolver.parseAudiochanFileId(snakeCase))
+        assertNull(AudioResolver.parseAudiochanFileId("""{"audioFile":{"id":null}}"""))
+        assertNull(AudioResolver.parseAudiochanFileId("{}"))
+    }
+
+    @Test
     fun readsAudiochanFileUrlWhenPublic() {
         val json = """{"audioFile":{"id":"x","url":"https://cdn.audiochan.com/file.m4a"}}"""
         assertEquals("https://cdn.audiochan.com/file.m4a", AudioResolver.parseAudiochanFileUrl(json))
