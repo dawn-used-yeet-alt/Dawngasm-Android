@@ -1,0 +1,35 @@
+name: Trigger Dependabot
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for triggering Dependabot'
+        required: false
+        type: string
+        default: 'manual trigger'
+
+concurrency:
+  group: trigger-dependabot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    name: Queue Dependabot Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Trigger Dependabot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "# Last dispatched: $(date -u '+%Y-%m-%dT%H:%M:%SZ') by ${{ github.actor }} (${{ inputs.reason }})" >> .github/dependabot.yml
+          git commit -am "ci: trigger dependabot update scan [skip ci]"
+          git push origin main

@@ -8,27 +8,13 @@ updates:
       day: "monday"
       time: "04:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 50
     commit-message:
       prefix: "build"
       include: "scope"
     labels:
       - "build"
       - "dependencies"
-    groups:
-      androidx-compose:
-        patterns:
-          - "androidx.compose*"
-      androidx-lifecycle:
-        patterns:
-          - "androidx.lifecycle*"
-      androidx-media3:
-        patterns:
-          - "androidx.media3*"
-      kotlin:
-        patterns:
-          - "org.jetbrains.kotlin*"
-          - "kotlinx-coroutines*"
 
   # Maintain GitHub Actions dependencies
   - package-ecosystem: "github-actions"
@@ -38,14 +24,10 @@ updates:
       day: "monday"
       time: "04:00"
       timezone: "Etc/UTC"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 50
     commit-message:
       prefix: "ci"
       include: "scope"
     labels:
       - "ci"
       - "dependencies"
-    groups:
-      actions:
-        patterns:
-          - "actions/*"
