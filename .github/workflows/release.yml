@@ -47,24 +47,39 @@ jobs:
           setup-rust: 'true'
           cache-read-only: 'false'
 
-      - name: Determine version metadata
-        id: version
+      - name: Verify release ref on main
         shell: bash
         run: |
-          if [ -n "${{ inputs.tag_name }}" ]; then
-            TAG="${{ inputs.tag_name }}"
+          git fetch origin main --depth=1 || true
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor HEAD origin/main; then
+              echo "::warning::Current HEAD is not an ancestor of origin/main."
+            fi
+          fi
+
+      - name: Determine version metadata
+        id: version
+        env:
+          TAG_INPUT: ${{ inputs.tag_name }}
+        shell: bash
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+
+          if [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF_NAME}"
           else
-            TAG="v1.0.${GITHUB_RUN_NUMBER}"
+            TAG="v1.0.${VERSION_CODE}"
           fi
           VERSION_NAME="${TAG#v}"
 
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Building Dawngasm release $TAG (versionName=$VERSION_NAME, versionCode=$GITHUB_RUN_NUMBER)"
+          echo "Building Dawngasm release $TAG (versionName=$VERSION_NAME, versionCode=$VERSION_CODE)"
 
       - name: Decode release signing key
         env:

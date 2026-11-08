@@ -29,8 +29,8 @@ on:
         default: true
 
 concurrency:
-  group: manual-build-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: manual-build-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -44,6 +44,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-env
@@ -52,10 +54,13 @@ jobs:
           cache-debug-keystore: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
           cache-read-only: 'false'
 
-      - name: Compute version
+      - name: Compute monotonic version
         run: |
-          echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}-manual" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}-manual" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}-manual"
 
       - name: Run Android Lint
         if: inputs.run_lint == true

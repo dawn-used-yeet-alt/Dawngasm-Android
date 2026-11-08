@@ -54,6 +54,13 @@ runs:
             -dname "CN=Android Debug,O=Android,C=US"
         fi
 
+    - name: Resolve hotaudio extractor reference
+      shell: bash
+      run: |
+        HOTAUDIO_REF=$(grep -o 'val hotaudioExtractorRef = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2 || echo "v2.3.0")
+        echo "HOTAUDIO_REF=$HOTAUDIO_REF" >> "$GITHUB_ENV"
+        echo "Using hotaudio extractor ref: $HOTAUDIO_REF"
+
     - name: Cache generated hotaudio bindings and native libs
       uses: actions/cache@v4
       with:
@@ -61,11 +68,7 @@ runs:
           app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
           app/src/main/java/net/hotaudio/extractor/.hotaudio-bindings-ref
           app/src/main/jniLibs
-        key: hotaudio-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}-arm64-v8a
-        restore-keys: |
-          hotaudio-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts') }}
-          hotaudio-${{ runner.os }}-
-          hotaudio-v2.3.0-arm64-v8a-v3
+        key: hotaudio-${{ runner.os }}-${{ env.HOTAUDIO_REF }}-arm64-v8a
 
     - name: Set up Rust
       if: inputs.setup-rust == 'true'
@@ -82,9 +85,9 @@ runs:
           ~/.cargo/registry/index
           ~/.cargo/registry/cache
           ~/.cargo/git/db
-        key: rust-${{ runner.os }}-${{ hashFiles('app/build.gradle.kts', 'gradle/libs.versions.toml') }}
+        key: cargo-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
         restore-keys: |
-          rust-${{ runner.os }}-
+          cargo-${{ runner.os }}-
 
     - name: Install cargo-ndk
       if: inputs.setup-rust == 'true'

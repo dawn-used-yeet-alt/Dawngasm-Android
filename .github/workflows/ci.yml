@@ -8,7 +8,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
       - name: Set up build environment
         uses: ./.github/actions/setup-build-env
         with:
-          setup-rust: 'true'
+          setup-rust: 'false'
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: Run Android Lint
@@ -45,24 +45,43 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  unit-tests:
-    name: Unit Tests
+  test-and-build-debug:
+    name: Test & Build Debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     if: github.event.pull_request.draft != true
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-env
         with:
           setup-rust: 'true'
+          cache-debug-keystore: 'true'
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      - name: Run Unit Tests
-        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest
+      - name: Compute monotonic version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}-debug" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}-debug"
+
+      - name: Run Unit Tests and assemble debug APK
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Test Report on Failure
         if: failure()
@@ -75,49 +94,18 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  build-debug:
-    name: Build Debug APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    if: github.event.pull_request.draft != true
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up build environment
-        uses: ./.github/actions/setup-build-env
-        with:
-          setup-rust: 'true'
-          cache-debug-keystore: 'true'
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
-
-      - name: Compute version
-        run: |
-          echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}-debug" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-
-      - name: Build Debug APK
-        run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleDebug
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v5
-        with:
-          name: dawngasm-debug
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          retention-days: 14
-
   build-release:
     name: Build Release APK
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, unit-tests]
+    needs: [lint, test-and-build-debug]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up build environment
         uses: ./.github/actions/setup-build-env
@@ -125,10 +113,13 @@ jobs:
           setup-rust: 'true'
           cache-read-only: 'false'
 
-      - name: Compute version
+      - name: Compute monotonic version
         run: |
-          echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}"
 
       - name: Decode release signing key
         env:

@@ -2,7 +2,6 @@
   - changed-files:
       - any-glob-to-any-file:
           - 'app/src/main/jniLibs/**'
-          - 'app/src/main/java/net/hotaudio/extractor/**'
           - '**/*.rs'
           - '**/Cargo.toml'
           - '**/Cargo.lock'
@@ -34,7 +33,6 @@
           - '*.gradle.kts'
           - 'app/build.gradle.kts'
           - 'gradle.properties'
-          - 'gradle/libs.versions.toml'
 
 'ci':
   - changed-files:
