@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.draft != true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'false'
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Run Android Lint
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:lintDebug
+
+      - name: Upload Lint Report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: lint-report
+          path: |
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test-and-build-debug:
+    name: Test & Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event.pull_request.draft != true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'true'
+          cache-debug-keystore: 'true'
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Compute monotonic version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}-debug" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}-debug"
+
+      - name: Run Unit Tests and assemble debug APK
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Test Report on Failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: unit-test-report
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build-release:
+    name: Build Release APK
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test-and-build-debug]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'true'
+          cache-read-only: 'false'
+
+      - name: Compute monotonic version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}"
+
+      - name: Decode release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DAWNGASM_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dawngasm-release.jks"
+            {
+              echo "DAWNGASM_KEYSTORE_PATH=$RUNNER_TEMP/dawngasm-release.jks"
+              echo "DAWNGASM_KEYSTORE_PASSWORD=${{ secrets.DAWNGASM_KEYSTORE_PASSWORD }}"
+              echo "DAWNGASM_KEY_ALIAS=${{ secrets.DAWNGASM_KEY_ALIAS }}"
+              echo "DAWNGASM_KEY_PASSWORD=${{ secrets.DAWNGASM_KEY_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::DAWNGASM_KEYSTORE_BASE64 is missing; the release APK will be unsigned."
+          fi
+
+      - name: Build Release APK
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleRelease
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30

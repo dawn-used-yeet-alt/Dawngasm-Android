@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release (e.g. v1.1.0). Inferred from git tag if empty.'
+        required: false
+        type: string
+        default: ''
+      is_draft:
+        description: 'Publish release as draft'
+        required: false
+        type: boolean
+        default: false
+      is_prerelease:
+        description: 'Mark release as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'true'
+          cache-read-only: 'false'
+
+      - name: Verify release ref on main
+        shell: bash
+        run: |
+          git fetch origin main --depth=1 || true
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor HEAD origin/main; then
+              echo "::warning::Current HEAD is not an ancestor of origin/main."
+            fi
+          fi
+
+      - name: Determine version metadata
+        id: version
+        env:
+          TAG_INPUT: ${{ inputs.tag_name }}
+        shell: bash
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+
+          if [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v1.0.${VERSION_CODE}"
+          fi
+          VERSION_NAME="${TAG#v}"
+
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building Dawngasm release $TAG (versionName=$VERSION_NAME, versionCode=$VERSION_CODE)"
+
+      - name: Decode release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DAWNGASM_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dawngasm-release.jks"
+            {
+              echo "DAWNGASM_KEYSTORE_PATH=$RUNNER_TEMP/dawngasm-release.jks"
+              echo "DAWNGASM_KEYSTORE_PASSWORD=${{ secrets.DAWNGASM_KEYSTORE_PASSWORD }}"
+              echo "DAWNGASM_KEY_ALIAS=${{ secrets.DAWNGASM_KEY_ALIAS }}"
+              echo "DAWNGASM_KEY_PASSWORD=${{ secrets.DAWNGASM_KEY_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::DAWNGASM_KEYSTORE_BASE64 is missing; release APK will be unsigned."
+          fi
+
+      - name: Run verification unit tests
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest
+
+      - name: Build signed release APK
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleRelease
+
+      - name: Generate SHA-256 Checksums
+        shell: bash
+        run: |
+          cd app/build/outputs/apk/release
+          sha256sum *.apk > checksums.txt
+          echo "Generated checksums:"
+          cat checksums.txt
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-${{ env.RELEASE_TAG }}
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/checksums.txt
+          if-no-files-found: error
+          retention-days: 60
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Dawngasm ${{ env.RELEASE_TAG }}
+          files: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/checksums.txt
+          generate_release_notes: true
+          draft: ${{ inputs.is_draft || false }}
+          prerelease: ${{ inputs.is_prerelease || false }}

@@ -1,0 +1,114 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build variant to assemble'
+        required: true
+        type: choice
+        options:
+          - 'debug'
+          - 'release'
+          - 'both'
+        default: 'debug'
+      run_tests:
+        description: 'Run unit tests before assembling'
+        required: false
+        type: boolean
+        default: true
+      run_lint:
+        description: 'Run Android lint before assembling'
+        required: false
+        type: boolean
+        default: false
+      sign_release:
+        description: 'Sign release APK if secrets are configured'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: manual-build-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  manual-build:
+    name: Build (${{ inputs.build_type }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'true'
+          cache-debug-keystore: ${{ inputs.build_type == 'debug' || inputs.build_type == 'both' }}
+          cache-read-only: 'false'
+
+      - name: Compute monotonic version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          VERSION_CODE=$(( 100 + COMMIT_COUNT ))
+          echo "VERSION_NAME=1.0.${VERSION_CODE}-manual" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}-manual"
+
+      - name: Run Android Lint
+        if: inputs.run_lint == true
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:lintDebug
+
+      - name: Run Unit Tests
+        if: inputs.run_tests == true
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest
+
+      - name: Decode release signing key
+        if: (inputs.build_type == 'release' || inputs.build_type == 'both') && inputs.sign_release == true
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DAWNGASM_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dawngasm-release.jks"
+            {
+              echo "DAWNGASM_KEYSTORE_PATH=$RUNNER_TEMP/dawngasm-release.jks"
+              echo "DAWNGASM_KEYSTORE_PASSWORD=${{ secrets.DAWNGASM_KEYSTORE_PASSWORD }}"
+              echo "DAWNGASM_KEY_ALIAS=${{ secrets.DAWNGASM_KEY_ALIAS }}"
+              echo "DAWNGASM_KEY_PASSWORD=${{ secrets.DAWNGASM_KEY_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+          else
+            echo "::warning::DAWNGASM_KEYSTORE_BASE64 is missing; release APK will be unsigned."
+          fi
+
+      - name: Build Debug APK
+        if: inputs.build_type == 'debug' || inputs.build_type == 'both'
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleDebug
+
+      - name: Build Release APK
+        if: inputs.build_type == 'release' || inputs.build_type == 'both'
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:assembleRelease
+
+      - name: Upload Debug APK
+        if: inputs.build_type == 'debug' || inputs.build_type == 'both'
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-manual-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Release APK
+        if: inputs.build_type == 'release' || inputs.build_type == 'both'
+        uses: actions/upload-artifact@v5
+        with:
+          name: dawngasm-manual-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
