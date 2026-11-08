@@ -38,6 +38,9 @@ class HotaudioStreamState internal constructor(
     @Volatile var progressLoaded: Long = 0L
     @Volatile var progressTotal: Long = 0L
 
+    /** Set by the stall watchdog so the attempt is retried, not user-cancelled. */
+    @Volatile var abortReason: String? = null
+
     /** Incremented at the start of every IP-family attempt. */
     @Volatile var generation: Int = 0
 }
@@ -61,6 +64,22 @@ object HotaudioStreamer {
     private const val TRANSIENT_ATTEMPTS = 3
     private const val TRANSIENT_BACKOFF_START_MS = 1_500L
     private const val TRANSIENT_BACKOFF_MAX_MS = 9_000L
+
+    /**
+     * hotaudio rate-limits the listen/key-paging endpoint per network. Waiting
+     * is the only fix, and switching IP families breaks a saved clearance, so
+     * back off on the same family instead.
+     */
+    private const val RATE_LIMIT_ATTEMPTS = 3
+    private const val RATE_LIMIT_BACKOFF_MS = 20_000L
+
+    /**
+     * Abort an attempt that stops writing for this long and retry it. A stall
+     * usually means the server is tarpitting a key page, and the HTTP client
+     * retries for up to a couple of minutes before giving up, so this has to be
+     * long enough not to restart a download that is merely waiting.
+     */
+    private const val STALL_TIMEOUT_MS = 45_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val states = ConcurrentHashMap<String, HotaudioStreamState>()
@@ -162,7 +181,15 @@ object HotaudioStreamer {
         prefs: AppPreferences?,
     ) {
         val families = familiesToTry(prefs)
-        HotaudioLog.i("download begin track=${spec.trackId} families=$families")
+        val cachedKeys = runCatching {
+            keysFileFor(spec).takeIf { it.exists() && it.length() > 0L }?.readText()
+        }.onFailure {
+            HotaudioLog.w("could not read cached keys track=${spec.trackId}", it)
+        }.getOrNull()
+        HotaudioLog.i(
+            "download begin track=${spec.trackId} families=$families " +
+                "cachedKeys=${cachedKeys != null}",
+        )
         var lastError: Throwable? = null
 
         for ((familyIndex, family) in families.withIndex()) {
@@ -192,11 +219,13 @@ object HotaudioStreamer {
                 // leaving it in place lets a reader at an earlier position keep
                 // reading instead of hitting a file-not-found gap.
                 markerFor(spec).delete()
+                state.abortReason = null
 
                 val token = CancellationToken()
                 tokens[spec.trackId] = token
 
                 val poller = scope.launch {
+                    var lastChangeAt = System.currentTimeMillis()
                     while (currentCoroutineContext().isActive) {
                         val length = if (spec.file.exists()) spec.file.length() else 0L
                         if (length != state.bytesWritten) {
@@ -212,8 +241,19 @@ object HotaudioStreamer {
                                 )
                             }
                             state.bytesWritten = length
+                            lastChangeAt = System.currentTimeMillis()
                         }
                         if (state.done) break
+                        val idleMs = System.currentTimeMillis() - lastChangeAt
+                        if (idleMs >= STALL_TIMEOUT_MS) {
+                            HotaudioLog.w(
+                                "download stalled track=${spec.trackId} family=$family " +
+                                    "for ${idleMs}ms at bytes=${state.bytesWritten}; aborting attempt",
+                            )
+                            state.abortReason = "stalled"
+                            token.cancel()
+                            break
+                        }
                         delay(POLL_MS)
                     }
                 }
@@ -223,8 +263,10 @@ object HotaudioStreamer {
                     val options = DownloadOptions(
                         trackId = null,
                         apiBase = "https://hotaudio.net",
-                        delayMs = 250u,
-                        initialKeysJson = null,
+                        // No artificial pause: playback is interactive and the
+                        // per-segment path is already latency-bound.
+                        delayMs = 0u,
+                        initialKeysJson = cachedKeys,
                     )
                     val listener = object : ProgressListener {
                         override fun onProgress(progress: Progress) {
@@ -242,7 +284,7 @@ object HotaudioStreamer {
                         "calling downloadToFile track=${spec.trackId} page=${spec.pageUrl} " +
                             "family=$family attempt=$attempt",
                     )
-                    downloadToFile(
+                    val info = downloadToFile(
                         pageUrl = spec.pageUrl,
                         path = spec.file.absolutePath,
                         options = options,
@@ -255,17 +297,23 @@ object HotaudioStreamer {
                     state.error = null
                     runCatching { markerFor(spec).writeText(state.bytesWritten.toString()) }
                         .onFailure { HotaudioLog.w("could not write done marker", it) }
+                    runCatching { keysFileFor(spec).writeText(info.keysJson) }
+                        .onFailure { HotaudioLog.w("could not cache keys", it) }
                     if (family != "any") prefs?.saveHotaudioIpFamily(family)
                     HotaudioLog.i(
                         "download complete track=${spec.trackId} bytes=${state.bytesWritten} " +
-                            "family=$family elapsed=${System.currentTimeMillis() - state.startedAt}ms",
+                            "family=$family keyPages=${info.keyPages} " +
+                            "elapsed=${System.currentTimeMillis() - state.startedAt}ms",
                     )
                     return
                 } catch (error: Throwable) {
                     lastError = error
                     state.bytesWritten = if (spec.file.exists()) spec.file.length() else 0L
 
-                    if (!currentCoroutineContext().isActive || token.isCancelled()) {
+                    val stalled = state.abortReason == "stalled"
+                    if (!currentCoroutineContext().isActive ||
+                        (token.isCancelled() && !stalled)
+                    ) {
                         HotaudioLog.w(
                             "download cancelled track=${spec.trackId} family=$family: ${error.message}",
                         )
@@ -279,19 +327,35 @@ object HotaudioStreamer {
                             "challenge=${HotaudioErrors.isChallenge(error)} " +
                             "rateLimit=${HotaudioErrors.isRateLimit(error)} " +
                             "dnsOrTransient=${HotaudioErrors.isDnsOrTransient(error)} " +
-                            "bytes=${state.bytesWritten}",
+                            "stalled=$stalled bytes=${state.bytesWritten}",
                         error,
                     )
 
-                    if (HotaudioErrors.isDnsOrTransient(error) && attempt < TRANSIENT_ATTEMPTS) {
+                    val transient = HotaudioErrors.isDnsOrTransient(error) || stalled
+                    val rateLimited = HotaudioErrors.isRateLimit(error)
+                    if (transient && attempt < TRANSIENT_ATTEMPTS) {
                         val backoff = (TRANSIENT_BACKOFF_START_MS shl (attempt - 1))
                             .coerceAtMost(TRANSIENT_BACKOFF_MAX_MS)
                         HotaudioLog.w(
-                            "transient/DNS failure on family=$family; retrying same family " +
-                                "in ${backoff}ms (attempt ${attempt + 1}/$TRANSIENT_ATTEMPTS)",
+                            "${if (stalled) "stalled attempt" else "transient/DNS failure"} " +
+                                "on family=$family; retrying same family in ${backoff}ms " +
+                                "(attempt ${attempt + 1}/$TRANSIENT_ATTEMPTS)",
                         )
                         try {
                             delay(backoff)
+                        } catch (cancelled: CancellationException) {
+                            HotaudioLog.w("cancelled while backing off")
+                            return
+                        }
+                        attempt += 1
+                        retrySameFamily = true
+                    } else if (rateLimited && attempt < RATE_LIMIT_ATTEMPTS) {
+                        HotaudioLog.w(
+                            "rate limited on family=$family; retrying same family in " +
+                                "${RATE_LIMIT_BACKOFF_MS}ms (attempt ${attempt + 1}/$RATE_LIMIT_ATTEMPTS)",
+                        )
+                        try {
+                            delay(RATE_LIMIT_BACKOFF_MS)
                         } catch (cancelled: CancellationException) {
                             HotaudioLog.w("cancelled while backing off")
                             return
@@ -349,6 +413,14 @@ object HotaudioStreamer {
         val saved = prefs?.hotaudioIpFamily()
             ?.lowercase()
             ?.takeIf { it == "ipv4" || it == "ipv6" }
+
+        // Cloudflare binds cf_clearance to the address that earned it. Switching
+        // families would throw that clearance away and earn a fresh challenge,
+        // so stay on the saved family when one is stored.
+        if (saved != null && prefs?.hotaudioClearance() != null) {
+            return listOf(saved)
+        }
+
         return buildList {
             if (saved != null) add(saved)
             add("ipv4")
@@ -359,6 +431,10 @@ object HotaudioStreamer {
 
     private fun markerFor(spec: HotaudioStreamSpec): File =
         File(spec.file.parentFile, "${spec.trackId}.done")
+
+    /** Full key envelope from a previous download; avoids rate-limited paging. */
+    private fun keysFileFor(spec: HotaudioStreamSpec): File =
+        File(spec.file.parentFile, "${spec.trackId}.keys.json")
 
     suspend fun awaitFirstBytes(
         spec: HotaudioStreamSpec,
@@ -393,6 +469,31 @@ object HotaudioStreamer {
             }
             delay(POLL_MS)
         }
+    }
+
+    /**
+     * Wait until a small lead is buffered so the player does not immediately
+     * catch up with the bursty downloader. Returns early on failure/completion
+     * and never throws: the caller can still play what already exists.
+     */
+    suspend fun awaitLead(
+        spec: HotaudioStreamSpec,
+        targetBytes: Long = 320L * 1024L,
+        timeoutMs: Long = 20_000L,
+    ): HotaudioStreamState? {
+        val state = states[spec.trackId] ?: return null
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (state.bytesWritten >= targetBytes || state.done || state.error != null) {
+                return state
+            }
+            delay(POLL_MS)
+        }
+        HotaudioLog.i(
+            "lead timeout track=${spec.trackId} bytes=${state.bytesWritten} " +
+                "target=$targetBytes; starting anyway",
+        )
+        return state
     }
 
     suspend fun awaitComplete(

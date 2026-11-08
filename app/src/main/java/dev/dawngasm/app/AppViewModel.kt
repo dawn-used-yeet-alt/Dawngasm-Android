@@ -21,6 +21,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.dawngasm.app.data.AppPreferences
@@ -63,6 +64,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val player: ExoPlayer = ExoPlayer.Builder(application)
         .setMediaSourceFactory(DefaultMediaSourceFactory(headerFactory))
+        // The hotaudio downloader writes in bursts, so keep a generous cushion
+        // instead of stopping and restarting playback every couple of seconds.
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 30_000,
+                    /* maxBufferMs = */ 180_000,
+                    /* bufferForPlaybackMs = */ 5_000,
+                    /* bufferForPlaybackAfterRebufferMs = */ 10_000,
+                )
+                .build(),
+        )
         .build()
         .apply {
             setAudioAttributes(

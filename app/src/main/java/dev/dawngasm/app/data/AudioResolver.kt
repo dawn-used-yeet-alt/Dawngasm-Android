@@ -163,10 +163,12 @@ class AudioResolver(private val context: Context? = null) {
         val spec = HotaudioStreamer.spec(context, track.id, track.pageUrl)
         HotaudioStreamer.ensureStarted(spec, prefs)
         val state = HotaudioStreamer.awaitFirstBytes(spec)
+        HotaudioStreamer.awaitLead(spec)
 
         HotaudioLog.i(
             "hotaudio ready track=${track.id} bytes=${state.bytesWritten} " +
-                "family=${state.family} firstByteIn=${state.firstByteAt - state.startedAt}ms",
+                "family=${state.family} firstByteIn=${state.firstByteAt - state.startedAt}ms " +
+                "lead=${state.bytesWritten}",
         )
         return ResolvedAudio(
             url = HotaudioStreamer.streamUri(track.id).toString(),
