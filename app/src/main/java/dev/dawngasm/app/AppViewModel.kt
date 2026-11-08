@@ -1,23 +1,36 @@
 package dev.dawngasm.app
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import java.io.File
+import java.util.Date
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DawngasmApi
+import dev.dawngasm.app.data.HotaudioDataSource
+import dev.dawngasm.app.data.HotaudioLog
+import dev.dawngasm.app.data.HotaudioRuntime
+import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.SearchRequest
@@ -45,12 +58,24 @@ import kotlinx.coroutines.launch
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
-    private val resolver = AudioResolver()
+    private val resolver = AudioResolver(application)
     private val downloader = TrackDownloader(application)
     private val headerFactory = HeaderDataSourceFactory(application, Network.client)
 
     private val player: ExoPlayer = ExoPlayer.Builder(application)
         .setMediaSourceFactory(DefaultMediaSourceFactory(headerFactory))
+        // The hotaudio downloader writes in bursts, so keep a generous cushion
+        // instead of stopping and restarting playback every couple of seconds.
+        .setLoadControl(
+            DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    /* minBufferMs = */ 30_000,
+                    /* maxBufferMs = */ 180_000,
+                    /* bufferForPlaybackMs = */ 5_000,
+                    /* bufferForPlaybackAfterRebufferMs = */ 10_000,
+                )
+                .build(),
+        )
         .build()
         .apply {
             setAudioAttributes(
@@ -83,10 +108,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                HotaudioLog.i("player isPlaying=$isPlaying")
                 updatePlayer { copy(isPlaying = isPlaying) }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                HotaudioLog.i(
+                    "player state=${playerStateName(playbackState)} " +
+                        "position=${player.currentPosition} duration=${player.duration} " +
+                        "buffered=${player.bufferedPosition}",
+                )
                 when (playbackState) {
                     Player.STATE_BUFFERING -> updatePlayer { copy(isLoading = true) }
                     Player.STATE_READY -> updatePlayer {
@@ -94,7 +125,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     Player.STATE_ENDED -> {
                         _progress.value = PlaybackProgress()
-                        if (queue.isNotEmpty()) {
+                        val endedTrackId = player.currentMediaItem?.mediaId
+                        val streamFailure = endedTrackId
+                            ?.let { HotaudioStreamer.stateFor(it, null)?.error }
+                        if (streamFailure != null) {
+                            // The source ended because the download died, not
+                            // because the track finished. Do not skip ahead.
+                            HotaudioLog.w(
+                                "playback ended early track=$endedTrackId: " +
+                                    "${streamFailure.message}",
+                            )
+                            updatePlayer { copy(isPlaying = false, isLoading = false) }
+                            emitMessage(
+                                "Playback stopped before the end: ${streamFailure.message}",
+                                isError = true,
+                            )
+                        } else if (queue.isNotEmpty()) {
                             nextTrack()
                         } else {
                             updatePlayer { copy(isPlaying = false) }
@@ -105,14 +151,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val failedTrackId = player.currentMediaItem?.mediaId
+                val currentTrackId = _uiState.value.player.currentTrack?.id
+                if (player.currentMediaItem == null ||
+                    (failedTrackId != null && currentTrackId != null &&
+                        failedTrackId != currentTrackId)
+                ) {
+                    HotaudioLog.w(
+                        "ignoring stale player error track=$failedTrackId " +
+                            "current=$currentTrackId code=${error.errorCodeName}",
+                    )
+                    return
+                }
                 val message = error.message ?: error.errorCodeName
+                HotaudioLog.e(
+                    "player error code=${error.errorCode} name=${error.errorCodeName} " +
+                        "message=$message",
+                    error,
+                )
                 updatePlayer { copy(isLoading = false, isPlaying = false, error = message) }
-                emitMessage("Playback failed: $message", isError = true)
+                emitMessage("Playback failed: $message", isError = true, throwable = error)
             }
         })
 
         loadFeed(reset = true)
         startProgressLoop()
+        HotaudioLog.i("AppViewModel.init: ensuring hotaudio runtime")
+        HotaudioRuntime.initialize(application)
+        HotaudioLog.i(
+            "AppViewModel.init: hotaudio tlsReady=${HotaudioRuntime.isTlsReady()} " +
+                "tlsError=${HotaudioRuntime.tlsError?.message}",
+        )
     }
 
     private fun initialState(): AppUiState {
@@ -129,6 +198,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             blockedTags = blocked,
             downloadTreeUri = tree,
             downloadFolderLabel = downloader.folderLabel(tree),
+            hotaudioConnected = prefs.hotaudioClearance() != null,
         )
     }
 
@@ -272,7 +342,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         error = message,
                     )
                 }
-                emitMessage(message, isError = true)
+                emitMessage(message, isError = true, throwable = error)
             }
         }
     }
@@ -326,7 +396,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                emitMessage("Download failed: ${error.message ?: "unknown error"}", isError = true)
+                emitMessage("Download failed: ${error.message ?: "unknown error"}", isError = true, throwable = error)
             } finally {
                 _uiState.update { it.copy(downloadingIds = it.downloadingIds - track.id) }
             }
@@ -343,22 +413,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Refresh the hotaudio clearance status after the WebView activity. */
+    fun refreshHotaudioClearance() {
+        HotaudioLog.i("refreshHotaudioClearance")
+        val clearance = prefs.hotaudioClearance()
+        if (clearance != null) {
+            HotaudioRuntime.applyClearance(prefs)
+        } else {
+            try {
+                net.hotaudio.extractor.clearClearance()
+                HotaudioLog.i("refreshHotaudioClearance: cleared native clearance")
+            } catch (error: Throwable) {
+                HotaudioLog.e("refreshHotaudioClearance: clearClearance failed", error)
+            }
+        }
+        _uiState.update { it.copy(hotaudioConnected = clearance != null) }
+    }
+
+    fun clearHotaudioClearance() {
+        HotaudioLog.i("clearHotaudioClearance")
+        prefs.clearHotaudioClearance()
+        try {
+            net.hotaudio.extractor.clearClearance()
+            net.hotaudio.extractor.setIpFamily("any")
+            HotaudioLog.i("clearHotaudioClearance: native state reset")
+        } catch (error: Throwable) {
+            HotaudioLog.e("clearHotaudioClearance: native reset failed", error)
+        }
+        _uiState.update { it.copy(hotaudioConnected = false) }
+    }
+
     // --- playback -----------------------------------------------------------
 
     fun play(track: Track, list: List<Track>? = null) {
+        HotaudioLog.i(
+            "play track=${track.id} host=${track.host.label} title=${track.title} " +
+                "page=${track.pageUrl} localUri=${track.localUri}",
+        )
+        val previous = _uiState.value.player.currentTrack
+
+        // Tear down the old source before resolving the new one. Otherwise a
+        // late error/retry from the previous media item can clobber the new
+        // track's state or be attributed to it.
+        val generation = playGeneration.incrementAndGet()
+        playJob?.cancel()
+        player.stop()
+        player.clearMediaItems()
+
+        if (previous != null && previous.id != track.id &&
+            previous.id !in _uiState.value.downloadingIds
+        ) {
+            HotaudioLog.i("play: cancelling previous stream track=${previous.id}")
+            HotaudioStreamer.cancel(previous.id)
+        }
+
         val source = list?.takeIf { it.isNotEmpty() } ?: _uiState.value.tracks
         queue = if (source.any { it.id == track.id }) source else listOf(track) + source
 
         val localUri = track.localUri
         if (localUri != null && downloader.exists(localUri)) {
-            playGeneration.incrementAndGet()
-            playJob?.cancel()
+            HotaudioLog.i("play local file track=${track.id} uri=$localUri")
             startPlayback(track, Uri.parse(localUri), emptyMap(), playWhenReady = true)
             return
         }
 
-        val generation = playGeneration.incrementAndGet()
-        playJob?.cancel()
         _uiState.update {
             it.copy(
                 player = PlayerUiState(
@@ -370,13 +488,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         playJob = viewModelScope.launch {
             try {
+                val startedAt = System.currentTimeMillis()
                 val audio = resolver.resolve(track)
-                if (generation != playGeneration.get()) return@launch
+                HotaudioLog.i(
+                    "play resolved track=${track.id} uri=${audio.url} " +
+                        "elapsed=${System.currentTimeMillis() - startedAt}ms",
+                )
+                if (generation != playGeneration.get()) {
+                    HotaudioLog.w("play superseded track=${track.id}")
+                    return@launch
+                }
                 startPlayback(track, Uri.parse(audio.url), audio.headers, playWhenReady = true)
             } catch (cancelled: CancellationException) {
+                HotaudioLog.w("play cancelled track=${track.id}")
                 throw cancelled
             } catch (error: Exception) {
                 if (generation != playGeneration.get()) return@launch
+                HotaudioLog.e("play failed track=${track.id}", error)
                 updatePlayer {
                     copy(
                         isLoading = false,
@@ -387,6 +515,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 emitMessage(
                     "Could not play this track: ${error.message ?: "unknown error"}",
                     isError = true,
+                    throwable = error,
                 )
             }
         }
@@ -398,8 +527,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         headers: Map<String, String>,
         playWhenReady: Boolean,
     ) {
+        HotaudioLog.i(
+            "startPlayback track=${track.id} uri=$uri scheme=${uri.scheme} " +
+                "headers=${headers.keys} playWhenReady=$playWhenReady",
+        )
         headerFactory.headers = headers + ("User-Agent" to Network.BROWSER_USER_AGENT)
-        player.setMediaItem(MediaItem.fromUri(uri))
+        val builder = MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(track.id)
+        if (uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
+            builder.setMimeType(MimeTypes.AUDIO_MP4)
+        }
+        val mediaItem = builder.build()
+        player.setMediaItem(mediaItem)
         player.prepare()
         player.playWhenReady = playWhenReady
         _progress.value = PlaybackProgress()
@@ -440,10 +580,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissPlayer() {
+        HotaudioLog.i("dismissPlayer")
+        val current = _uiState.value.player.currentTrack
         playGeneration.incrementAndGet()
         playJob?.cancel()
         player.stop()
         player.clearMediaItems()
+        if (current != null && current.id !in _uiState.value.downloadingIds) {
+            HotaudioStreamer.cancel(current.id)
+        }
         _progress.value = PlaybackProgress()
         _uiState.update { it.copy(player = PlayerUiState()) }
     }
@@ -469,13 +614,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun emitMessage(text: String, isError: Boolean = false) {
+    private fun emitMessage(text: String, isError: Boolean = false, throwable: Throwable? = null) {
+        if (isError) {
+            handleDebugError(text, throwable)
+        }
         _messages.tryEmit(UiMessage(text, isError))
     }
 
+    private fun handleDebugError(message: String, throwable: Throwable?) {
+        HotaudioLog.e("error: $message", throwable)
+        if (!BuildConfig.DEBUG) return
+        val stackTrace = throwable?.let { Log.getStackTraceString(it) } ?: ""
+        val errorText = buildString {
+            appendLine("Error: $message")
+            if (throwable != null) {
+                appendLine("Exception: ${throwable.javaClass.name}: ${throwable.message}")
+                if (stackTrace.isNotBlank()) {
+                    appendLine("Stacktrace:")
+                    appendLine(stackTrace)
+                }
+            }
+        }.trim()
+
+        try {
+            val app = getApplication<Application>()
+            val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Dawngasm Error", errorText))
+
+            val dir = app.getExternalFilesDir(null) ?: app.filesDir
+            File(dir, "last_error.log").writeText("${Date()}\n$errorText\n")
+            File(app.filesDir, "last_error.log").writeText("${Date()}\n$errorText\n")
+            File(dir, "errors.log").appendText("${Date()}\n$errorText\n----------------------------------------\n")
+        } catch (e: Throwable) {
+            Log.e("AppViewModel", "Failed to copy/save debug error", e)
+        }
+    }
+
     override fun onCleared() {
+        HotaudioLog.i("AppViewModel.onCleared")
         feedJob?.cancel()
         playJob?.cancel()
+        HotaudioStreamer.cancelAll()
         player.release()
         super.onCleared()
     }
@@ -502,6 +681,58 @@ private class HeaderDataSourceFactory(
     override fun createDataSource(): DataSource {
         val http = OkHttpDataSource.Factory(client)
             .setDefaultRequestProperties(headers)
-        return DefaultDataSource.Factory(appContext, http).createDataSource()
+        return RoutingDataSource(appContext, DefaultDataSource.Factory(appContext, http))
     }
+}
+
+/**
+ * Sends `hotaudio://stream/...` URIs to [HotaudioDataSource] and everything
+ * else to Media3's default file/HTTP stack.
+ */
+private class RoutingDataSource(
+    private val context: Context,
+    private val fallbackFactory: DataSource.Factory,
+) : DataSource {
+    private var delegate: DataSource? = null
+    private val listeners = mutableListOf<TransferListener>()
+
+    override fun addTransferListener(transferListener: TransferListener) {
+        listeners += transferListener
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        val next = if (dataSpec.uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
+            HotaudioLog.i("routing to HotaudioDataSource uri=${dataSpec.uri}")
+            HotaudioDataSource(context)
+        } else {
+            fallbackFactory.createDataSource()
+        }
+        listeners.forEach(next::addTransferListener)
+        delegate = next
+        return next.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        delegate?.read(buffer, offset, length) ?: C.RESULT_END_OF_INPUT
+
+    override fun close() {
+        try {
+            delegate?.close()
+        } finally {
+            delegate = null
+        }
+    }
+
+    override fun getUri(): Uri? = delegate?.uri
+
+    override fun getResponseHeaders(): Map<String, List<String>> =
+        delegate?.responseHeaders ?: emptyMap()
+}
+
+private fun playerStateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "UNKNOWN($state)"
 }

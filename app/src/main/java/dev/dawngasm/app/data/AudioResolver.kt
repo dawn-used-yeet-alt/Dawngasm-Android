@@ -1,5 +1,6 @@
 package dev.dawngasm.app.data
 
+import android.content.Context
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
 import java.util.concurrent.ConcurrentHashMap
@@ -25,23 +26,41 @@ data class ResolvedAudio(
  * cookie-gated play intent followed by a signed stream URL; the shared
  * [Network] cookie jar carries the cookie to the media requests.
  */
-class AudioResolver {
+class AudioResolver(private val context: Context? = null) {
     private data class CacheEntry(val audio: ResolvedAudio, val createdAt: Long)
 
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
     suspend fun resolve(track: Track): ResolvedAudio = withContext(Dispatchers.IO) {
-        cache[track.id]?.takeIf { System.currentTimeMillis() - it.createdAt < CACHE_TTL_MS }
-            ?.audio
-            ?.let { return@withContext it }
+        if (track.host != AudioHost.HOTAUDIO) {
+            cache[track.id]?.takeIf { System.currentTimeMillis() - it.createdAt < CACHE_TTL_MS }
+                ?.audio
+                ?.let {
+                    HotaudioLog.d("resolve cache hit track=${track.id} host=${track.host.label}")
+                    return@withContext it
+                }
+        }
 
+        HotaudioLog.i(
+            "resolve start track=${track.id} host=${track.host.label} page=${track.pageUrl}",
+        )
+        val startedAt = System.currentTimeMillis()
         val resolved = when (track.host) {
             AudioHost.SOUNDGASM -> soundgasm(track)
             AudioHost.WHYP -> whyp(track)
             AudioHost.AUDIOCHAN -> audiochan(track)
+            AudioHost.HOTAUDIO -> hotaudio(track)
             AudioHost.UNKNOWN -> throw ResolveException("Unsupported audio host")
         }
-        cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
+        HotaudioLog.i(
+            "resolve done track=${track.id} host=${track.host.label} " +
+                "elapsed=${System.currentTimeMillis() - startedAt}ms url=${resolved.url}",
+        )
+        // hotaudio is intentionally not cached: the URI points at a streaming
+        // file that may be cancelled when the player is dismissed.
+        if (track.host != AudioHost.HOTAUDIO) {
+            cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
+        }
         resolved
     }
 
@@ -133,6 +152,28 @@ class AudioResolver {
                 "Referer" to AUDIOCHAN_REFERER,
             ),
             extension = extensionFromUrl(streamUrl, "m4a"),
+        )
+    }
+
+    private suspend fun hotaudio(track: Track): ResolvedAudio {
+        HotaudioLog.i("hotaudio resolve track=${track.id} page=${track.pageUrl}")
+        val prefs = context?.let { AppPreferences(it) }
+        HotaudioRuntime.applyClearance(prefs)
+
+        val spec = HotaudioStreamer.spec(context, track.id, track.pageUrl)
+        HotaudioStreamer.ensureStarted(spec, prefs)
+        val state = HotaudioStreamer.awaitFirstBytes(spec)
+        HotaudioStreamer.awaitLead(spec)
+
+        HotaudioLog.i(
+            "hotaudio ready track=${track.id} bytes=${state.bytesWritten} " +
+                "family=${state.family} firstByteIn=${state.firstByteAt - state.startedAt}ms " +
+                "lead=${state.bytesWritten}",
+        )
+        return ResolvedAudio(
+            url = HotaudioStreamer.streamUri(track.id).toString(),
+            headers = emptyMap(),
+            extension = "m4a",
         )
     }
 

@@ -19,7 +19,7 @@ jobs:
   build:
     name: Build & test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -32,6 +32,51 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Rust registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: rust-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            rust-${{ runner.os }}-
+
+      - name: Cache generated hotaudio bindings and native libs
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
+            app/src/main/java/net/hotaudio/extractor/.hotaudio-bindings-ref
+            app/src/main/jniLibs
+          key: hotaudio-v2.3.0-arm64-v8a-v3
+
+      # Gradle generates a fresh debug keystore on every runner, so each run's
+      # APK has a different signature and `adb install -r` refuses it. Cache one
+      # keystore so debug builds stay upgradeable in place.
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
+      - name: Install cargo-ndk
+        run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
+
+      - name: Locate NDK
+        run: |
+          NDK_DIR="$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$NDK_DIR" ]; then
+            echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+            echo "Using NDK: $NDK_DIR"
+          fi
 
       - name: Install Android SDK packages
         run: |
@@ -68,16 +113,13 @@ jobs:
             echo "::warning::DAWNGASM_KEYSTORE_BASE64 is missing; the release APK will be unsigned."
           fi
 
-      - name: Run unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
-
-      - name: Build debug APK
+      - name: Test and build debug APK
         if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleDebug
 
-      - name: Build release APK
+      - name: Test and build release APK
         if: github.event_name == 'push'
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleRelease
 
       - name: Upload debug APK
         if: github.event_name != 'push'

@@ -47,6 +47,40 @@ class AppPreferences(context: Context) {
         }.apply()
     }
 
+    /** The `cf_clearance` cookie and the User-Agent it was issued to. */
+    fun hotaudioClearance(): Pair<String, String>? {
+        val cookie = prefs.getString(KEY_HOTAUDIO_COOKIE, null).orEmpty()
+        val userAgent = prefs.getString(KEY_HOTAUDIO_USER_AGENT, null).orEmpty()
+        return (cookie to userAgent).takeIf { cookie.isNotBlank() }
+    }
+
+    fun saveHotaudioClearance(cookie: String, userAgent: String) {
+        prefs.edit()
+            .putString(KEY_HOTAUDIO_COOKIE, cookie)
+            .putString(KEY_HOTAUDIO_USER_AGENT, userAgent)
+            .apply()
+    }
+
+    fun hotaudioIpFamily(): String? = prefs.getString(KEY_HOTAUDIO_IP_FAMILY, null)
+
+    fun hotaudioClientIp(): String? = prefs.getString(KEY_HOTAUDIO_CLIENT_IP, null)
+
+    fun saveHotaudioIpFamily(family: String?, ip: String? = null) {
+        prefs.edit().apply {
+            if (family == null) remove(KEY_HOTAUDIO_IP_FAMILY) else putString(KEY_HOTAUDIO_IP_FAMILY, family)
+            if (ip != null) putString(KEY_HOTAUDIO_CLIENT_IP, ip)
+        }.apply()
+    }
+
+    fun clearHotaudioClearance() {
+        prefs.edit()
+            .remove(KEY_HOTAUDIO_COOKIE)
+            .remove(KEY_HOTAUDIO_USER_AGENT)
+            .remove(KEY_HOTAUDIO_IP_FAMILY)
+            .remove(KEY_HOTAUDIO_CLIENT_IP)
+            .apply()
+    }
+
     fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
 
     fun saveSaved(tracks: List<Track>) {
@@ -76,6 +110,10 @@ class AppPreferences(context: Context) {
         const val KEY_DEFAULTS_VERSION = "defaults_version"
         const val KEY_BLOCKED_TAGS = "blocked_tags"
         const val KEY_DOWNLOAD_TREE = "download_tree"
+        const val KEY_HOTAUDIO_COOKIE = "hotaudio_cookie"
+        const val KEY_HOTAUDIO_USER_AGENT = "hotaudio_user_agent"
+        const val KEY_HOTAUDIO_IP_FAMILY = "hotaudio_ip_family"
+        const val KEY_HOTAUDIO_CLIENT_IP = "hotaudio_client_ip"
         const val KEY_SAVED = "saved_tracks"
         const val KEY_HISTORY = "history_tracks"
         const val KEY_DOWNLOADS = "downloaded_tracks"

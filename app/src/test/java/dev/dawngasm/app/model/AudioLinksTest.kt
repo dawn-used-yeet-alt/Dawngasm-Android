@@ -56,6 +56,22 @@ class AudioLinksTest {
     }
 
     @Test
+    fun findsHotaudioTrack() {
+        val result = AudioLinks.find(
+            postUrl = "",
+            selftext = "Listen: https://hotaudio.net/u/creator/sample-track?key=abc",
+        )
+        assertEquals(AudioHost.HOTAUDIO, result?.first)
+        assertEquals("https://hotaudio.net/u/creator/sample-track?key=abc", result?.second)
+    }
+
+    @Test
+    fun detectsHotaudioHost() {
+        assertEquals(AudioHost.HOTAUDIO, AudioLinks.hostOf("https://hotaudio.net/u/user/slug"))
+        assertEquals(AudioHost.HOTAUDIO, AudioLinks.hostOf("https://www.hotaudio.net/u/user/slug?key=x"))
+    }
+
+    @Test
     fun ignoresUnsupportedHosts() {
         assertNull(AudioLinks.find("https://example.com/file.mp3", ""))
     }
