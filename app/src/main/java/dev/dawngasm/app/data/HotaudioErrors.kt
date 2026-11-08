@@ -19,6 +19,12 @@ object HotaudioErrors {
         return text.contains("429") || text.contains("too many requests", ignoreCase = true)
     }
 
+    fun isTimeout(error: Throwable): Boolean {
+        val text = "${error.message.orEmpty()} ${detail(error)}"
+        return text.contains("timeout", ignoreCase = true) ||
+            text.contains("timed out", ignoreCase = true)
+    }
+
     fun isDnsOrTransient(error: Throwable): Boolean {
         val text = "${error.message.orEmpty()} ${detail(error)}"
         return text.contains("failed to lookup address information", ignoreCase = true) ||
@@ -38,6 +44,9 @@ object HotaudioErrors {
             "hotaudio Cloudflare clearance expired or invalid — refresh it in Settings"
         isRateLimit(error) ->
             "hotaudio rate limit reached (too many requests) — wait 20–30 seconds and try again"
+        isTimeout(error) ->
+            "hotaudio did not respond in time — the site may be throttling this network. " +
+                "Wait a minute and try again."
         isDnsOrTransient(error) ->
             "hotaudio network/DNS failure (${detail(error)}). If your carrier blocks hotaudio, enable Private DNS (e.g. dns.google) or try another network."
         error is FfiException.Failed -> "hotaudio error (${error.code}): ${error.detail}"

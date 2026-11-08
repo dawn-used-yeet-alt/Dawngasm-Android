@@ -81,6 +81,14 @@ object HotaudioStreamer {
      */
     private const val STALL_TIMEOUT_MS = 45_000L
 
+    /**
+     * Before the first byte arrives the call is still doing the page handshake
+     * and the initial listen, which the HTTP client may retry for up to two
+     * minutes. Aborting that early just cancels a request that is about to
+     * succeed, so give it a longer budget than a mid-stream stall.
+     */
+    private const val NO_FIRST_BYTE_ABORT_MS = 150_000L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val states = ConcurrentHashMap<String, HotaudioStreamState>()
     private val jobs = ConcurrentHashMap<String, Job>()
@@ -226,6 +234,7 @@ object HotaudioStreamer {
 
                 val poller = scope.launch {
                     var lastChangeAt = System.currentTimeMillis()
+                    var wroteAnything = false
                     while (currentCoroutineContext().isActive) {
                         val length = if (spec.file.exists()) spec.file.length() else 0L
                         if (length != state.bytesWritten) {
@@ -242,10 +251,16 @@ object HotaudioStreamer {
                             }
                             state.bytesWritten = length
                             lastChangeAt = System.currentTimeMillis()
+                            if (length > 0L) wroteAnything = true
                         }
                         if (state.done) break
                         val idleMs = System.currentTimeMillis() - lastChangeAt
-                        if (idleMs >= STALL_TIMEOUT_MS) {
+                        val limit = if (wroteAnything) {
+                            STALL_TIMEOUT_MS
+                        } else {
+                            NO_FIRST_BYTE_ABORT_MS
+                        }
+                        if (idleMs >= limit) {
                             HotaudioLog.w(
                                 "download stalled track=${spec.trackId} family=$family " +
                                     "for ${idleMs}ms at bytes=${state.bytesWritten}; aborting attempt",
