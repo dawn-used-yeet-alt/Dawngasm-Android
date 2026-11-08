@@ -15,6 +15,22 @@ updates:
     labels:
       - "build"
       - "dependencies"
+    ignore:
+      # Gradle 9.x removes internal APIs used by Android Gradle Plugin 8.x
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major"]
+      # Android Gradle Plugin 9.x requires Gradle 9.6+
+      - dependency-name: "com.android.application"
+        update-types: ["version-update:semver-major"]
+      # OkHttp 5.x requires compileSdk 37 (Android 17 APIs)
+      - dependency-name: "com.squareup.okhttp3:okhttp"
+        update-types: ["version-update:semver-major"]
+      # androidx.core 1.18+ requires compileSdk 37
+      - dependency-name: "androidx.core:core-ktx"
+        versions: [">= 1.18.0"]
+      # androidx.compose BOM 2026.02+ requires compileSdk 37
+      - dependency-name: "androidx.compose:compose-bom"
+        versions: [">= 2026.02.00"]
 
   # Maintain GitHub Actions dependencies
   - package-ecosystem: "github-actions"
