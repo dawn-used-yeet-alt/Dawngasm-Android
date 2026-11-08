@@ -58,14 +58,28 @@ jobs:
             app/src/main/jniLibs
           key: hotaudio-v2.3.0-arm64-v8a-v3
 
-      # Gradle generates a fresh debug keystore on every runner, so each run's
-      # APK has a different signature and `adb install -r` refuses it. Cache one
-      # keystore so debug builds stay upgradeable in place.
+      # Gradle creates a debug keystore on first use, and on a fresh runner that
+      # is a new key every time — so every run's APK has a different signature
+      # and `adb install -r` refuses it. Create it at the default path up front
+      # and cache it, so debug builds stay upgradeable in place.
       - name: Cache debug keystore
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
+          path: ~/.android
           key: android-debug-keystore-v1
+
+      - name: Ensure stable debug keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          ls -l "$HOME/.android"
 
       - name: Install cargo-ndk
         run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
