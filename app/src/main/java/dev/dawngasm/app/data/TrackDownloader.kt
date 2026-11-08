@@ -32,19 +32,22 @@ class TrackDownloader(
         treeUri: String?,
     ): SavedDownload = withContext(Dispatchers.IO) {
         val fileName = buildFileName(track, audio.extension)
-        if (track.host == AudioHost.HOTAUDIO || audio.url.startsWith("file:")) {
-            val fileUri = Uri.parse(audio.url)
-            val inputStream = if (fileUri.scheme == "file") {
-                val file = File(fileUri.path ?: throw DownloadException("invalid local file URI"))
-                if (!file.exists()) throw DownloadException("resolved audio file does not exist")
-                file.inputStream()
-            } else {
-                throw DownloadException("unsupported hotaudio URI: ${audio.url}")
+        if (track.host == AudioHost.HOTAUDIO || audio.url.startsWith("${HotaudioStreamer.SCHEME}:")) {
+            val spec = HotaudioStreamer.spec(context, track.id, track.pageUrl)
+            if (HotaudioStreamer.stateFor(track.id, context) == null) {
+                HotaudioLog.i("download hotaudio: stream was not started, starting it now")
+                HotaudioStreamer.ensureStarted(spec, AppPreferences(context))
             }
+            HotaudioLog.i("download hotaudio: awaiting full stream track=${track.id}")
+            val file = HotaudioStreamer.awaitComplete(spec)
+            HotaudioLog.i(
+                "download hotaudio: stream complete track=${track.id} " +
+                    "bytes=${file.length()} path=${file.absolutePath}",
+            )
             if (treeUri != null) {
-                saveToTree(treeUri, fileName, audio.extension, inputStream)
+                saveToTree(treeUri, fileName, audio.extension, file.inputStream())
             } else {
-                saveToAppStorage(fileName, inputStream)
+                saveToAppStorage(fileName, file.inputStream())
             }
         } else {
             val request = Request.Builder()

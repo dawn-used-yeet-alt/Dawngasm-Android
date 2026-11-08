@@ -19,7 +19,7 @@
 -keepclassmembers class net.hotaudio.extractor.** { *; }
 
 # rustls-platform-verifier
--keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }
+-keep,includedescriptorclasses class org.rustls.platformverifier.** { *; }
 
 # Keep line numbers for crash reports without exposing the full mapping in logs.
 -keepattributes SourceFile,LineNumberTable

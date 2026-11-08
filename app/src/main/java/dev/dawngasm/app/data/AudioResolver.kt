@@ -1,11 +1,8 @@
 package dev.dawngasm.app.data
 
 import android.content.Context
-import android.net.Uri
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
-import java.io.File
-import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,10 +32,19 @@ class AudioResolver(private val context: Context? = null) {
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
     suspend fun resolve(track: Track): ResolvedAudio = withContext(Dispatchers.IO) {
-        cache[track.id]?.takeIf { System.currentTimeMillis() - it.createdAt < CACHE_TTL_MS }
-            ?.audio
-            ?.let { return@withContext it }
+        if (track.host != AudioHost.HOTAUDIO) {
+            cache[track.id]?.takeIf { System.currentTimeMillis() - it.createdAt < CACHE_TTL_MS }
+                ?.audio
+                ?.let {
+                    HotaudioLog.d("resolve cache hit track=${track.id} host=${track.host.label}")
+                    return@withContext it
+                }
+        }
 
+        HotaudioLog.i(
+            "resolve start track=${track.id} host=${track.host.label} page=${track.pageUrl}",
+        )
+        val startedAt = System.currentTimeMillis()
         val resolved = when (track.host) {
             AudioHost.SOUNDGASM -> soundgasm(track)
             AudioHost.WHYP -> whyp(track)
@@ -46,7 +52,15 @@ class AudioResolver(private val context: Context? = null) {
             AudioHost.HOTAUDIO -> hotaudio(track)
             AudioHost.UNKNOWN -> throw ResolveException("Unsupported audio host")
         }
-        cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
+        HotaudioLog.i(
+            "resolve done track=${track.id} host=${track.host.label} " +
+                "elapsed=${System.currentTimeMillis() - startedAt}ms url=${resolved.url}",
+        )
+        // hotaudio is intentionally not cached: the URI points at a streaming
+        // file that may be cancelled when the player is dismissed.
+        if (track.host != AudioHost.HOTAUDIO) {
+            cache[track.id] = CacheEntry(resolved, System.currentTimeMillis())
+        }
         resolved
     }
 
@@ -141,148 +155,21 @@ class AudioResolver(private val context: Context? = null) {
         )
     }
 
-    private data class HotaudioEndpoint(val pageUrl: String, val apiBase: String)
-
-    private fun isDnsOrTransientNetworkError(error: Throwable): Boolean {
-        val detail = when (error) {
-            is net.hotaudio.extractor.FfiException.Failed -> error.detail
-            is net.hotaudio.extractor.FfiException.Panic -> error.detail
-            else -> error.message.orEmpty()
-        }
-        val text = "${error.message.orEmpty()} $detail"
-        return text.contains("failed to lookup address information", ignoreCase = true) ||
-            text.contains("No address associated with hostname", ignoreCase = true) ||
-            text.contains("Name or service not known", ignoreCase = true) ||
-            text.contains("connection refused", ignoreCase = true) ||
-            text.contains("connection reset", ignoreCase = true) ||
-            text.contains("timeout", ignoreCase = true) ||
-            text.contains("timed out", ignoreCase = true) ||
-            text.contains("network is unreachable", ignoreCase = true)
-    }
-
-    private fun isRateLimitError(error: Throwable): Boolean {
-        val detail = when (error) {
-            is net.hotaudio.extractor.FfiException.Failed -> error.detail
-            is net.hotaudio.extractor.FfiException.Panic -> error.detail
-            else -> error.message.orEmpty()
-        }
-        val text = "${error.message.orEmpty()} $detail"
-        return text.contains("429", ignoreCase = true) ||
-            text.contains("too many requests", ignoreCase = true)
-    }
-
-    private fun warmDns(host: String): Boolean {
-        return try {
-            val addrs = InetAddress.getAllByName(host)
-            addrs != null && addrs.isNotEmpty()
-        } catch (_: Throwable) {
-            false
-        }
-    }
-
-    private fun hotaudio(track: Track): ResolvedAudio {
+    private suspend fun hotaudio(track: Track): ResolvedAudio {
+        HotaudioLog.i("hotaudio resolve track=${track.id} page=${track.pageUrl}")
         val prefs = context?.let { AppPreferences(it) }
-        // Ensure clearance from preferences is passed down to native FFI if available
-        prefs?.hotaudioClearance()?.let { (cookie, ua) ->
-            runCatching { net.hotaudio.extractor.setClearance(cookie, ua) }
-        }
+        HotaudioRuntime.applyClearance(prefs)
 
-        val savedFamily = prefs?.hotaudioIpFamily()?.lowercase()?.takeIf { it == "ipv4" || it == "ipv6" }
+        val spec = HotaudioStreamer.spec(context, track.id, track.pageUrl)
+        HotaudioStreamer.ensureStarted(spec, prefs)
+        val state = HotaudioStreamer.awaitFirstBytes(spec)
 
-        val cacheRoot = context?.cacheDir ?: File(System.getProperty("java.io.tmpdir") ?: "/tmp")
-        val hotaudioDir = File(cacheRoot, "hotaudio").apply { mkdirs() }
-        val targetFile = File(hotaudioDir, "${track.id}.m4a")
-        if (!targetFile.exists() || targetFile.length() == 0L) {
-            val tempFile = File(hotaudioDir, "${track.id}.${System.currentTimeMillis()}.tmp")
-
-            var normalizedUrl = track.pageUrl.trim()
-            if (normalizedUrl.startsWith("http://", ignoreCase = true)) {
-                normalizedUrl = "https" + normalizedUrl.substring(4)
-            }
-            val pageUrl = normalizedUrl.replace("://www.hotaudio.net", "://hotaudio.net")
-
-            val familiesToTry = listOfNotNull(
-                savedFamily,
-                if (savedFamily == "ipv4") "ipv6" else "ipv4",
-                "any",
-            ).distinct()
-
-            var lastError: Throwable? = null
-            var succeeded = false
-
-            familyLoop@ for (family in familiesToTry) {
-                runCatching { net.hotaudio.extractor.setIpFamily(family) }
-                runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", family, true) }
-
-                tempFile.delete()
-                try {
-                    val options = net.hotaudio.extractor.DownloadOptions(
-                        trackId = null,
-                        apiBase = "https://hotaudio.net",
-                        delayMs = 250u,
-                        initialKeysJson = null,
-                    )
-                    net.hotaudio.extractor.downloadToFile(
-                        pageUrl = pageUrl,
-                        path = tempFile.absolutePath,
-                        options = options,
-                        progress = null,
-                        cancel = null,
-                    )
-                    if (!tempFile.renameTo(targetFile)) {
-                        tempFile.copyTo(targetFile, overwrite = true)
-                        tempFile.delete()
-                    }
-                    succeeded = true
-                    if (family != "any") {
-                        prefs?.saveHotaudioIpFamily(family)
-                    }
-                    break@familyLoop
-                } catch (error: Throwable) {
-                    tempFile.delete()
-                    lastError = error
-                    val isChallenge = error is net.hotaudio.extractor.FfiException.Failed && error.code == "challenge"
-                    val isRateLimit = isRateLimitError(error)
-                    if (isChallenge) {
-                        // IP mismatch against clearance — try alternate family
-                        continue@familyLoop
-                    }
-                    if (isRateLimit && family != familiesToTry.last()) {
-                        // Rate limited on this IP / family — wait 2.5s and try alternate IP family
-                        try {
-                            Thread.sleep(2500)
-                        } catch (_: InterruptedException) {}
-                        continue@familyLoop
-                    }
-                    // Fatal error, stop early rather than stalling
-                    break@familyLoop
-                }
-            }
-
-            if (!succeeded) {
-                val err = lastError
-                val message = when {
-                    err is net.hotaudio.extractor.FfiException.Failed && err.code == "challenge" -> {
-                        "hotaudio Cloudflare clearance expired or invalid — refresh in Settings"
-                    }
-                    err != null && isRateLimitError(err) -> {
-                        "hotaudio rate limit reached (too many requests) — please wait 20–30 seconds before trying again"
-                    }
-                    err != null && isDnsOrTransientNetworkError(err) -> {
-                        val detail = (err as? net.hotaudio.extractor.FfiException.Failed)?.detail
-                            ?: err.message ?: err.toString()
-                        "hotaudio DNS resolution failed ($detail). If your mobile carrier/ISP blocks hotaudio, enable Private DNS in Android Settings (e.g. set Private DNS to 'dns.google' or 'one.one.one.one')."
-                    }
-                    err is net.hotaudio.extractor.FfiException.Failed -> "hotaudio error (${err.code}): ${err.detail}"
-                    err is net.hotaudio.extractor.FfiException.Panic -> "hotaudio error: ${err.detail}"
-                    err != null -> err.message ?: err.toString()
-                    else -> "hotaudio extraction failed"
-                }
-                throw ResolveException(message)
-            }
-        }
+        HotaudioLog.i(
+            "hotaudio ready track=${track.id} bytes=${state.bytesWritten} " +
+                "family=${state.family} firstByteIn=${state.firstByteAt - state.startedAt}ms",
+        )
         return ResolvedAudio(
-            url = Uri.fromFile(targetFile).toString(),
+            url = HotaudioStreamer.streamUri(track.id).toString(),
             headers = emptyMap(),
             extension = "m4a",
         )

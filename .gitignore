@@ -17,6 +17,11 @@ captures/
 .kotlin/
 *.class
 
+# Generated hotaudio artifacts (built by the Gradle tasks / CI cache)
+app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
+app/src/main/java/net/hotaudio/extractor/.hotaudio-bindings-ref
+app/src/main/jniLibs/
+
 # Signing material — never commit these
 *.jks
 *.keystore

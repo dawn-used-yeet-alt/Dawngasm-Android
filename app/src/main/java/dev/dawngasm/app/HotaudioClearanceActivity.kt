@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.dawngasm.app.data.AppPreferences
+import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 
 /**
@@ -68,6 +69,7 @@ class HotaudioClearanceActivity : ComponentActivity() {
     }
 
     private fun captureClearance(webView: WebView?, ip: String?, family: String?): Boolean {
+        HotaudioLog.i("captureClearance: begin ip=$ip family=$family")
         val cookieManager = CookieManager.getInstance()
         val cookieApex = cookieManager.getCookie(HOTAUDIO_URL).orEmpty()
         val cookieWww = cookieManager.getCookie(HOTAUDIO_WWW_URL).orEmpty()
@@ -76,18 +78,37 @@ class HotaudioClearanceActivity : ComponentActivity() {
             .flatMap { it.split("; ") }
             .distinct()
             .joinToString("; ")
-        if (!rawCookie.contains("cf_clearance", ignoreCase = true)) return false
+        HotaudioLog.i(
+            "captureClearance: cookieApexLen=${cookieApex.length} " +
+                "cookieWwwLen=${cookieWww.length} mergedLen=${rawCookie.length} " +
+                "hasCfClearance=${rawCookie.contains("cf_clearance", ignoreCase = true)}",
+        )
+        if (!rawCookie.contains("cf_clearance", ignoreCase = true)) {
+            HotaudioLog.w("captureClearance: no cf_clearance cookie yet")
+            return false
+        }
         val userAgent = webView?.settings?.userAgentString
             ?: WebSettings.getDefaultUserAgent(this)
+        HotaudioLog.i("captureClearance: userAgent=${userAgent.take(120)}")
         val prefs = AppPreferences(this)
         prefs.saveHotaudioClearance(rawCookie, userAgent)
+        HotaudioLog.i("captureClearance: saved cookie+ua")
         if (family != null) {
             prefs.saveHotaudioIpFamily(family, ip)
-            runCatching { net.hotaudio.extractor.setIpFamily(family) }
-            runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", family, true) }
+            try {
+                net.hotaudio.extractor.setIpFamily(family)
+                HotaudioLog.i("captureClearance: setIpFamily($family) OK")
+            } catch (error: Throwable) {
+                HotaudioLog.e("captureClearance: setIpFamily($family) failed", error)
+            }
+        } else {
+            HotaudioLog.w("captureClearance: no IP family detected")
         }
-        runCatching {
+        try {
             net.hotaudio.extractor.setClearance(rawCookie, userAgent)
+            HotaudioLog.i("captureClearance: setClearance OK")
+        } catch (error: Throwable) {
+            HotaudioLog.e("captureClearance: setClearance failed", error)
         }
         cookieManager.flush()
         setResult(RESULT_OK, Intent().putExtra(EXTRA_CONNECTED, true))
@@ -138,8 +159,10 @@ private fun HotaudioClearanceScreen(
                 .firstOrNull { it.startsWith("ip=") }
                 ?.substringAfter("ip=")
                 ?.trim()
+            HotaudioLog.i("webview trace ip=$ip")
             if (!ip.isNullOrBlank()) {
                 val fam = if (ip.contains(":")) "ipv6" else "ipv4"
+                HotaudioLog.i("webview detected client family=$fam")
                 handler.post {
                     detectedIp = ip
                     detectedFamily = fam
@@ -227,6 +250,7 @@ private fun HotaudioClearanceScreen(
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 loading = false
+                                HotaudioLog.i("webview page finished url=$url")
                                 refreshStatus()
                                 view?.evaluateJavascript(
                                     """
@@ -252,6 +276,11 @@ private fun HotaudioClearanceScreen(
                                 request: WebResourceRequest?,
                                 error: WebResourceError?,
                             ) {
+                                HotaudioLog.w(
+                                    "webview error url=${request?.url} " +
+                                        "mainFrame=${request?.isForMainFrame} " +
+                                        "code=${error?.errorCode} desc=${error?.description}",
+                                )
                                 if (request?.isForMainFrame == true) {
                                     loading = false
                                 }

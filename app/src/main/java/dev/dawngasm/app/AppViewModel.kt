@@ -13,16 +13,23 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DawngasmApi
+import dev.dawngasm.app.data.HotaudioDataSource
+import dev.dawngasm.app.data.HotaudioLog
+import dev.dawngasm.app.data.HotaudioRuntime
+import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.SearchRequest
@@ -88,10 +95,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                HotaudioLog.i("player isPlaying=$isPlaying")
                 updatePlayer { copy(isPlaying = isPlaying) }
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                HotaudioLog.i(
+                    "player state=${playerStateName(playbackState)} " +
+                        "position=${player.currentPosition} duration=${player.duration} " +
+                        "buffered=${player.bufferedPosition}",
+                )
                 when (playbackState) {
                     Player.STATE_BUFFERING -> updatePlayer { copy(isLoading = true) }
                     Player.STATE_READY -> updatePlayer {
@@ -111,6 +124,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             override fun onPlayerError(error: PlaybackException) {
                 val message = error.message ?: error.errorCodeName
+                HotaudioLog.e(
+                    "player error code=${error.errorCode} name=${error.errorCodeName} " +
+                        "message=$message",
+                    error,
+                )
                 updatePlayer { copy(isLoading = false, isPlaying = false, error = message) }
                 emitMessage("Playback failed: $message", isError = true, throwable = error)
             }
@@ -118,16 +136,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         loadFeed(reset = true)
         startProgressLoop()
-        runCatching {
-            net.hotaudio.extractor.Hotaudio.initAndroidTls(application)
-            prefs.hotaudioClearance()?.let { (cookie, ua) ->
-                net.hotaudio.extractor.setClearance(cookie, ua)
-            }
-            prefs.hotaudioIpFamily()?.let { fam ->
-                net.hotaudio.extractor.setIpFamily(fam)
-                android.system.Os.setenv("HOTAUDIO_IP_FAMILY", fam, true)
-            }
-        }
+        HotaudioLog.i("AppViewModel.init: ensuring hotaudio runtime")
+        HotaudioRuntime.initialize(application)
+        HotaudioLog.i(
+            "AppViewModel.init: hotaudio tlsReady=${HotaudioRuntime.isTlsReady()} " +
+                "tlsError=${HotaudioRuntime.tlsError?.message}",
+        )
     }
 
     private fun initialState(): AppUiState {
@@ -361,35 +375,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Refresh the hotaudio clearance status after the WebView activity. */
     fun refreshHotaudioClearance() {
+        HotaudioLog.i("refreshHotaudioClearance")
         val clearance = prefs.hotaudioClearance()
         if (clearance != null) {
-            runCatching { net.hotaudio.extractor.setClearance(clearance.first, clearance.second) }
-            prefs.hotaudioIpFamily()?.let { fam ->
-                runCatching { net.hotaudio.extractor.setIpFamily(fam) }
-                runCatching { android.system.Os.setenv("HOTAUDIO_IP_FAMILY", fam, true) }
-            }
+            HotaudioRuntime.applyClearance(prefs)
         } else {
-            runCatching { net.hotaudio.extractor.clearClearance() }
+            try {
+                net.hotaudio.extractor.clearClearance()
+                HotaudioLog.i("refreshHotaudioClearance: cleared native clearance")
+            } catch (error: Throwable) {
+                HotaudioLog.e("refreshHotaudioClearance: clearClearance failed", error)
+            }
         }
         _uiState.update { it.copy(hotaudioConnected = clearance != null) }
     }
 
     fun clearHotaudioClearance() {
+        HotaudioLog.i("clearHotaudioClearance")
         prefs.clearHotaudioClearance()
-        runCatching { net.hotaudio.extractor.clearClearance() }
-        runCatching { net.hotaudio.extractor.setIpFamily("any") }
-        runCatching { android.system.Os.unsetenv("HOTAUDIO_IP_FAMILY") }
+        try {
+            net.hotaudio.extractor.clearClearance()
+            net.hotaudio.extractor.setIpFamily("any")
+            HotaudioLog.i("clearHotaudioClearance: native state reset")
+        } catch (error: Throwable) {
+            HotaudioLog.e("clearHotaudioClearance: native reset failed", error)
+        }
         _uiState.update { it.copy(hotaudioConnected = false) }
     }
 
     // --- playback -----------------------------------------------------------
 
     fun play(track: Track, list: List<Track>? = null) {
+        HotaudioLog.i(
+            "play track=${track.id} host=${track.host.label} title=${track.title} " +
+                "page=${track.pageUrl} localUri=${track.localUri}",
+        )
+        val previous = _uiState.value.player.currentTrack
+        if (previous != null && previous.id != track.id &&
+            previous.id !in _uiState.value.downloadingIds
+        ) {
+            HotaudioLog.i("play: cancelling previous stream track=${previous.id}")
+            HotaudioStreamer.cancel(previous.id)
+        }
+
         val source = list?.takeIf { it.isNotEmpty() } ?: _uiState.value.tracks
         queue = if (source.any { it.id == track.id }) source else listOf(track) + source
 
         val localUri = track.localUri
         if (localUri != null && downloader.exists(localUri)) {
+            HotaudioLog.i("play local file track=${track.id} uri=$localUri")
             playGeneration.incrementAndGet()
             playJob?.cancel()
             startPlayback(track, Uri.parse(localUri), emptyMap(), playWhenReady = true)
@@ -409,13 +443,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         playJob = viewModelScope.launch {
             try {
+                val startedAt = System.currentTimeMillis()
                 val audio = resolver.resolve(track)
-                if (generation != playGeneration.get()) return@launch
+                HotaudioLog.i(
+                    "play resolved track=${track.id} uri=${audio.url} " +
+                        "elapsed=${System.currentTimeMillis() - startedAt}ms",
+                )
+                if (generation != playGeneration.get()) {
+                    HotaudioLog.w("play superseded track=${track.id}")
+                    return@launch
+                }
                 startPlayback(track, Uri.parse(audio.url), audio.headers, playWhenReady = true)
             } catch (cancelled: CancellationException) {
+                HotaudioLog.w("play cancelled track=${track.id}")
                 throw cancelled
             } catch (error: Exception) {
                 if (generation != playGeneration.get()) return@launch
+                HotaudioLog.e("play failed track=${track.id}", error)
                 updatePlayer {
                     copy(
                         isLoading = false,
@@ -438,8 +482,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         headers: Map<String, String>,
         playWhenReady: Boolean,
     ) {
+        HotaudioLog.i(
+            "startPlayback track=${track.id} uri=$uri scheme=${uri.scheme} " +
+                "headers=${headers.keys} playWhenReady=$playWhenReady",
+        )
         headerFactory.headers = headers + ("User-Agent" to Network.BROWSER_USER_AGENT)
-        player.setMediaItem(MediaItem.fromUri(uri))
+        val mediaItem = if (uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMimeType(MimeTypes.AUDIO_MP4)
+                .build()
+        } else {
+            MediaItem.fromUri(uri)
+        }
+        player.setMediaItem(mediaItem)
         player.prepare()
         player.playWhenReady = playWhenReady
         _progress.value = PlaybackProgress()
@@ -480,10 +536,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissPlayer() {
+        HotaudioLog.i("dismissPlayer")
+        val current = _uiState.value.player.currentTrack
         playGeneration.incrementAndGet()
         playJob?.cancel()
         player.stop()
         player.clearMediaItems()
+        if (current != null && current.id !in _uiState.value.downloadingIds) {
+            HotaudioStreamer.cancel(current.id)
+        }
         _progress.value = PlaybackProgress()
         _uiState.update { it.copy(player = PlayerUiState()) }
     }
@@ -517,6 +578,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleDebugError(message: String, throwable: Throwable?) {
+        HotaudioLog.e("error: $message", throwable)
         if (!BuildConfig.DEBUG) return
         val stackTrace = throwable?.let { Log.getStackTraceString(it) } ?: ""
         val errorText = buildString {
@@ -545,8 +607,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        HotaudioLog.i("AppViewModel.onCleared")
         feedJob?.cancel()
         playJob?.cancel()
+        HotaudioStreamer.cancelAll()
         player.release()
         super.onCleared()
     }
@@ -573,6 +637,58 @@ private class HeaderDataSourceFactory(
     override fun createDataSource(): DataSource {
         val http = OkHttpDataSource.Factory(client)
             .setDefaultRequestProperties(headers)
-        return DefaultDataSource.Factory(appContext, http).createDataSource()
+        return RoutingDataSource(appContext, DefaultDataSource.Factory(appContext, http))
     }
+}
+
+/**
+ * Sends `hotaudio://stream/...` URIs to [HotaudioDataSource] and everything
+ * else to Media3's default file/HTTP stack.
+ */
+private class RoutingDataSource(
+    private val context: Context,
+    private val fallbackFactory: DataSource.Factory,
+) : DataSource {
+    private var delegate: DataSource? = null
+    private val listeners = mutableListOf<TransferListener>()
+
+    override fun addTransferListener(transferListener: TransferListener) {
+        listeners += transferListener
+    }
+
+    override fun open(dataSpec: DataSpec): Long {
+        val next = if (dataSpec.uri.scheme.equals(HotaudioStreamer.SCHEME, ignoreCase = true)) {
+            HotaudioLog.i("routing to HotaudioDataSource uri=${dataSpec.uri}")
+            HotaudioDataSource(context)
+        } else {
+            fallbackFactory.createDataSource()
+        }
+        listeners.forEach(next::addTransferListener)
+        delegate = next
+        return next.open(dataSpec)
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int =
+        delegate?.read(buffer, offset, length) ?: C.RESULT_END_OF_INPUT
+
+    override fun close() {
+        try {
+            delegate?.close()
+        } finally {
+            delegate = null
+        }
+    }
+
+    override fun getUri(): Uri? = delegate?.uri
+
+    override fun getResponseHeaders(): Map<String, List<String>> =
+        delegate?.responseHeaders ?: emptyMap()
+}
+
+private fun playerStateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "UNKNOWN($state)"
 }
