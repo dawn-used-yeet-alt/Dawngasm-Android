@@ -60,8 +60,8 @@ fun HomeScreen(
     onTrackClick: (Track) -> Unit,
     onToggleSave: (Track) -> Unit,
     onToggleDownload: (Track) -> Unit,
-    bottomInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     Column(
         modifier = modifier

@@ -123,7 +123,7 @@ class HotaudioClearanceActivity : ComponentActivity() {
     }
 }
 
-private class ClearanceBridge(
+internal class ClearanceBridge(
     private val onTrace: (String) -> Unit,
 ) {
     @JavascriptInterface
@@ -132,7 +132,7 @@ private class ClearanceBridge(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 private fun HotaudioClearanceScreen(
     onCapture: (WebView?, String?, String?) -> Boolean,
@@ -153,7 +153,7 @@ private fun HotaudioClearanceScreen(
     }
 
     val handler = remember { Handler(Looper.getMainLooper()) }
-    val bridge = remember {
+    val bridge: ClearanceBridge = remember {
         ClearanceBridge { trace ->
             val ip = trace.lineSequence()
                 .firstOrNull { it.startsWith("ip=") }

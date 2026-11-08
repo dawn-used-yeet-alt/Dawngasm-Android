@@ -6,8 +6,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 import java.io.File
 import java.util.Date
+import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
@@ -16,6 +18,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
@@ -55,6 +58,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+@OptIn(UnstableApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
@@ -491,7 +495,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val localUri = track.localUri
         if (localUri != null && downloader.exists(localUri)) {
             HotaudioLog.i("play local file track=${track.id} uri=$localUri")
-            startPlayback(track, Uri.parse(localUri), emptyMap(), playWhenReady = true)
+            startPlayback(track, localUri.toUri(), emptyMap(), playWhenReady = true)
             return
         }
 
@@ -516,7 +520,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     HotaudioLog.w("play superseded track=${track.id}")
                     return@launch
                 }
-                startPlayback(track, Uri.parse(audio.url), audio.headers, playWhenReady = true)
+                startPlayback(track, audio.url.toUri(), audio.headers, playWhenReady = true)
             } catch (cancelled: CancellationException) {
                 HotaudioLog.w("play cancelled track=${track.id}")
                 throw cancelled
@@ -687,6 +691,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
  * media item. audiochan needs Origin/Referer headers; soundgasm and whyp just
  * need a browser user agent. Sharing the OkHttp client keeps the cookie jar.
  */
+@OptIn(UnstableApi::class)
 private class HeaderDataSourceFactory(
     context: Context,
     private val client: okhttp3.OkHttpClient,
@@ -707,6 +712,7 @@ private class HeaderDataSourceFactory(
  * Sends `hotaudio://stream/...` URIs to [HotaudioDataSource] and everything
  * else to Media3's default file/HTTP stack.
  */
+@OptIn(UnstableApi::class)
 private class RoutingDataSource(
     private val context: Context,
     private val fallbackFactory: DataSource.Factory,

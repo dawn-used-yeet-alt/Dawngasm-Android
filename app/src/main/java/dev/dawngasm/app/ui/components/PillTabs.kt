@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.state.LibrarySubTab
 import dev.dawngasm.app.ui.theme.Dimens
@@ -77,7 +78,7 @@ fun PillTabs(
 
         Box(
             modifier = Modifier
-                .offset(x = tabWidth * animatedIndex)
+                .offset { IntOffset(x = (tabWidth * animatedIndex).roundToPx(), y = 0) }
                 .width(tabWidth)
                 .fillMaxHeight()
                 .clip(CircleShape)

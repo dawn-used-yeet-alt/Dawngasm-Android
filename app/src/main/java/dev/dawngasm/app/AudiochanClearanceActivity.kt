@@ -107,7 +107,7 @@ class AudiochanClearanceActivity : ComponentActivity() {
     }
 }
 
-private class AudiochanBridge(
+internal class AudiochanBridge(
     private val onVerified: () -> Unit,
 ) {
     @JavascriptInterface
@@ -116,7 +116,7 @@ private class AudiochanBridge(
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 private fun AudiochanClearanceScreen(
     onCapture: (WebView?) -> Boolean,
@@ -138,7 +138,7 @@ private fun AudiochanClearanceScreen(
     }
 
     val handler = remember { Handler(Looper.getMainLooper()) }
-    val bridge = remember {
+    val bridge: AudiochanBridge = remember {
         AudiochanBridge {
             handler.post {
                 verified = true
