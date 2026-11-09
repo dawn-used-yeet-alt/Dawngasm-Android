@@ -589,6 +589,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun seekTo(positionMs: Long) {
+        val duration = _progress.value.durationMs
+        val target = if (duration > 0L) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
+        player.seekTo(target)
+        _progress.value = _progress.value.copy(positionMs = target)
+    }
+
     fun nextTrack() {
         val current = _uiState.value.player.currentTrack ?: return
         val list = queue.ifEmpty { _uiState.value.tracks }
