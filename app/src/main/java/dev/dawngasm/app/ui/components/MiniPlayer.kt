@@ -3,9 +3,11 @@ package dev.dawngasm.app.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -32,9 +34,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -125,6 +125,11 @@ private fun MiniPlayerBody(
     } else {
         0f
     }
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = if (fraction == 0f) snap() else tween(durationMillis = 500, easing = LinearEasing),
+        label = "miniPlayerProgress",
+    )
 
     LaunchedEffect(track.id) { dragOffsetY = 0f }
 
@@ -259,40 +264,29 @@ private fun MiniPlayerBody(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .size(Dimens.MiniPlayerPlayPauseSize)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable(role = Role.Button, onClick = onTogglePlayPause)
-                            .testTag("mini_player_play_pause"),
-                        contentAlignment = Alignment.Center,
+                    MorphingProgressIconButton(
+                        progress = { animatedFraction },
+                        indeterminate = player.isLoading,
+                        onClick = onTogglePlayPause,
+                        enabled = true,
+                        backgroundColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
+                        progressColor = MaterialTheme.colorScheme.primary,
+                        buttonColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("mini_player_play_pause"),
                     ) {
-                        if (player.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.5.dp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        AnimatedContent(
+                            targetState = player.isPlaying,
+                            transitionSpec = {
+                                fadeIn(tween(120)) togetherWith fadeOut(tween(90))
+                            },
+                            label = "playPauseIcon",
+                        ) { playing ->
+                            Icon(
+                                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (player.isLoading) "Song loading" else if (playing) "Pause" else "Play",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(Dimens.MiniPlayerPlayPauseIconSize),
                             )
-                        } else {
-                            AnimatedContent(
-                                targetState = player.isPlaying,
-                                transitionSpec = {
-                                    fadeIn(tween(120)) togetherWith fadeOut(tween(90))
-                                },
-                                label = "playPauseIcon",
-                            ) { playing ->
-                                Icon(
-                                    imageVector = if (playing) {
-                                        Icons.Filled.Pause
-                                    } else {
-                                        Icons.Filled.PlayArrow
-                                    },
-                                    contentDescription = if (playing) "Pause" else "Play",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(Dimens.MiniPlayerPlayPauseIconSize),
-                                )
-                            }
                         }
                     }
 
@@ -313,19 +307,6 @@ private fun MiniPlayerBody(
                         )
                     }
                 }
-            }
-
-            if (progress.durationMs > 0) {
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .padding(horizontal = 28.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                )
             }
         }
     }
