@@ -84,4 +84,6 @@
     <string name="host_unknown">audio</string>
     <string name="download_in_progress">Downloading…</string>
     <string name="loading_more">Loading more…</string>
+    <string name="notification_channel_name">Playback</string>
+    <string name="notification_channel_description">Media playback controls and information</string>
 </resources>
