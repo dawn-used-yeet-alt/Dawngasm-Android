@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -35,7 +34,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -51,10 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -270,78 +264,29 @@ private fun MiniPlayerBody(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier.size(Dimens.MiniPlayerPlayPauseContainerSize),
-                        contentAlignment = Alignment.Center,
+                    MorphingProgressIconButton(
+                        progress = { animatedFraction },
+                        indeterminate = player.isLoading,
+                        onClick = onTogglePlayPause,
+                        enabled = true,
+                        backgroundColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
+                        progressColor = MaterialTheme.colorScheme.primary,
+                        buttonColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.testTag("mini_player_play_pause"),
                     ) {
-                        val trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-                        val progressColor = MaterialTheme.colorScheme.primary
-                        Canvas(
-                            modifier = Modifier.size(Dimens.MiniPlayerPlayPauseContainerSize),
-                        ) {
-                            val strokeWidthPx = Dimens.MiniPlayerProgressBarWidth.toPx()
-                            val halfStroke = strokeWidthPx / 2f
-                            val arcSize = Size(size.width - strokeWidthPx, size.height - strokeWidthPx)
-                            val topLeft = Offset(halfStroke, halfStroke)
-
-                            drawArc(
-                                color = trackColor,
-                                startAngle = 0f,
-                                sweepAngle = 360f,
-                                useCenter = false,
-                                topLeft = topLeft,
-                                size = arcSize,
-                                style = Stroke(width = strokeWidthPx),
+                        AnimatedContent(
+                            targetState = player.isPlaying,
+                            transitionSpec = {
+                                fadeIn(tween(120)) togetherWith fadeOut(tween(90))
+                            },
+                            label = "playPauseIcon",
+                        ) { playing ->
+                            Icon(
+                                imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (player.isLoading) "Song loading" else if (playing) "Pause" else "Play",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(Dimens.MiniPlayerPlayPauseIconSize),
                             )
-
-                            if (animatedFraction > 0f) {
-                                drawArc(
-                                    color = progressColor,
-                                    startAngle = -90f,
-                                    sweepAngle = animatedFraction * 360f,
-                                    useCenter = false,
-                                    topLeft = topLeft,
-                                    size = arcSize,
-                                    style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round),
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .size(Dimens.MiniPlayerPlayPauseSize)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer)
-                                .clickable(role = Role.Button, onClick = onTogglePlayPause)
-                                .testTag("mini_player_play_pause"),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (player.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.5.dp,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            } else {
-                                AnimatedContent(
-                                    targetState = player.isPlaying,
-                                    transitionSpec = {
-                                        fadeIn(tween(120)) togetherWith fadeOut(tween(90))
-                                    },
-                                    label = "playPauseIcon",
-                                ) { playing ->
-                                    Icon(
-                                        imageVector = if (playing) {
-                                            Icons.Filled.Pause
-                                        } else {
-                                            Icons.Filled.PlayArrow
-                                        },
-                                        contentDescription = if (playing) "Pause" else "Play",
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(Dimens.MiniPlayerPlayPauseIconSize),
-                                    )
-                                }
-                            }
                         }
                     }
 

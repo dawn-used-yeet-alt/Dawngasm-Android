@@ -44,9 +44,7 @@ object Dimens {
     val MiniPlayerHeartSize = 46.dp
     val MiniPlayerHeartIconSize = 23.dp
     val MiniPlayerPlayPauseSize = 46.dp
-    val MiniPlayerPlayPauseContainerSize = 56.dp
     val MiniPlayerPlayPauseIconSize = 24.dp
-    val MiniPlayerProgressBarWidth = 3.dp
     val MiniPlayerNextSize = 52.dp
     val MiniPlayerNextIconSize = 27.dp
 
