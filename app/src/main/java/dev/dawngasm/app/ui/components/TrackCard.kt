@@ -1,6 +1,7 @@
 package dev.dawngasm.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -9,6 +10,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -33,13 +36,21 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
@@ -47,6 +58,7 @@ import dev.dawngasm.app.ui.theme.Dimens
 import dev.dawngasm.app.util.compactScore
 import dev.dawngasm.app.util.relativeTime
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackCard(
     track: Track,
@@ -60,6 +72,8 @@ fun TrackCard(
     cardPosition: CardGroupPosition = CardGroupPosition.Standalone,
     showSaveAction: Boolean = true,
 ) {
+    var isExpanded by rememberSaveable(track.id) { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -79,17 +93,36 @@ fun TrackCard(
         label = "heartScale",
     )
 
+    val shape = ExpressiveCardShapes.forPosition(cardPosition)
+
     Surface(
-        onClick = { onTrackClick(track) },
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = 0.6f,
+                    stiffness = 900f,
+                ),
+            )
             .scale(scale)
+            .clip(shape)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Button,
+                onClickLabel = "Play ${track.title}",
+                onLongClickLabel = if (isExpanded) "Collapse title" else "Expand title",
+                onClick = { onTrackClick(track) },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    isExpanded = !isExpanded
+                },
+            )
             .testTag("track_card_${track.id}"),
-        shape = ExpressiveCardShapes.forPosition(cardPosition),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        interactionSource = interaction,
     ) {
         Row(
             modifier = Modifier
@@ -107,7 +140,7 @@ fun TrackCard(
                     text = track.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(modifier = Modifier.size(3.dp))
