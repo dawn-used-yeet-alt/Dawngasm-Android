@@ -3,21 +3,26 @@ package dev.dawngasm.app.ui.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +33,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
@@ -36,12 +42,16 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -73,6 +83,7 @@ fun MiniPlayer(
     onToggleSave: () -> Unit,
     onNextTrack: () -> Unit,
     onDismiss: () -> Unit,
+    onSeek: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -100,6 +111,7 @@ fun MiniPlayer(
                 onToggleSave = onToggleSave,
                 onNextTrack = onNextTrack,
                 onDismiss = onDismiss,
+                onSeek = onSeek,
             )
         }
     }
@@ -115,8 +127,12 @@ private fun MiniPlayerBody(
     onToggleSave: () -> Unit,
     onNextTrack: () -> Unit,
     onDismiss: () -> Unit,
+    onSeek: (Long) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    var isExpanded by remember { mutableStateOf(false) }
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubFraction by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
     val dismissThresholdPx = with(density) { 40.dp.toPx() }
@@ -127,11 +143,24 @@ private fun MiniPlayerBody(
     }
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
-        animationSpec = if (fraction == 0f) snap() else tween(durationMillis = 500, easing = LinearEasing),
+        animationSpec = if (fraction == 0f || isScrubbing) snap() else tween(durationMillis = 500, easing = LinearEasing),
         label = "miniPlayerProgress",
     )
 
-    LaunchedEffect(track.id) { dragOffsetY = 0f }
+    val cornerRadius by animateDpAsState(
+        targetValue = if (isExpanded) Dimens.CardCornerRadiusLarge else Dimens.MiniPlayerHeight / 2,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "miniPlayerCornerRadius",
+    )
+    val cardShape = RoundedCornerShape(cornerRadius)
+
+    LaunchedEffect(track.id) {
+        dragOffsetY = 0f
+        isScrubbing = false
+    }
 
     Surface(
         modifier = Modifier
@@ -141,13 +170,22 @@ private fun MiniPlayerBody(
                 vertical = Dimens.MiniPlayerBottomMargin,
             )
             .offset { IntOffset(0, dragOffsetY.roundToInt()) }
-            .height(Dimens.MiniPlayerHeight)
-            .clip(CircleShape)
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            )
+            .clip(cardShape)
             .pointerInput(track.id) {
                 detectVerticalDragGestures(
                     onDragEnd = {
                         if (dragOffsetY > dismissThresholdPx) {
-                            onDismiss()
+                            if (isExpanded) {
+                                isExpanded = false
+                            } else {
+                                onDismiss()
+                            }
                             dragOffsetY = 0f
                         } else {
                             scope.launch {
@@ -163,17 +201,19 @@ private fun MiniPlayerBody(
                         }
                     },
                     onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        if (!isScrubbing) {
+                            change.consume()
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
                     },
                 )
             }
             .testTag("mini_player"),
-        shape = CircleShape,
+        shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = Dimens.MiniPlayerElevation,
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -190,7 +230,18 @@ private fun MiniPlayerBody(
                         fadeIn(tween(170)) togetherWith fadeOut(tween(90))
                     },
                     label = "playerTrackTransition",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(),
+                            role = Role.Button,
+                            onClickLabel = if (isExpanded) "Retract player" else "Expand player",
+                            onClick = { isExpanded = !isExpanded },
+                        )
+                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                        .testTag("mini_player_text_toggle"),
                 ) { current ->
                     Column {
                         Text(
@@ -202,7 +253,7 @@ private fun MiniPlayerBody(
                         )
                         val subtitle = buildString {
                             append(current.displayAuthor)
-                            if (progress.durationMs > 0) {
+                            if (progress.durationMs > 0 && !isExpanded) {
                                 append(" · ")
                                 append(formatDuration(progress.positionMs))
                                 append(" / ")
@@ -265,7 +316,7 @@ private fun MiniPlayerBody(
                     }
 
                     MorphingProgressIconButton(
-                        progress = { animatedFraction },
+                        progress = { if (isScrubbing) scrubFraction else animatedFraction },
                         indeterminate = player.isLoading,
                         onClick = onTogglePlayPause,
                         enabled = true,
@@ -304,6 +355,80 @@ private fun MiniPlayerBody(
                             contentDescription = "Next track",
                             tint = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.size(Dimens.MiniPlayerNextIconSize),
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                ) + fadeIn(animationSpec = tween(180, delayMillis = 40)),
+                exit = shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                ) + fadeOut(animationSpec = tween(120)),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = Dimens.MiniPlayerStartPadding,
+                            end = Dimens.MiniPlayerStartPadding,
+                            bottom = 12.dp,
+                        ),
+                ) {
+                    val currentFraction = if (isScrubbing) scrubFraction else fraction
+                    val currentPositionMs = if (isScrubbing) {
+                        (scrubFraction * progress.durationMs).toLong().coerceIn(0L, progress.durationMs)
+                    } else {
+                        progress.positionMs
+                    }
+
+                    Slider(
+                        value = currentFraction,
+                        onValueChange = {
+                            isScrubbing = true
+                            scrubFraction = it
+                        },
+                        onValueChangeFinished = {
+                            val targetMs = (scrubFraction * progress.durationMs).toLong().coerceIn(0L, progress.durationMs)
+                            onSeek(targetMs)
+                            isScrubbing = false
+                        },
+                        enabled = progress.durationMs > 0,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("mini_player_seek_slider"),
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp)
+                            .offset(y = (-6).dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = formatDuration(currentPositionMs),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = if (progress.durationMs > 0) formatDuration(progress.durationMs) else "0:00",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

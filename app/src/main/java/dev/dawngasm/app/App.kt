@@ -177,6 +177,7 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                 },
                 onNextTrack = viewModel::nextTrack,
                 onDismiss = viewModel::dismissPlayer,
+                onSeek = viewModel::seekTo,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
