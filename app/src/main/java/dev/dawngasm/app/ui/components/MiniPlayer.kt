@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -64,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.Track
@@ -117,6 +119,7 @@ fun MiniPlayer(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MiniPlayerBody(
     track: Track,
@@ -150,8 +153,8 @@ private fun MiniPlayerBody(
     val cornerRadius by animateDpAsState(
         targetValue = if (isExpanded) Dimens.CardCornerRadiusLarge else Dimens.MiniPlayerHeight / 2,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = 0.6f,
+            stiffness = 900f,
         ),
         label = "miniPlayerCornerRadius",
     )
@@ -172,8 +175,8 @@ private fun MiniPlayerBody(
             .offset { IntOffset(0, dragOffsetY.roundToInt()) }
             .animateContentSize(
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
+                    dampingRatio = 0.6f,
+                    stiffness = 900f,
                 ),
             )
             .clip(cardShape)
@@ -364,16 +367,16 @@ private fun MiniPlayerBody(
                 visible = isExpanded,
                 enter = expandVertically(
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
+                        dampingRatio = 0.6f,
+                        stiffness = 900f,
                     ),
-                ) + fadeIn(animationSpec = tween(180, delayMillis = 40)),
+                ) + fadeIn(animationSpec = tween(140)),
                 exit = shrinkVertically(
                     animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
+                        dampingRatio = 0.6f,
+                        stiffness = 900f,
                     ),
-                ) + fadeOut(animationSpec = tween(120)),
+                ) + fadeOut(animationSpec = tween(90)),
             ) {
                 Column(
                     modifier = Modifier
@@ -391,6 +394,7 @@ private fun MiniPlayerBody(
                         progress.positionMs
                     }
 
+                    val sliderInteractionSource = remember { MutableInteractionSource() }
                     Slider(
                         value = currentFraction,
                         onValueChange = {
@@ -408,6 +412,17 @@ private fun MiniPlayerBody(
                             activeTrackColor = MaterialTheme.colorScheme.primary,
                             inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         ),
+                        interactionSource = sliderInteractionSource,
+                        thumb = {
+                            SliderDefaults.Thumb(
+                                interactionSource = sliderInteractionSource,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                ),
+                                enabled = progress.durationMs > 0,
+                                thumbSize = DpSize(width = 4.dp, height = 22.dp),
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("mini_player_seek_slider"),
