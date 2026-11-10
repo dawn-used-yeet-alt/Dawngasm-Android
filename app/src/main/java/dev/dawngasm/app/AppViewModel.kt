@@ -53,6 +53,22 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+data class FeedSnapshot(
+    val tracks: List<Track>,
+    val query: String,
+    val includeTags: List<String>,
+    val excludeTags: List<String>,
+    val sort: String,
+    val window: String,
+    val hosts: List<String>,
+    val excludeHosts: List<String>,
+    val feedPage: Int,
+    val hasMore: Boolean,
+    val similarSourceTrack: Track? = null,
+    val scrollIndex: Int = 0,
+    val scrollOffset: Int = 0,
+)
+
 @OptIn(UnstableApi::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = AppPreferences(application)
@@ -100,6 +116,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var feedJob: Job? = null
     private var feedPage = 0
     private val feedGeneration = AtomicLong(0)
+    private val feedStack = ArrayDeque<FeedSnapshot>()
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -199,12 +216,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // --- feed ---------------------------------------------------------------
 
     fun refresh() {
-        loadFeed(reset = true, refreshing = true)
+        val state = _uiState.value
+        if (state.similarSourceTrack != null) {
+            loadSimilar(state.similarSourceTrack, reset = true, refreshing = true)
+        } else {
+            loadFeed(reset = true, refreshing = true)
+        }
     }
 
     fun loadMore() {
         val state = _uiState.value
-        if (state.isLoading || state.isLoadingMore || !state.hasMore) return
+        if (state.similarSourceTrack != null || state.isLoading || state.isLoadingMore || !state.hasMore) return
         loadFeed(reset = false)
     }
 
@@ -214,6 +236,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val parsed = SearchSyntax.parse(request.text)
         val combinedHosts = (request.hosts + parsed.hosts).distinct()
         val combinedExcludeHosts = (request.excludeHosts + parsed.excludeHosts).distinct()
+        feedStack.clear()
         _uiState.update {
             it.copy(
                 query = parsed.text,
@@ -223,6 +246,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 window = parsed.window ?: request.window,
                 hosts = combinedHosts,
                 excludeHosts = combinedExcludeHosts,
+                similarSourceTrack = null,
+                canGoBack = false,
             )
         }
         persistFeed()
@@ -230,6 +255,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearSearch() {
+        if (_uiState.value.similarSourceTrack != null) {
+            navigateBack()
+            return
+        }
+        feedStack.clear()
         _uiState.update {
             it.copy(
                 query = "",
@@ -239,10 +269,116 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 window = SearchSyntax.DEFAULT_WINDOW,
                 hosts = emptyList(),
                 excludeHosts = emptyList(),
+                similarSourceTrack = null,
+                canGoBack = false,
             )
         }
         persistFeed()
         loadFeed(reset = true)
+    }
+
+    fun showSimilar(track: Track, scrollIndex: Int = 0, scrollOffset: Int = 0) {
+        val state = _uiState.value
+        feedStack.addLast(
+            FeedSnapshot(
+                tracks = state.tracks,
+                query = state.query,
+                includeTags = state.includeTags,
+                excludeTags = state.excludeTags,
+                sort = state.sort,
+                window = state.window,
+                hosts = state.hosts,
+                excludeHosts = state.excludeHosts,
+                feedPage = feedPage,
+                hasMore = state.hasMore,
+                similarSourceTrack = state.similarSourceTrack,
+                scrollIndex = scrollIndex,
+                scrollOffset = scrollOffset,
+            ),
+        )
+        loadSimilar(track, reset = true)
+    }
+
+    private fun loadSimilar(track: Track, reset: Boolean = true, refreshing: Boolean = false) {
+        val generation = feedGeneration.incrementAndGet()
+        feedJob?.cancel()
+
+        _uiState.update {
+            it.copy(
+                isLoading = reset && !refreshing,
+                isRefreshing = refreshing,
+                isLoadingMore = false,
+                error = null,
+                similarSourceTrack = track,
+                canGoBack = feedStack.isNotEmpty(),
+                pendingScrollRestore = if (reset) 0 to 0 else null,
+            )
+        }
+
+        feedJob = viewModelScope.launch {
+            try {
+                val similarTracks = api.similar(track.id)
+                if (generation != feedGeneration.get()) return@launch
+                _uiState.update {
+                    it.copy(
+                        tracks = similarTracks,
+                        isLoading = false,
+                        isRefreshing = false,
+                        isLoadingMore = false,
+                        hasMore = false,
+                        error = if (similarTracks.isEmpty()) "No similar posts found" else null,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (generation != feedGeneration.get()) return@launch
+                val message = error.message ?: "Could not find similar posts"
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        isLoadingMore = false,
+                        error = message,
+                    )
+                }
+                emitMessage(message, isError = true, throwable = error)
+            }
+        }
+    }
+
+    fun navigateBack(): Boolean {
+        if (feedStack.isEmpty()) return false
+        val previous = feedStack.removeLast()
+        feedJob?.cancel()
+        feedGeneration.incrementAndGet()
+        feedPage = previous.feedPage
+
+        _uiState.update {
+            it.copy(
+                tracks = previous.tracks,
+                query = previous.query,
+                includeTags = previous.includeTags,
+                excludeTags = previous.excludeTags,
+                sort = previous.sort,
+                window = previous.window,
+                hosts = previous.hosts,
+                excludeHosts = previous.excludeHosts,
+                hasMore = previous.hasMore,
+                similarSourceTrack = previous.similarSourceTrack,
+                isLoading = false,
+                isRefreshing = false,
+                isLoadingMore = false,
+                error = null,
+                canGoBack = feedStack.isNotEmpty(),
+                pendingScrollRestore = previous.scrollIndex to previous.scrollOffset,
+            )
+        }
+        return true
+    }
+
+    fun onScrollRestored() {
+        _uiState.update { it.copy(pendingScrollRestore = null) }
     }
 
     /** Tag autocomplete for the search sheet. Failures simply show no rows. */
@@ -286,6 +422,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 isRefreshing = refreshing && reset && it.tracks.isNotEmpty(),
                 isLoadingMore = !reset,
                 error = null,
+                similarSourceTrack = if (reset) null else it.similarSourceTrack,
+                canGoBack = feedStack.isNotEmpty(),
             )
         }
 

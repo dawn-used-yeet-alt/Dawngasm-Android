@@ -15,17 +15,19 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -35,7 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -71,6 +73,7 @@ fun TrackCard(
     modifier: Modifier = Modifier,
     cardPosition: CardGroupPosition = CardGroupPosition.Standalone,
     showSaveAction: Boolean = true,
+    onSimilarClick: () -> Unit = {},
 ) {
     var isExpanded by rememberSaveable(track.id) { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
@@ -92,6 +95,15 @@ fun TrackCard(
         ),
         label = "heartScale",
     )
+    val expandProgress by animateFloatAsState(
+        targetValue = if (isExpanded) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "trackCardExpandProgress",
+    )
+    val clampedProgress = expandProgress.coerceIn(0f, 1f)
 
     val shape = ExpressiveCardShapes.forPosition(cardPosition)
 
@@ -133,9 +145,13 @@ fun TrackCard(
                     top = Dimens.CardInnerVerticalPadding,
                     bottom = Dimens.CardInnerVerticalPadding,
                 ),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp),
+            ) {
                 Text(
                     text = track.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -163,68 +179,160 @@ fun TrackCard(
                 }
             }
 
-            if (showSaveAction) {
-                val heartTint by animateColorAsState(
-                    targetValue = if (isSaved) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    animationSpec = tween(160),
-                    label = "heartTint",
-                )
-                IconButton(
-                    onClick = onToggleSave,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("save_track_${track.id}"),
-                ) {
-                    Icon(
-                        imageVector = if (isSaved) {
-                            Icons.Filled.Favorite
-                        } else {
-                            Icons.Outlined.FavoriteBorder
-                        },
-                        contentDescription = if (isSaved) "Saved" else "Save",
-                        tint = heartTint,
-                        modifier = Modifier.scale(heartScale),
-                    )
-                }
-            }
-
-            val downloadTint by animateColorAsState(
-                targetValue = if (isDownloaded || isDownloading) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                animationSpec = tween(160),
-                label = "downloadTint",
+            TrackCardActions(
+                isExpanded = isExpanded,
+                clampedProgress = clampedProgress,
+                showSaveAction = showSaveAction,
+                isSaved = isSaved,
+                heartScale = heartScale,
+                onToggleSave = onToggleSave,
+                isDownloaded = isDownloaded,
+                isDownloading = isDownloading,
+                onToggleDownload = onToggleDownload,
+                onSimilarClick = onSimilarClick,
+                trackId = track.id,
             )
+        }
+    }
+}
+
+@Composable
+private fun TrackCardActions(
+    isExpanded: Boolean,
+    clampedProgress: Float,
+    showSaveAction: Boolean,
+    isSaved: Boolean,
+    heartScale: Float,
+    onToggleSave: () -> Unit,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    onToggleDownload: () -> Unit,
+    onSimilarClick: () -> Unit,
+    trackId: String,
+) {
+    val buttonSize = 48.dp
+
+    val containerWidth = if (showSaveAction) {
+        buttonSize * (2f - clampedProgress)
+    } else {
+        buttonSize
+    }
+
+    val containerHeight = if (showSaveAction) {
+        buttonSize * (1f + 2f * clampedProgress)
+    } else {
+        buttonSize * (1f + clampedProgress)
+    }
+
+    val heartTint by animateColorAsState(
+        targetValue = if (isSaved) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(160),
+        label = "heartTint",
+    )
+
+    val downloadTint by animateColorAsState(
+        targetValue = if (isDownloaded || isDownloading) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(160),
+        label = "downloadTint",
+    )
+
+    Box(
+        modifier = Modifier.size(width = containerWidth, height = containerHeight),
+    ) {
+        if (showSaveAction) {
             IconButton(
-                onClick = onToggleDownload,
-                enabled = !isDownloading,
+                onClick = onToggleSave,
                 modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("download_track_${track.id}"),
+                    .offset(x = 0.dp, y = 0.dp)
+                    .size(buttonSize)
+                    .testTag("save_track_$trackId"),
             ) {
-                if (isDownloading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(21.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isDownloaded) {
-                            Icons.Outlined.DownloadDone
-                        } else {
-                            Icons.Outlined.Download
-                        },
-                        contentDescription = if (isDownloaded) "Downloaded" else "Download",
-                        tint = downloadTint,
-                    )
-                }
+                Icon(
+                    imageVector = if (isSaved) {
+                        Icons.Filled.Favorite
+                    } else {
+                        Icons.Outlined.FavoriteBorder
+                    },
+                    contentDescription = if (isSaved) "Saved" else "Save",
+                    tint = heartTint,
+                    modifier = Modifier.scale(heartScale),
+                )
+            }
+        }
+
+        val downloadOffsetX = if (showSaveAction) {
+            buttonSize * (1f - clampedProgress)
+        } else {
+            0.dp
+        }
+        val downloadOffsetY = if (showSaveAction) {
+            buttonSize * clampedProgress
+        } else {
+            0.dp
+        }
+
+        IconButton(
+            onClick = onToggleDownload,
+            enabled = !isDownloading,
+            modifier = Modifier
+                .offset(x = downloadOffsetX, y = downloadOffsetY)
+                .size(buttonSize)
+                .testTag("download_track_$trackId"),
+        ) {
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(21.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Icon(
+                    imageVector = if (isDownloaded) {
+                        Icons.Outlined.DownloadDone
+                    } else {
+                        Icons.Outlined.Download
+                    },
+                    contentDescription = if (isDownloaded) "Downloaded" else "Download",
+                    tint = downloadTint,
+                )
+            }
+        }
+
+        val similarOffsetY = if (showSaveAction) {
+            buttonSize * (1f + clampedProgress)
+        } else {
+            buttonSize * clampedProgress
+        }
+        val similarAlpha = clampedProgress
+        val similarScale = 0.5f + 0.5f * clampedProgress
+
+        if (clampedProgress > 0.01f) {
+            IconButton(
+                onClick = onSimilarClick,
+                enabled = isExpanded && clampedProgress > 0.7f,
+                modifier = Modifier
+                    .offset(x = 0.dp, y = similarOffsetY)
+                    .size(buttonSize)
+                    .graphicsLayer {
+                        alpha = similarAlpha
+                        scaleX = similarScale
+                        scaleY = similarScale
+                    }
+                    .testTag("similar_track_$trackId"),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AutoAwesome,
+                    contentDescription = "Similar posts",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

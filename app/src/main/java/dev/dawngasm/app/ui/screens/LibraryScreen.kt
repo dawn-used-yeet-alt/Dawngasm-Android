@@ -50,6 +50,7 @@ fun LibraryScreen(
     onToggleDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    onSimilarClick: ((Track) -> Unit)? = null,
 ) {
     var selectedSubTab by rememberSaveable { mutableStateOf(LibrarySubTab.History) }
 
@@ -93,6 +94,7 @@ fun LibraryScreen(
                     testTag = "history_track_list",
                     onTrackClick = { onTrackClick(it, historyTracks) },
                     onToggleDownload = onToggleDownload,
+                    onSimilarClick = onSimilarClick,
                     bottomInset = bottomInset,
                 )
 
@@ -106,6 +108,7 @@ fun LibraryScreen(
                     testTag = "saved_track_list",
                     onTrackClick = { onTrackClick(it, savedTracks) },
                     onToggleDownload = onToggleDownload,
+                    onSimilarClick = onSimilarClick,
                     bottomInset = bottomInset,
                 )
 
@@ -119,6 +122,7 @@ fun LibraryScreen(
                     testTag = "downloads_track_list",
                     onTrackClick = { onTrackClick(it, downloadedTracks) },
                     onToggleDownload = onToggleDownload,
+                    onSimilarClick = onSimilarClick,
                     bottomInset = bottomInset,
                 )
             }
@@ -138,6 +142,7 @@ private fun TrackList(
     onTrackClick: (Track) -> Unit,
     onToggleDownload: (Track) -> Unit,
     bottomInset: Dp = 0.dp,
+    onSimilarClick: ((Track) -> Unit)? = null,
 ) {
     if (tracks.isEmpty()) {
         EmptyState(
@@ -173,6 +178,7 @@ private fun TrackList(
                 onTrackClick = onTrackClick,
                 onToggleSave = {},
                 onToggleDownload = { onToggleDownload(track) },
+                onSimilarClick = { onSimilarClick?.invoke(track) },
                 cardPosition = position,
                 showSaveAction = false,
                 modifier = Modifier.animateItem(),

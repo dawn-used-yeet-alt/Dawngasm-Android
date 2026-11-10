@@ -1,5 +1,6 @@
 package dev.dawngasm.app
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -74,6 +75,14 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
         }
     }
 
+    BackHandler(enabled = selectedTab != NavigationTab.Home) {
+        selectedTab = NavigationTab.Home
+    }
+
+    BackHandler(enabled = state.canGoBack && selectedTab == NavigationTab.Home) {
+        viewModel.navigateBack()
+    }
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -117,6 +126,12 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                         isRefreshing = state.isRefreshing,
                         error = state.error,
                         hasMore = state.hasMore,
+                        isSimilarMode = state.isSimilarMode,
+                        pendingScrollRestore = state.pendingScrollRestore,
+                        onScrollRestored = viewModel::onScrollRestored,
+                        onSimilarClick = { track, scrollIndex, scrollOffset ->
+                            viewModel.showSimilar(track, scrollIndex, scrollOffset)
+                        },
                         onOpenSearch = { searchOpen = true },
                         onClearSearch = viewModel::clearSearch,
                         onRefresh = viewModel::refresh,
@@ -135,6 +150,10 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                         downloadingIds = state.downloadingIds,
                         onTrackClick = { track, list -> viewModel.play(track, list) },
                         onToggleDownload = viewModel::download,
+                        onSimilarClick = { track ->
+                            selectedTab = NavigationTab.Home
+                            viewModel.showSimilar(track, 0, 0)
+                        },
                         bottomInset = bottomInset,
                     )
 
