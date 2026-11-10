@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.SearchOff
@@ -62,7 +63,21 @@ fun HomeScreen(
     onToggleDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    isSimilarMode: Boolean = false,
+    pendingScrollRestore: Pair<Int, Int>? = null,
+    onScrollRestored: () -> Unit = {},
+    onSimilarClick: (Track, Int, Int) -> Unit = { _, _, _ -> },
 ) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(pendingScrollRestore, tracks.size) {
+        val restore = pendingScrollRestore
+        if (restore != null && (tracks.isNotEmpty() || restore.first == 0)) {
+            listState.scrollToItem(restore.first, restore.second)
+            onScrollRestored()
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -85,6 +100,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("home_track_list"),
@@ -109,7 +125,6 @@ fun HomeScreen(
                     items(8) { index ->
                         val position = groupPosition(index, 8)
                         TrackSkeleton(
-                            modifier = Modifier.animateItem(),
                             cardPosition = position,
                         )
                         Spacer(modifier = Modifier.height(groupGap(position)))
@@ -138,8 +153,12 @@ fun HomeScreen(
                     item(key = "empty") {
                         EmptyState(
                             icon = Icons.Outlined.SearchOff,
-                            title = "Nothing here yet",
-                            subtitle = "Pull to refresh, widen the time window, or try another search.",
+                            title = if (isSimilarMode) "No similar posts" else "Nothing here yet",
+                            subtitle = if (isSimilarMode) {
+                                "No semantically similar posts were found for this track."
+                            } else {
+                                "Pull to refresh, widen the time window, or try another search."
+                            },
                         )
                     }
                 } else {
@@ -156,9 +175,15 @@ fun HomeScreen(
                             onTrackClick = onTrackClick,
                             onToggleSave = { onToggleSave(track) },
                             onToggleDownload = { onToggleDownload(track) },
+                            onSimilarClick = {
+                                onSimilarClick(
+                                    track,
+                                    listState.firstVisibleItemIndex,
+                                    listState.firstVisibleItemScrollOffset,
+                                )
+                            },
                             cardPosition = position,
                             showSaveAction = true,
-                            modifier = Modifier.animateItem(),
                         )
                         Spacer(modifier = Modifier.height(groupGap(position)))
                     }

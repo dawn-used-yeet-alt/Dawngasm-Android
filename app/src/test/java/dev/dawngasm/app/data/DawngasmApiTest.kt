@@ -122,4 +122,45 @@ class DawngasmApiTest {
         assertEquals("soundgasm,whyp", url.queryParameter("hosts"))
         assertEquals("audiochan", url.queryParameter("excludeHosts"))
     }
+
+    @Test
+    fun buildSimilarUrlConstructsValidRequest() {
+        val url = DawngasmApi.buildSimilarUrl(
+            baseUrl = "https://example.com",
+            postId = "post123",
+            limit = 50,
+        )
+        assertEquals("https://example.com/similar?post_id=post123&limit=50", url.toString())
+    }
+
+    @Test
+    fun parsesSimilarResponse() {
+        val body = """
+            {
+                "posts": [
+                    {
+                        "id": "sim1",
+                        "title": "Similar Track 1",
+                        "subreddit": "gonewildaudio",
+                        "author": "author_sim",
+                        "score": 150,
+                        "created": "2026-11-01 12:00:00",
+                        "created_unix": 1730462400,
+                        "distance": 0.25
+                    }
+                ],
+                "count": 1,
+                "source": "source1"
+            }
+        """.trimIndent()
+
+        val posts = DawngasmApi().parseSimilar(body)
+        assertEquals(1, posts.size)
+        assertEquals("sim1", posts[0].id)
+        assertEquals("Similar Track 1", posts[0].title)
+        assertEquals("author_sim", posts[0].author)
+        assertEquals("gonewildaudio", posts[0].subreddit)
+        assertEquals(150L, posts[0].score)
+        assertEquals(1730462400L, posts[0].createdUtc)
+    }
 }

@@ -27,9 +27,13 @@ data class AppUiState(
     val downloadFolderLabel: String = "App storage (Music/Dawngasm)",
     val hotaudioConnected: Boolean = false,
     val audiochanConnected: Boolean = false,
+    val similarSourceTrack: Track? = null,
+    val canGoBack: Boolean = false,
+    val pendingScrollRestore: Pair<Int, Int>? = null,
 ) {
     val savedIds: Set<String> get() = saved.mapTo(HashSet()) { it.id }
     val downloadedIds: Set<String> get() = downloads.mapTo(HashSet()) { it.id }
+    val isSimilarMode: Boolean get() = similarSourceTrack != null
 
     val searchRequest: SearchRequest
         get() = SearchRequest(
@@ -44,6 +48,9 @@ data class AppUiState(
 
     val searchSummary: String
         get() {
+            if (similarSourceTrack != null) {
+                return "Similar to: ${similarSourceTrack.title}"
+            }
             val request = searchRequest
             val queryText = request.summary()
             return if (queryText.isEmpty()) {

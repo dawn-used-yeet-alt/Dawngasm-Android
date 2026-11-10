@@ -138,6 +138,42 @@ class DawngasmApi(
             tags
         }
 
+    /**
+     * Semantically similar posts backed by `/similar?post_id=`.
+     */
+    suspend fun similar(
+        postId: String,
+        limit: Int = PAGE_LIMIT,
+    ): List<Track> = withContext(Dispatchers.IO) {
+        val url = buildSimilarUrl(
+            baseUrl = baseUrl,
+            postId = postId,
+            limit = limit,
+        )
+
+        val parsed = parseSimilar(get(url))
+        if (parsed.isEmpty()) return@withContext emptyList()
+
+        val audioMap = fetchAudioForPosts(parsed.map { it.id })
+
+        val tracks = LinkedHashMap<String, Track>()
+        for (post in parsed) {
+            if (tracks.containsKey(post.id)) continue
+            val (host, audioUrl) = audioMap[post.id] ?: continue
+            tracks[post.id] = Track(
+                id = post.id,
+                title = post.title.ifBlank { "Untitled post" },
+                author = post.author,
+                host = host,
+                pageUrl = audioUrl,
+                subreddit = post.subreddit,
+                score = post.score,
+                createdUtc = post.createdUtc,
+            )
+        }
+        tracks.values.toList()
+    }
+
     private fun get(url: HttpUrl): String {
         val request = Request.Builder()
             .url(url)
@@ -188,6 +224,52 @@ class DawngasmApi(
             if (id.isNotBlank()) details[id] = row.optString(urlCol) to row.optString(textCol)
         }
         return details
+    }
+
+    private fun fetchAudioForPosts(ids: List<String>): Map<String, Pair<AudioHost, String>> {
+        if (ids.isEmpty()) return emptyMap()
+        val result = HashMap<String, Pair<AudioHost, String>>(ids.size)
+
+        val placeholders = ids.joinToString(",") { "?" }
+        val sql = "SELECT post_id, host, url FROM post_audio WHERE post_id IN ($placeholders) ORDER BY position ASC"
+        val payload = JSONObject()
+            .put("sql", sql)
+            .put("args", JSONArray(ids))
+            .toString()
+        runCatching {
+            val root = parseRoot(postJson("$baseUrl/query".toHttpUrl(), payload))
+            val columns = root.optJSONArray("columns") ?: return@runCatching
+            val rows = root.optJSONArray("rows") ?: return@runCatching
+            val names = (0 until columns.length()).map { columns.optString(it) }
+            val idCol = names.indexOf("post_id").takeIf { it >= 0 } ?: return@runCatching
+            val hostCol = names.indexOf("host").takeIf { it >= 0 } ?: return@runCatching
+            val urlCol = names.indexOf("url").takeIf { it >= 0 } ?: return@runCatching
+
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONArray(index) ?: continue
+                val id = row.optString(idCol)
+                if (id.isBlank() || result.containsKey(id)) continue
+                val hostStr = row.optString(hostCol)
+                val urlStr = row.optString(urlCol)
+                val host = AudioHost.fromLabel(hostStr).takeIf { it != AudioHost.UNKNOWN }
+                    ?: AudioLinks.hostOf(urlStr)
+                if (host != AudioHost.UNKNOWN && urlStr.isNotBlank()) {
+                    result[id] = host to AudioLinks.cleanUrl(urlStr)
+                }
+            }
+        }
+
+        val missing = ids.filterNot { result.containsKey(it) }
+        if (missing.isNotEmpty()) {
+            val details = fetchDetails(missing)
+            for (id in missing) {
+                val pair = details[id] ?: continue
+                val resolved = AudioLinks.find(pair.first, pair.second) ?: continue
+                result[id] = resolved
+            }
+        }
+
+        return result
     }
 
     internal fun parseSearch(body: String): ParsedSearch {
@@ -263,6 +345,28 @@ class DawngasmApi(
         )
     }
 
+    internal fun parseSimilar(body: String): List<RawPost> {
+        val root = parseRoot(body)
+        val postsArray = root.optJSONArray("posts") ?: return emptyList()
+        val posts = ArrayList<RawPost>(postsArray.length())
+        for (i in 0 until postsArray.length()) {
+            val obj = postsArray.optJSONObject(i) ?: continue
+            val id = obj.optString("id")
+            if (id.isBlank()) continue
+            posts += RawPost(
+                id = id,
+                title = obj.optString("title"),
+                author = obj.optString("author"),
+                subreddit = obj.optString("subreddit"),
+                score = obj.optLong("score", 0L),
+                createdUtc = obj.optLong("created_unix", 0L),
+                url = "",
+                selftext = "",
+            )
+        }
+        return posts
+    }
+
     private fun parseRoot(body: String): JSONObject {
         val root = runCatching { JSONObject(body) }
             .getOrElse { throw ApiException("The index returned invalid JSON") }
@@ -275,10 +379,10 @@ class DawngasmApi(
         val root = runCatching { JSONObject(body) }.getOrNull()
         val message = root?.optString("error")?.takeIf { it.isNotBlank() } ?: "unexpected response"
         val retry = root?.optInt("retryAfterSeconds", 0) ?: 0
-        return if (status == 429 && retry > 0) {
-            "Rate limited — retry in ${retry}s ($message)"
-        } else {
-            "Index returned HTTP $status: $message"
+        return when {
+            status == 429 && retry > 0 -> "Rate limited — retry in ${retry}s ($message)"
+            status == 404 -> "No similar posts found for this track"
+            else -> "Index returned HTTP $status: $message"
         }
     }
 
@@ -336,6 +440,15 @@ class DawngasmApi(
                 val excludedHostsList = excludeHosts.filter { it.isNotBlank() }.joinToString(",")
                 if (excludedHostsList.isNotEmpty()) addQueryParameter("excludeHosts", excludedHostsList)
             }
+            .build()
+
+        fun buildSimilarUrl(
+            baseUrl: String = DEFAULT_BASE_URL,
+            postId: String,
+            limit: Int = PAGE_LIMIT,
+        ): HttpUrl = "$baseUrl/similar".toHttpUrl().newBuilder()
+            .addQueryParameter("post_id", postId)
+            .addQueryParameter("limit", limit.coerceIn(1, 200).toString())
             .build()
 
         fun parseTags(body: String): List<TagSuggestion> {
