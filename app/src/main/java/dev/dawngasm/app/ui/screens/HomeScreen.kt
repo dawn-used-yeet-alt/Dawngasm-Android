@@ -70,9 +70,10 @@ fun HomeScreen(
 ) {
     val listState = rememberLazyListState()
 
-    LaunchedEffect(pendingScrollRestore) {
-        pendingScrollRestore?.let { (index, offset) ->
-            listState.scrollToItem(index, offset)
+    LaunchedEffect(pendingScrollRestore, tracks.size) {
+        val restore = pendingScrollRestore
+        if (restore != null && (tracks.isNotEmpty() || restore.first == 0)) {
+            listState.scrollToItem(restore.first, restore.second)
             onScrollRestored()
         }
     }
@@ -124,7 +125,6 @@ fun HomeScreen(
                     items(8) { index ->
                         val position = groupPosition(index, 8)
                         TrackSkeleton(
-                            modifier = Modifier.animateItem(),
                             cardPosition = position,
                         )
                         Spacer(modifier = Modifier.height(groupGap(position)))
@@ -184,7 +184,6 @@ fun HomeScreen(
                             },
                             cardPosition = position,
                             showSaveAction = true,
-                            modifier = Modifier.animateItem(),
                         )
                         Spacer(modifier = Modifier.height(groupGap(position)))
                     }

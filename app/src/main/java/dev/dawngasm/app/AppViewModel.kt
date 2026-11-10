@@ -305,6 +305,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.update {
             it.copy(
+                tracks = if (reset && !refreshing) emptyList() else it.tracks,
                 isLoading = reset && !refreshing,
                 isRefreshing = refreshing,
                 isLoadingMore = false,

@@ -75,12 +75,12 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
         }
     }
 
-    BackHandler(enabled = selectedTab != NavigationTab.Home) {
-        selectedTab = NavigationTab.Home
-    }
-
-    BackHandler(enabled = state.canGoBack && selectedTab == NavigationTab.Home) {
-        viewModel.navigateBack()
+    BackHandler(enabled = selectedTab != NavigationTab.Home || state.canGoBack) {
+        if (selectedTab != NavigationTab.Home) {
+            selectedTab = NavigationTab.Home
+        } else if (state.canGoBack) {
+            viewModel.navigateBack()
+        }
     }
 
     Scaffold(

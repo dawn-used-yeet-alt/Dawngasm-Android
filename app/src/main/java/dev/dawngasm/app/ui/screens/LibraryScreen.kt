@@ -181,7 +181,6 @@ private fun TrackList(
                 onSimilarClick = { onSimilarClick?.invoke(track) },
                 cardPosition = position,
                 showSaveAction = false,
-                modifier = Modifier.animateItem(),
             )
             Spacer(modifier = Modifier.height(groupGap(position)))
         }
