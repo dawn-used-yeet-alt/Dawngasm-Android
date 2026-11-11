@@ -86,8 +86,25 @@ fun MiniPlayer(
     onNextTrack: () -> Unit,
     onDismiss: () -> Unit,
     onSeek: (Long) -> Unit = {},
+    isExpanded: Boolean? = null,
+    onExpandedChange: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    var internalExpanded by remember { mutableStateOf(false) }
+    val expanded = isExpanded ?: internalExpanded
+    val setExpanded: (Boolean) -> Unit = { next ->
+        if (isExpanded == null) {
+            internalExpanded = next
+        }
+        onExpandedChange?.invoke(next)
+    }
+
+    LaunchedEffect(player.currentTrack == null) {
+        if (player.currentTrack == null && isExpanded == null) {
+            internalExpanded = false
+        }
+    }
+
     AnimatedVisibility(
         visible = player.currentTrack != null,
         enter = slideInVertically(
@@ -109,6 +126,8 @@ fun MiniPlayer(
                 player = player,
                 progress = progress,
                 isSaved = isSaved,
+                isExpanded = expanded,
+                onExpandedChange = setExpanded,
                 onTogglePlayPause = onTogglePlayPause,
                 onToggleSave = onToggleSave,
                 onNextTrack = onNextTrack,
@@ -126,6 +145,8 @@ private fun MiniPlayerBody(
     player: PlayerUiState,
     progress: PlaybackProgress,
     isSaved: Boolean,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onTogglePlayPause: () -> Unit,
     onToggleSave: () -> Unit,
     onNextTrack: () -> Unit,
@@ -133,7 +154,6 @@ private fun MiniPlayerBody(
     onSeek: (Long) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var isExpanded by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubFraction by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
@@ -185,7 +205,7 @@ private fun MiniPlayerBody(
                     onDragEnd = {
                         if (dragOffsetY > dismissThresholdPx) {
                             if (isExpanded) {
-                                isExpanded = false
+                                onExpandedChange(false)
                             } else {
                                 onDismiss()
                             }
@@ -241,7 +261,7 @@ private fun MiniPlayerBody(
                             indication = ripple(),
                             role = Role.Button,
                             onClickLabel = if (isExpanded) "Retract player" else "Expand player",
-                            onClick = { isExpanded = !isExpanded },
+                            onClick = { onExpandedChange(!isExpanded) },
                         )
                         .padding(vertical = 4.dp, horizontal = 2.dp)
                         .testTag("mini_player_text_toggle"),

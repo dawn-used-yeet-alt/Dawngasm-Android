@@ -29,6 +29,17 @@ actual object PlatformFileOps {
     actual fun readText(path: String): String? =
         File(path).takeIf { it.exists() }?.readText()
 
+    actual fun readBytes(path: String): ByteArray? =
+        File(path).takeIf { it.exists() }?.readBytes()
+
+    actual fun writeBytes(path: String, bytes: ByteArray): Boolean =
+        runCatching {
+            val file = File(path)
+            file.parentFile?.mkdirs()
+            file.writeBytes(bytes)
+            true
+        }.getOrDefault(false)
+
     actual fun ensureDir(path: String) {
         File(path).mkdirs()
     }

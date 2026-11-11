@@ -114,7 +114,7 @@ jobs:
       - name: Build Kotlin/Native frameworks
         run: |
           TARGETS=":composeApp:linkDebugFrameworkIosSimulatorArm64"
-          if [ "${{ github.event.inputs.build_device }}" = "true" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "${{ github.event.inputs.build_device }}" = "true" ] || [ "${{ github.ref }}" = "refs/heads/main" ] || [[ "${{ github.event.head_commit.message }}" == *"[package ios]"* ]] || [[ "${{ github.event.head_commit.message }}" == *"[ipa]"* ]]; then
             TARGETS="$TARGETS :composeApp:linkDebugFrameworkIosArm64"
           fi
           echo "Compiling targets: $TARGETS"
@@ -213,7 +213,8 @@ jobs:
             build
 
       - name: Compile Xcode app (generic device, unsigned)
-        if: github.event.inputs.build_device == 'true' || github.ref == 'refs/heads/main'
+        id: compile_device
+        if: github.event.inputs.build_device == 'true' || github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[package ios]') || contains(github.event.head_commit.message, '[ipa]')
         run: |
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
@@ -228,6 +229,29 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Package unsigned IPA (for TrollStore / AltStore / SideStore / Jailbreak)
+        if: steps.compile_device.outcome == 'success'
+        run: |
+          DEVICE_APP=$(find "$RUNNER_TEMP/DerivedData-device/Build/Products/Debug-iphoneos" -name "*.app" | head -n 1)
+          if [ -n "$DEVICE_APP" ]; then
+            echo "Packaging unsigned IPA from $DEVICE_APP..."
+            mkdir -p "$RUNNER_TEMP/ipa-package/Payload"
+            cp -r "$DEVICE_APP" "$RUNNER_TEMP/ipa-package/Payload/"
+            (cd "$RUNNER_TEMP/ipa-package" && zip -qr "$GITHUB_WORKSPACE/Dawngasm.ipa" Payload)
+            echo "Successfully created Dawngasm.ipa ($(du -h "$GITHUB_WORKSPACE/Dawngasm.ipa" | cut -f1))"
+          else
+            echo "No device .app found; skipping IPA packaging."
+          fi
+
+      - name: Upload unsigned IPA
+        if: steps.compile_device.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Dawngasm-iOS-unsigned-ipa
+          path: Dawngasm.ipa
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Capture iOS simulator screenshots
         run: |

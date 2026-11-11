@@ -34,6 +34,7 @@ object Dimens {
     val FabIconSize = 28.dp
 
     val MiniPlayerHeight = 72.dp
+    val MiniPlayerExpandedHeight = 148.dp
     val MiniPlayerHorizontalMargin = 12.dp
     val MiniPlayerBottomMargin = 8.dp
     val MiniPlayerElevation = 8.dp

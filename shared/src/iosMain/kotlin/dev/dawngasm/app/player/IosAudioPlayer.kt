@@ -8,18 +8,25 @@ import dev.dawngasm.app.util.PlatformLog
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerItem
+import platform.AVFoundation.currentItem
+import platform.AVFoundation.currentTime
+import platform.AVFoundation.duration
 import platform.AVFoundation.pause
 import platform.AVFoundation.play
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
+import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSURL
 
@@ -33,6 +40,11 @@ class IosAudioPlayer(
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private var player: AVPlayer? = null
+    private var progressJob: Job? = null
+
+    init {
+        IosAudioIntegration.activePlayer = this
+    }
 
     override fun play(track: Track, queue: List<Track>?) {
         val trackList = queue ?: listOf(track)
@@ -47,6 +59,12 @@ class IosAudioPlayer(
                 durationMs = 0L,
             )
         }
+        IosAudioIntegration.observer?.onTrackChanged(track)
+        IosAudioIntegration.observer?.onPlaybackStateChanged(
+            isPlaying = false,
+            positionMs = 0L,
+            durationMs = 0L,
+        )
 
         scope.launch {
             try {
@@ -85,6 +103,12 @@ class IosAudioPlayer(
                         isPlaying = true,
                     )
                 }
+                IosAudioIntegration.observer?.onPlaybackStateChanged(
+                    isPlaying = true,
+                    positionMs = 0L,
+                    durationMs = 0L,
+                )
+                startProgressLoop()
             } catch (e: Exception) {
                 PlatformLog.e("IosAudioPlayer", "Error playing track: ${track.id}", e)
                 _state.update {
@@ -94,6 +118,11 @@ class IosAudioPlayer(
                         error = e.message ?: "Failed to play audio",
                     )
                 }
+                IosAudioIntegration.observer?.onPlaybackStateChanged(
+                    isPlaying = false,
+                    positionMs = 0L,
+                    durationMs = 0L,
+                )
             }
         }
     }
@@ -109,11 +138,22 @@ class IosAudioPlayer(
     override fun pause() {
         player?.pause()
         _state.update { it.copy(isPlaying = false) }
+        IosAudioIntegration.observer?.onPlaybackStateChanged(
+            isPlaying = false,
+            positionMs = _state.value.positionMs,
+            durationMs = _state.value.durationMs,
+        )
     }
 
     override fun resume() {
         player?.play()
         _state.update { it.copy(isPlaying = true) }
+        IosAudioIntegration.observer?.onPlaybackStateChanged(
+            isPlaying = true,
+            positionMs = _state.value.positionMs,
+            durationMs = _state.value.durationMs,
+        )
+        startProgressLoop()
     }
 
     override fun seekTo(positionMs: Long) {
@@ -121,6 +161,11 @@ class IosAudioPlayer(
         val time = CMTimeMakeWithSeconds(seconds, 1000)
         player?.seekToTime(time)
         _state.update { it.copy(positionMs = positionMs) }
+        IosAudioIntegration.observer?.onPlaybackStateChanged(
+            isPlaying = _state.value.isPlaying,
+            positionMs = positionMs,
+            durationMs = _state.value.durationMs,
+        )
     }
 
     override fun nextTrack() {
@@ -138,6 +183,7 @@ class IosAudioPlayer(
     }
 
     override fun stop() {
+        progressJob?.cancel()
         player?.pause()
         player?.replaceCurrentItemWithPlayerItem(null)
         _state.update {
@@ -147,10 +193,63 @@ class IosAudioPlayer(
                 positionMs = 0L,
             )
         }
+        IosAudioIntegration.observer?.onPlaybackStateChanged(
+            isPlaying = false,
+            positionMs = 0L,
+            durationMs = _state.value.durationMs,
+        )
     }
 
     override fun release() {
         stop()
+        if (IosAudioIntegration.activePlayer === this) {
+            IosAudioIntegration.activePlayer = null
+        }
         player = null
+    }
+
+    private fun startProgressLoop() {
+        progressJob?.cancel()
+        progressJob = scope.launch {
+            while (isActive) {
+                val p = player
+                if (p != null && _state.value.isPlaying) {
+                    val posSec = try {
+                        val s = CMTimeGetSeconds(p.currentTime())
+                        if (!s.isNaN() && !s.isInfinite() && s >= 0.0) s else 0.0
+                    } catch (_: Throwable) { 0.0 }
+                    val posMs = (posSec * 1000.0).toLong().coerceAtLeast(0L)
+
+                    val durSec = try {
+                        val item = p.currentItem
+                        if (item != null) {
+                            val s = CMTimeGetSeconds(item.duration)
+                            if (!s.isNaN() && !s.isInfinite() && s >= 0.0) s else 0.0
+                        } else 0.0
+                    } catch (_: Throwable) { 0.0 }
+                    val totalMs = (durSec * 1000.0).toLong().coerceAtLeast(0L)
+
+                    val newDuration = if (totalMs > 0L) totalMs else _state.value.durationMs
+                    _state.update {
+                        it.copy(
+                            positionMs = posMs,
+                            durationMs = newDuration,
+                        )
+                    }
+                    IosAudioIntegration.observer?.onPlaybackStateChanged(
+                        isPlaying = true,
+                        positionMs = posMs,
+                        durationMs = newDuration,
+                    )
+
+                    // Auto-advance if track reached the end
+                    if (totalMs > 0L && posMs >= totalMs) {
+                        nextTrack()
+                        break
+                    }
+                }
+                delay(300)
+            }
+        }
     }
 }

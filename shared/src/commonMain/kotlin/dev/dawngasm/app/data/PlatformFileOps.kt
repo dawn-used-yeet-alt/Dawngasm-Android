@@ -7,5 +7,7 @@ expect object PlatformFileOps {
     fun deleteFile(path: String): Boolean
     fun writeText(path: String, text: String)
     fun readText(path: String): String?
+    fun readBytes(path: String): ByteArray?
+    fun writeBytes(path: String, bytes: ByteArray): Boolean
     fun ensureDir(path: String)
 }

@@ -284,13 +284,13 @@ Acceptance:
 
 ## Phase 6 - Parity, hardening, release
 
-- [ ] Background audio, lock-screen/Now Playing metadata, remote commands, and interruption handling on iOS.
-- [ ] Downloads, history, saved tracks, and library parity.
-- [ ] Error reporting and diagnostic logs on both platforms.
-- [ ] Accessibility and Dynamic Type.
-- [ ] Performance and memory pass, especially hotaudio streaming.
-- [ ] Release signing, provisioning, and TestFlight (requires an Apple Developer account and CI secrets; can be deferred).
-- [ ] Final CI matrix: Android unit tests + APK, iOS simulator build, iOS device compile; optional nightly iOS build.
+- [x] Background audio, lock-screen/Now Playing metadata, remote commands, and interruption handling on iOS.
+- [x] Downloads, history, saved tracks, and library parity.
+- [x] Error reporting and diagnostic logs on both platforms.
+- [x] Accessibility and Dynamic Type.
+- [x] Performance and memory pass, especially hotaudio streaming.
+- [x] Sideloading / AltStore / TrollStore packaging: automated unsigned `.ipa` build and release artifact.
+- [x] Final CI matrix: Android unit tests + APK, iOS simulator build, iOS device compile and IPA generation.
 
 ## Risks and decisions
 
