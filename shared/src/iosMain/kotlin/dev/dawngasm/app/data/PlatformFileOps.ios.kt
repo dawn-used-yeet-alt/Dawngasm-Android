@@ -33,8 +33,10 @@ actual object PlatformFileOps {
 
     actual fun writeText(path: String, text: String) {
         val nsStr = text as NSString
-        val parent = (path as NSString).stringByDeletingLastPathComponent
-        ensureDir(parent)
+        val parent = path.substringBeforeLast('/', "")
+        if (parent.isNotEmpty()) {
+            ensureDir(parent)
+        }
         nsStr.writeToFile(path, true, NSUTF8StringEncoding, null)
     }
 

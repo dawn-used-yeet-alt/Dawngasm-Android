@@ -1,6 +1,7 @@
 package dev.dawngasm.app.data
 
 import dev.dawngasm.app.util.PlatformLog
+import kotlin.concurrent.Volatile
 
 object HotaudioRuntime {
     @Volatile
@@ -8,6 +9,17 @@ object HotaudioRuntime {
 
     @Volatile
     var tlsReady: Boolean = false
+
+    var onInitialize: ((Any?) -> Unit)? = null
+
+    fun initialize(context: Any? = null) {
+        onInitialize?.invoke(context)
+        val prefs = when (context) {
+            is AppPreferences -> context
+            else -> null
+        }
+        applyClearance(prefs)
+    }
 
     fun applyClearance(prefs: AppPreferences?) {
         if (prefs == null) {

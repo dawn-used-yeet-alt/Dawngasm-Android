@@ -2,6 +2,7 @@ package dev.dawngasm.app.data
 
 import dev.dawngasm.app.util.Clock
 import dev.dawngasm.app.util.PlatformLog
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +96,9 @@ object HotaudioStreamer {
         return url.replace("://www.hotaudio.net", "://hotaudio.net")
     }
 
+    fun spec(context: Any?, trackId: String, pageUrl: String): HotaudioStreamSpec =
+        spec(trackId, pageUrl)
+
     fun spec(trackId: String, pageUrl: String): HotaudioStreamSpec {
         val root = PlatformFileOps.getCacheDir()
         val dir = "$root/hotaudio"
@@ -112,6 +116,8 @@ object HotaudioStreamer {
         if (!uriString.startsWith(SCHEME, ignoreCase = true)) return null
         return uriString.substringAfterLast('/').substringBefore('?').takeIf { it.isNotBlank() }
     }
+
+    fun stateFor(trackId: String, context: Any?): HotaudioStreamState? = stateFor(trackId)
 
     /** The live state, or a completed state restored from the `.done` marker. */
     fun stateFor(trackId: String): HotaudioStreamState? {

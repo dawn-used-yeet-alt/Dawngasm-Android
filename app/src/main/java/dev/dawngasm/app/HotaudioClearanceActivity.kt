@@ -2,6 +2,7 @@ package dev.dawngasm.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent

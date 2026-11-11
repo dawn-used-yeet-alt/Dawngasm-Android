@@ -124,13 +124,17 @@ class IosAudioPlayer(
     }
 
     override fun nextTrack() {
-        val next = queue.nextTrack() ?: return
+        val next = queue.moveToNext() ?: return
         play(next, queue.tracks)
     }
 
     override fun previousTrack() {
-        val prev = queue.previousTrack() ?: return
-        play(prev, queue.tracks)
+        val (prev, seekToZero) = queue.getPreviousTrack(_state.value.positionMs)
+        if (seekToZero) {
+            seekTo(0L)
+        } else if (prev != null) {
+            play(prev, queue.tracks)
+        }
     }
 
     override fun stop() {
