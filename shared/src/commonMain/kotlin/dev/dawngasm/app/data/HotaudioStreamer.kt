@@ -263,6 +263,7 @@ object HotaudioStreamer {
                     }
                 }
 
+                val parentJob = currentCoroutineContext()[Job]
                 var retrySameFamily = false
                 try {
                     val result = bridge.downloadToFile(
@@ -275,7 +276,7 @@ object HotaudioStreamer {
                             state.progressTotal = total
                         },
                         isCancelled = {
-                            !currentCoroutineContext().isActive ||
+                            parentJob?.isActive == false ||
                                 cancelledFlags[spec.trackId] == true ||
                                 attemptCancelled
                         },
