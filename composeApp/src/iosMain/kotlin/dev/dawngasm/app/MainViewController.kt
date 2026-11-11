@@ -62,7 +62,16 @@ fun MainViewController(): UIViewController = ComposeUIViewController(
                 showHotaudioClearance = true
             }
 
-            override fun hotaudioClearanceDetail(): String? = prefs.hotaudioClearanceIp()
+            override fun hotaudioClearanceDetail(): String? {
+                val ip = prefs.hotaudioClientIp()
+                val family = prefs.hotaudioIpFamily()?.uppercase()
+                return when {
+                    !ip.isNullOrBlank() && !family.isNullOrBlank() -> "$family: $ip"
+                    !ip.isNullOrBlank() -> ip
+                    !family.isNullOrBlank() -> family
+                    else -> null
+                }
+            }
         }
     }
 

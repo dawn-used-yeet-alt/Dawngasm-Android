@@ -352,17 +352,18 @@ object HotaudioStreamer {
 
             if (familyIndex < families.lastIndex) {
                 val failure = lastError
-                when {
-                    failure == null -> Unit
-                    HotaudioErrors.isRateLimit(failure) -> {
-                        try {
-                            delay(2500)
-                        } catch (c: CancellationException) {
-                            return
+                if (failure != null) {
+                    when {
+                        HotaudioErrors.isRateLimit(failure) -> {
+                            try {
+                                delay(2500)
+                            } catch (c: CancellationException) {
+                                return
+                            }
                         }
+                        HotaudioErrors.isChallenge(failure) || HotaudioErrors.isDnsOrTransient(failure) -> Unit
+                        else -> break
                     }
-                    HotaudioErrors.isChallenge(failure) || HotaudioErrors.isDnsOrTransient(failure) -> Unit
-                    else -> break
                 }
             }
         }

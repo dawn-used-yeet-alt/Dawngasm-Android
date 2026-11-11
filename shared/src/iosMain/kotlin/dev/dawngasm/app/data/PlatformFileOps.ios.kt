@@ -1,7 +1,10 @@
 package dev.dawngasm.app.data
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.Foundation.NSCachesDirectory
+import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSNumber
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
@@ -9,6 +12,7 @@ import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSUTF8StringEncoding
 import platform.Foundation.NSUserDomainMask
+import platform.Foundation.dataWithBytes
 import platform.Foundation.stringWithContentsOfFile
 import platform.Foundation.writeToFile
 
@@ -32,16 +36,23 @@ actual object PlatformFileOps {
         NSFileManager.defaultManager.removeItemAtPath(path, null)
 
     actual fun writeText(path: String, text: String) {
-        val nsStr = text as NSString
         val parent = path.substringBeforeLast('/', "")
         if (parent.isNotEmpty()) {
             ensureDir(parent)
         }
-        nsStr.writeToFile(path, true, NSUTF8StringEncoding, null)
+        val bytes = text.encodeToByteArray()
+        val nsData = if (bytes.isNotEmpty()) {
+            bytes.usePinned { pinned ->
+                NSData.dataWithBytes(pinned.addressOf(0), bytes.size.toULong())
+            }
+        } else {
+            NSData()
+        }
+        nsData.writeToFile(path, atomically = true)
     }
 
     actual fun readText(path: String): String? =
-        NSString.stringWithContentsOfFile(path, NSUTF8StringEncoding, null) as? String
+        NSString.stringWithContentsOfFile(path, NSUTF8StringEncoding, null)
 
     actual fun ensureDir(path: String) {
         NSFileManager.defaultManager.createDirectoryAtPath(path, true, null, null)
