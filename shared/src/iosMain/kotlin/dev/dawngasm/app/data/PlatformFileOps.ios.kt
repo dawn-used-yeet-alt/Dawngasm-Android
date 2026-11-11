@@ -55,14 +55,20 @@ actual object PlatformFileOps {
         NSString.stringWithContentsOfFile(path, NSUTF8StringEncoding, null)
 
     actual fun readBytes(path: String): ByteArray? {
-        val nsData = NSData.dataWithContentsOfFile(path) ?: return null
-        val length = nsData.length.toInt()
-        if (length == 0) return ByteArray(0)
-        val result = ByteArray(length)
-        result.usePinned { pinned ->
-            platform.posix.memcpy(pinned.addressOf(0), nsData.bytes, nsData.length)
+        val file = platform.posix.fopen(path, "rb") ?: return null
+        try {
+            platform.posix.fseek(file, 0, platform.posix.SEEK_END)
+            val size = platform.posix.ftell(file).toInt()
+            platform.posix.fseek(file, 0, platform.posix.SEEK_SET)
+            if (size <= 0) return ByteArray(0)
+            val bytes = ByteArray(size)
+            bytes.usePinned { pinned ->
+                platform.posix.fread(pinned.addressOf(0), 1.toULong(), size.toULong(), file)
+            }
+            return bytes
+        } finally {
+            platform.posix.fclose(file)
         }
-        return result
     }
 
     actual fun writeBytes(path: String, bytes: ByteArray): Boolean {
