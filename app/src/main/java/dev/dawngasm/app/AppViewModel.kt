@@ -219,8 +219,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
 
     override fun refresh() {
         val state = _uiState.value
-        if (state.similarSourceTrack != null) {
-            loadSimilar(state.similarSourceTrack, reset = true, refreshing = true)
+        val source = state.similarSourceTrack
+        if (source != null) {
+            loadSimilar(source, reset = true, refreshing = true)
         } else {
             loadFeed(reset = true, refreshing = true)
         }
@@ -634,12 +635,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     override fun togglePlayPause() {
         val controller = mediaController ?: return
         val state = _uiState.value.player
-        if (state.currentTrack == null || state.isLoading) return
+        val currentTrack = state.currentTrack ?: return
+        if (state.isLoading) return
         if (controller.isPlaying) {
             controller.pause()
         } else {
             if (controller.currentMediaItem == null) {
-                play(state.currentTrack, null)
+                play(currentTrack, null)
             } else {
                 if (controller.playbackState == Player.STATE_ENDED) controller.seekTo(0L)
                 controller.play()
