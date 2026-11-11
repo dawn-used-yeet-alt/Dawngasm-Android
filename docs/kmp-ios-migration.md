@@ -215,20 +215,20 @@ Tasks:
 
 - [x] Move models to `shared/commonMain`: `Track`, `AudioHost`, `SearchRequest`, `SearchSyntax`, `AudioLinks`, `TagSuggestion`.
 - [x] Replace `org.json` with `kotlinx.serialization`; keep JSON field names so saved/history/downloads remain readable.
-- [ ] Replace OkHttp with Ktor:
+- [x] Replace OkHttp with Ktor:
   - `androidMain`: OkHttp engine, preserving current behavior;
   - `iosMain`: Darwin engine;
   - shared cookie-jar abstraction for the audiochan flow.
 - [x] Replace `java.util.Locale` with Kotlin `lowercase()`/`uppercase()`.
-- [ ] Replace JVM-only helpers: `TimeUnit`, `Date`, `ConcurrentHashMap`, `AtomicLong`, `Thread.sleep`, `System.currentTimeMillis`, `System.getProperty`.
-- [ ] Replace `java.io.File` and `RandomAccessFile` with okio `FileSystem` / `Path`.
+- [x] Replace JVM-only helpers: `TimeUnit`, `Date`, `ConcurrentHashMap`, `AtomicLong`, `Thread.sleep`, `System.currentTimeMillis`, `System.getProperty`.
+- [x] Replace `java.io.File` and `RandomAccessFile` with okio `FileSystem` / `Path` / `FileSaver` abstraction.
 - [x] Settings: use `multiplatform-settings` or an `expect`/`actual` store; migrate the existing `dawngasm` SharedPreferences keys to iOS defaults.
 - [x] Logging: `PlatformLog` actuals (Android `Log`, iOS `os_log`).
-- [ ] Define `AudioPlayer` and move the playback contract to `shared`:
+- [x] Define `AudioPlayer` and move the playback contract to `shared`:
   - Android actual keeps Media3/ExoPlayer and the existing `PlaybackService`/MediaSession behavior;
   - iOS actual uses AVPlayer + AVAudioSession.
-- [ ] Move `DawngasmApi`, `Network`, the soundgasm/whyp parts of `AudioResolver`, and `PlaybackQueue` to shared.
-- [ ] Downloads: `FileSaver` expect/actual. Android keeps SAF/`DocumentFile`; iOS writes to app Documents and uses the document picker.
+- [x] Move `DawngasmApi`, `Network`, the soundgasm/whyp parts of `AudioResolver`, and `PlaybackQueue` to shared.
+- [x] Downloads: `FileSaver` expect/actual. Android keeps SAF/`DocumentFile`; iOS writes to app Documents and uses the document picker.
 - [x] Move model/parser tests to `commonTest` with `kotlin.test`; keep Android instrumentation tests where they still add value.
 - [ ] Run shared tests and the iOS build in CI.
 
