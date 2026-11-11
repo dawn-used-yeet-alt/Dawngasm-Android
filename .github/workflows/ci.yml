@@ -84,7 +84,7 @@ jobs:
           echo "Computed versionCode=${VERSION_CODE}, versionName=1.0.${VERSION_CODE}-debug"
 
       - name: Run Unit Tests and assemble debug APK
-        run: ./gradlew --no-daemon --build-cache --stacktrace :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew --no-daemon --build-cache --stacktrace :shared:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v7
@@ -102,6 +102,8 @@ jobs:
           path: |
             app/build/reports/tests/
             app/build/test-results/
+            shared/build/reports/tests/
+            shared/build/test-results/
           if-no-files-found: ignore
           retention-days: 7
 

@@ -178,26 +178,26 @@ Goal: Home, Library, Settings, Search, and the mini player render identically on
 Tasks:
 
 - [ ] Upgrade the toolchain to AGP 9.1+, Gradle 9.x, `compileSdk = 37`, the AGP KMP library plugin, and Compose Multiplatform 1.12+. Deferred: the UI is ported on Compose Multiplatform 1.11.1 first so the existing AGP 8.13 / SDK 36 Android app stays green. The upgrade is a separate change once the shared UI is stable.
-- [ ] Move the theme to `composeApp/commonMain`: colors, typography, dimens, shapes.
-- [ ] Replace Android-only theme hooks with `expect`/`actual`:
+- [x] Move the theme to `composeApp/commonMain`: colors, typography, dimens, shapes.
+- [x] Replace Android-only theme hooks with `expect`/`actual`:
   - status bar / navigation bar appearance (`WindowCompat`, `LocalView`);
   - dynamic color (currently disabled, so the Android actual can keep the current behavior);
   - `LocalContext` usages.
-- [ ] Move reusable components: `AppNavBar`, `TrackCard`, `SearchSheet`, `SearchRow`, `SearchFab`, `PillTabs`, `MiniPlayer`, `MorphingProgressIconButton`, `EmptyState`, `CardGroupShape`.
-- [ ] Move screens: `HomeScreen`, `LibraryScreen`, `SettingsScreen`.
-- [ ] Move `DawngasmApp()` navigation, snackbar, tab transitions, and back handling.
-- [ ] Replace Android-only UI APIs with `expect`/`actual` or Compose Multiplatform equivalents:
+- [x] Move reusable components: `AppNavBar`, `TrackCard`, `SearchSheet`, `SearchRow`, `SearchFab`, `PillTabs`, `MiniPlayer`, `MorphingProgressIconButton`, `EmptyState`, `CardGroupShape`.
+- [x] Move screens: `HomeScreen`, `LibraryScreen`, `SettingsScreen`.
+- [x] Move `DawngasmApp()` navigation, snackbar, tab transitions, and back handling.
+- [x] Replace Android-only UI APIs with `expect`/`actual` or Compose Multiplatform equivalents:
   - `BackHandler` -> `PlatformBackHandler`;
   - `AndroidView` -> `ClearanceWebView` (stub on iOS until Phase 4);
   - `rememberLauncherForActivityResult` -> platform folder picker and clearance launcher contracts;
   - `LocalContext` -> `PlatformContext` / `AppInfo`;
   - haptics, keyboard controller, IME actions -> CMP equivalents or expect/actual;
   - `BuildConfig.VERSION_NAME` -> `appVersion`.
-- [ ] Keep `MainActivity` thin: `setContent { DawngasmApp() }`.
+- [x] Keep `MainActivity` thin: `setContent { AndroidDawngasmApp() }`.
 - [x] Add Android screenshot/golden tests for the main screens (`AppScreenshotTest` with Roborazzi + Robolectric).
 - [x] Add CI jobs for reference screenshot capture (`recordRoborazziDebug`) and verification (`verifyRoborazziDebug`).
 - [x] Capture iOS simulator screenshots in CI and upload them as artifacts (`xcrun simctl`).
-- [ ] Compare against the Phase 0 baseline at the same device size and theme.
+- [x] Compare against the Phase 0 baseline at the same device size and theme.
 
 Acceptance:
 
@@ -212,7 +212,7 @@ Goal: search and play/download soundgasm and whyp on both platforms.
 
 Tasks:
 
-- [ ] Move models to `shared/commonMain`: `Track`, `AudioHost`, `SearchRequest`, `SearchSyntax`, `AudioLinks`, `TagSuggestion`.
+- [x] Move models to `shared/commonMain`: `Track`, `AudioHost`, `SearchRequest`, `SearchSyntax`, `AudioLinks`, `TagSuggestion`.
 - [ ] Replace `org.json` with `kotlinx.serialization`; keep JSON field names so saved/history/downloads remain readable.
 - [ ] Replace OkHttp with Ktor:
   - `androidMain`: OkHttp engine, preserving current behavior;
@@ -228,7 +228,7 @@ Tasks:
   - iOS actual uses AVPlayer + AVAudioSession.
 - [ ] Move `DawngasmApi`, `Network`, the soundgasm/whyp parts of `AudioResolver`, and `PlaybackQueue` to shared.
 - [ ] Downloads: `FileSaver` expect/actual. Android keeps SAF/`DocumentFile`; iOS writes to app Documents and uses the document picker.
-- [ ] Move model/parser tests to `commonTest` with `kotlin.test`; keep Android instrumentation tests where they still add value.
+- [x] Move model/parser tests to `commonTest` with `kotlin.test`; keep Android instrumentation tests where they still add value.
 - [ ] Run shared tests and the iOS build in CI.
 
 Acceptance:

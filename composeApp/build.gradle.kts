@@ -21,12 +21,13 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            export(project(":shared"))
         }
     }
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":shared"))
+            api(project(":shared"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
