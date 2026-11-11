@@ -81,4 +81,26 @@ object ClearanceScripts {
             }
         })();
     """.trimIndent()
+
+    /**
+     * JavaScript injected into hotaudio.net to query /cdn-cgi/trace and report the client's
+     * detected public IP address to the host application bridge.
+     */
+    val HOTAUDIO_TRACE_INJECTION: String = """
+        (function() {
+            try {
+                fetch('/cdn-cgi/trace')
+                    .then(function(r) { return r.text(); })
+                    .then(function(t) {
+                        if (window.ClearanceBridge) {
+                            window.ClearanceBridge.reportTrace(t);
+                        }
+                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.clearanceBridge) {
+                            window.webkit.messageHandlers.clearanceBridge.postMessage(t);
+                        }
+                    })
+                    .catch(function() {});
+            } catch(e) {}
+        })();
+    """.trimIndent()
 }

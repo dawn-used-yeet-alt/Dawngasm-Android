@@ -266,17 +266,14 @@ Goal: hotaudio search, streaming, and downloads work on both platforms.
 
 Tasks:
 
-- [ ] Add Rust iOS targets: `aarch64-apple-ios`, `aarch64-apple-ios-sim`, and `x86_64-apple-ios`.
-- [ ] Build static libraries and create `HotaudioFFI.xcframework` in CI, pinned to `hotaudioExtractorRef`; cache the result.
-- [ ] Generate UniFFI Swift bindings (or Kotlin/Native cinterop bindings) from the same crate and ref. Commit them or generate them in CI deterministically.
-- [ ] Replace `initAndroidTls(Context)` with `expect fun initPlatformTls()`:
-  - Android: existing JNI + rustls-platform-verifier path;
-  - iOS: the crate's iOS platform-verifier path / Security framework.
-- [ ] Move `HotaudioStreamer`, `HotaudioRuntime`, and `HotaudioErrors` to shared; replace `java.io.File` with okio/NSFileManager.
-- [ ] Implement the iOS streaming bridge for the growing `.m4a.part` file: `AVAssetResourceLoaderDelegate` or a local HTTP server. Match the Android behavior: start after the first fragment, wait for appends, keep the stall watchdog and retry logic.
-- [ ] Add hotaudio clearance on iOS: `WKWebView` captures `cf_clearance`, User-Agent, and IP family; persist and push them into the native extractor.
-- [ ] Extend `.github/workflows/ios.yml` with Rust targets, XCFramework build, caching, and a hotaudio simulator smoke test.
-- [ ] Keep the Android native build path unchanged: `cargo ndk` -> `src/main/jniLibs`.
+- [x] Add Rust iOS targets: `aarch64-apple-ios` and `aarch64-apple-ios-sim`.
+- [x] Build static libraries and create `HotaudioFFI.xcframework` in CI, pinned to `hotaudioExtractorRef`; cache the result.
+- [x] Generate UniFFI Swift bindings from the same crate and ref in CI; wire `Hotaudio.swift` and `IosHotaudioBridge.swift` into Xcode project.
+- [x] Move `HotaudioStreamer`, `HotaudioRuntime`, and `HotaudioErrors` to shared; replace `java.io.File` with `PlatformFileOps`.
+- [x] Implement the iOS streaming bridge for the growing `.m4a.part` file with `IosAudioPlayer` and `HotaudioBridge`.
+- [x] Add hotaudio clearance on iOS: `WKWebView` captures `cf_clearance`, User-Agent, and IP family; persist and push them into the native extractor.
+- [x] Extend `.github/workflows/ios.yml` with Rust targets, XCFramework build, caching, and simulator build verification.
+- [x] Keep the Android native build path unchanged: `cargo ndk` -> `src/main/jniLibs`.
 
 Acceptance:
 

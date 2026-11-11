@@ -1,6 +1,7 @@
 package dev.dawngasm.app.player
 
 import dev.dawngasm.app.data.AudioResolver
+import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.PlaybackQueue
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.util.PlatformLog
@@ -50,11 +51,27 @@ class IosAudioPlayer(
         scope.launch {
             try {
                 val resolved = resolver.resolve(track)
-                val url = NSURL.URLWithString(resolved.url) ?: run {
-                    _state.update { it.copy(isLoading = false, error = "Invalid URL") }
-                    return@launch
+                val item = if (resolved.url.startsWith("hotaudio://", ignoreCase = true)) {
+                    val trackId = HotaudioStreamer.trackIdFrom(resolved.url)
+                    val streamState = trackId?.let { HotaudioStreamer.stateFor(it) }
+                    val path = streamState?.spec?.filePath
+                    if (path != null) {
+                        AVPlayerItem(uRL = NSURL.fileURLWithPath(path))
+                    } else {
+                        val nsUrl = NSURL.URLWithString(resolved.url) ?: run {
+                            _state.update { it.copy(isLoading = false, error = "Invalid URL") }
+                            return@launch
+                        }
+                        AVPlayerItem(uRL = nsUrl)
+                    }
+                } else {
+                    val nsUrl = NSURL.URLWithString(resolved.url) ?: run {
+                        _state.update { it.copy(isLoading = false, error = "Invalid URL") }
+                        return@launch
+                    }
+                    AVPlayerItem(uRL = nsUrl)
                 }
-                val item = AVPlayerItem(uRL = url)
+
                 if (player == null) {
                     player = AVPlayer(playerItem = item)
                 } else {
@@ -100,25 +117,20 @@ class IosAudioPlayer(
     }
 
     override fun seekTo(positionMs: Long) {
-        val seconds = positionMs / 1000.0
+        val seconds = positionMs.toDouble() / 1000.0
         val time = CMTimeMakeWithSeconds(seconds, 1000)
         player?.seekToTime(time)
         _state.update { it.copy(positionMs = positionMs) }
     }
 
     override fun nextTrack() {
-        val next = queue.moveToNext() ?: return
+        val next = queue.nextTrack() ?: return
         play(next, queue.tracks)
     }
 
     override fun previousTrack() {
-        val (prev, seekToZero) = queue.getPreviousTrack(_state.value.positionMs)
-        if (seekToZero || prev == null) {
-            seekTo(0L)
-        } else {
-            queue.setQueue(queue.tracks, prev)
-            play(prev, queue.tracks)
-        }
+        val prev = queue.previousTrack() ?: return
+        play(prev, queue.tracks)
     }
 
     override fun stop() {

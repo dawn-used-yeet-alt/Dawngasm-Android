@@ -42,7 +42,7 @@ class TrackDownloader(
                 HotaudioStreamer.ensureStarted(spec, AppPreferences(context))
             }
             HotaudioLog.i("download hotaudio: awaiting full stream track=${track.id}")
-            val file = HotaudioStreamer.awaitComplete(spec)
+            val file = File(HotaudioStreamer.awaitComplete(spec))
             HotaudioLog.i(
                 "download hotaudio: stream complete track=${track.id} " +
                     "bytes=${file.length()} path=${file.absolutePath}",

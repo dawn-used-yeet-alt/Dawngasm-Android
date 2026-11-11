@@ -1,18 +1,15 @@
 package dev.dawngasm.app.data
 
-import net.hotaudio.extractor.FfiException
-
-/** Shared classification and human-readable messages for hotaudio failures. */
+/**
+ * Shared classification and human-readable messages for hotaudio failures across platforms.
+ */
 object HotaudioErrors {
-    fun detail(error: Throwable): String = when (error) {
-        is FfiException.Failed -> error.detail
-        is FfiException.Panic -> error.detail
-        else -> error.message.orEmpty()
-    }
+    fun detail(error: Throwable): String = error.message.orEmpty()
 
-    fun isChallenge(error: Throwable): Boolean =
-        (error is FfiException.Failed && error.code.equals("challenge", ignoreCase = true)) ||
-            detail(error).contains("challenge", ignoreCase = true)
+    fun isChallenge(error: Throwable): Boolean {
+        val text = "${error.message.orEmpty()} ${detail(error)}"
+        return text.contains("challenge", ignoreCase = true)
+    }
 
     fun isRateLimit(error: Throwable): Boolean {
         val text = "${error.message.orEmpty()} ${detail(error)}"
@@ -49,8 +46,6 @@ object HotaudioErrors {
                 "Wait a minute and try again."
         isDnsOrTransient(error) ->
             "hotaudio network/DNS failure (${detail(error)}). If your carrier blocks hotaudio, enable Private DNS (e.g. dns.google) or try another network."
-        error is FfiException.Failed -> "hotaudio error (${error.code}): ${error.detail}"
-        error is FfiException.Panic -> "hotaudio error: ${error.detail}"
         else -> error.message ?: error.toString()
     }
 }
