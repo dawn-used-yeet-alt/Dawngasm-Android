@@ -32,6 +32,7 @@ The migration order is deliberate:
 ## Ground rules
 
 - Keep the Android build and existing Android CI green at every merge.
+- Clear lint as you go: every phase runs `./gradlew :app:lintDebug :shared:lintDebug :composeApp:lintDebug` and fixes new errors and warnings before merging. Do not let lint debt accumulate across phases.
 - One phase per pull request where practical; each phase must leave both platforms buildable.
 - `commonMain` must not import `android.*`, `androidx.*`, `java.*`, `javax.*`, `okhttp3.*`, or `org.json.*`.
 - Platform-specific code goes behind `expect`/`actual` in `androidMain` or `iosMain`.
@@ -81,6 +82,14 @@ If two KMP modules become too much overhead, `shared` and `composeApp` can be me
 - runs `xcodebuild` for the simulator and for a generic iOS device with signing disabled;
 - uploads the simulator `.app` artifact.
 
+The workflow is tuned for repeated use:
+
+- `gradle/actions/setup-gradle` persists the Gradle dependency and build caches;
+- `~/.konan` (Kotlin/Native toolchain and platform libs) is cached by Kotlin version;
+- Xcode `DerivedData` is cached per branch with a fallback chain;
+- both iOS frameworks are linked in one Gradle invocation before `xcodebuild`;
+- simulator and device builds disable the Swift index store, and PRs read the cache without writing it.
+
 Limitations:
 
 - Unsigned builds cannot be installed on a physical device or uploaded to TestFlight. That needs an Apple Developer account and signing secrets in Phase 6.
@@ -114,6 +123,7 @@ Tasks:
 - [ ] Add `MainViewController()` in `composeApp/iosMain` and a placeholder `DawngasmApp()` in `composeApp/commonMain`.
 - [ ] Keep `:app` working; point it at the placeholder only if needed for wiring.
 - [ ] Add `expect`/`actual` skeletons for the platform services the later phases need: `PlatformLog`, `Settings`, `HttpClientFactory`, `AudioPlayer`, `FileSystem`, `AppInfo`.
+- [ ] Run `./gradlew :app:lintDebug :shared:lintDebug :composeApp:lintDebug` and fix every new issue in the KMP modules.
 - [ ] Run the iOS workflow and fix framework search paths, Xcode scheme, and signing-disabled build issues.
 - [ ] Add a minimal launch smoke test (XCUITest) if it can be made reliable in CI.
 
@@ -124,6 +134,7 @@ Acceptance:
 - `xcodebuild ... -sdk iphonesimulator` and `xcodebuild ... -sdk iphoneos` pass with `CODE_SIGNING_ALLOWED=NO`.
 - The iOS app shows the placeholder screen.
 - Android UI is unchanged.
+- `:app`, `:shared`, and `:composeApp` all pass Android lint with no new issues.
 
 Risks:
 

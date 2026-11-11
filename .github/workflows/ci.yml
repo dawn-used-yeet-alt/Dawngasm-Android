@@ -33,7 +33,7 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: Run Android Lint
-        run: ./gradlew --no-daemon --build-cache --stacktrace :app:lintDebug
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:lintDebug :shared:lintDebug :composeApp:lintDebug
 
       - name: Upload Lint Report
         if: always()
@@ -43,6 +43,10 @@ jobs:
           path: |
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-debug.xml
+            shared/build/reports/lint-results-debug.html
+            shared/build/reports/lint-results-debug.xml
+            composeApp/build/reports/lint-results-debug.html
+            composeApp/build/reports/lint-results-debug.xml
           if-no-files-found: ignore
           retention-days: 7
 
