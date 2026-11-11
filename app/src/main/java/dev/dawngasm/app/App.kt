@@ -52,19 +52,29 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by rememberSaveable { mutableStateOf(NavigationTab.Home) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var isPlayerExpanded by rememberSaveable { mutableStateOf(false) }
 
     val savedIds = remember(state.saved) { state.saved.mapTo(HashSet()) { it.id } }
     val downloadedIds = remember(state.downloads) { state.downloads.mapTo(HashSet()) { it.id } }
 
     // Space the floating mini player occupies, so lists and the FAB can stay clear of it.
     val playerVisible = state.player.currentTrack != null
+    LaunchedEffect(playerVisible) {
+        if (!playerVisible) {
+            isPlayerExpanded = false
+        }
+    }
+
     val bottomInset by animateDpAsState(
-        targetValue = if (playerVisible) {
-            Dimens.MiniPlayerHeight + Dimens.MiniPlayerBottomMargin * 2
-        } else {
-            0.dp
+        targetValue = when {
+            !playerVisible -> 0.dp
+            isPlayerExpanded -> Dimens.MiniPlayerExpandedHeight + Dimens.MiniPlayerBottomMargin * 2
+            else -> Dimens.MiniPlayerHeight + Dimens.MiniPlayerBottomMargin * 2
         },
-        animationSpec = tween(200),
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 900f,
+        ),
         label = "miniPlayerInset",
     )
 
@@ -75,8 +85,10 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
         }
     }
 
-    BackHandler(enabled = selectedTab != NavigationTab.Home || state.canGoBack) {
-        if (selectedTab != NavigationTab.Home) {
+    BackHandler(enabled = isPlayerExpanded || selectedTab != NavigationTab.Home || state.canGoBack) {
+        if (isPlayerExpanded) {
+            isPlayerExpanded = false
+        } else if (selectedTab != NavigationTab.Home) {
             selectedTab = NavigationTab.Home
         } else if (state.canGoBack) {
             viewModel.navigateBack()
@@ -176,20 +188,13 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                 }
             }
 
-            if (selectedTab == NavigationTab.Home && !searchOpen) {
-                SearchFab(
-                    onClick = { searchOpen = true },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp + bottomInset),
-                )
-            }
-
             // Floats over the content, so the area around the pill is transparent.
             MiniPlayer(
                 player = state.player,
                 progress = progress,
                 isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
+                isExpanded = isPlayerExpanded,
+                onExpandedChange = { isPlayerExpanded = it },
                 onTogglePlayPause = viewModel::togglePlayPause,
                 onToggleSave = {
                     state.player.currentTrack?.let(viewModel::toggleSave)
@@ -199,6 +204,15 @@ fun DawngasmApp(viewModel: AppViewModel = viewModel()) {
                 onSeek = viewModel::seekTo,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
+
+            if (selectedTab == NavigationTab.Home && !searchOpen) {
+                SearchFab(
+                    onClick = { searchOpen = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp + bottomInset),
+                )
+            }
         }
     }
 
