@@ -6,7 +6,9 @@ import dev.dawngasm.app.ui.theme.DawngasmTheme
 import kotlinx.coroutines.flow.emptyFlow
 import platform.UIKit.UIViewController
 
-fun MainViewController(): UIViewController = ComposeUIViewController {
+fun MainViewController(): UIViewController = ComposeUIViewController(
+    configure = { enforceStrictPlistSanityCheck = false }
+) {
     DawngasmTheme {
         DawngasmApp(
             state = sampleAppUiState(),
