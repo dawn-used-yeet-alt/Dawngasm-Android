@@ -7,12 +7,16 @@ name: iOS
 
 on:
   workflow_dispatch:
+    inputs:
+      build_device:
+        description: "Also compile for physical iOS device (in addition to simulator; adds ~15m)"
+        type: boolean
+        default: false
   push:
     branches:
       - main
       - kmp-ios-migration
     paths:
-      - "app/**"
       - "composeApp/**"
       - "shared/**"
       - "iosApp/**"
@@ -22,7 +26,6 @@ on:
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
-      - "app/**"
       - "composeApp/**"
       - "shared/**"
       - "iosApp/**"
@@ -43,6 +46,12 @@ jobs:
     name: Compile iOS (unsigned)
     runs-on: macos-latest
     timeout-minutes: 45
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'pull_request' ||
+      contains(github.event.head_commit.message, '[ios]') ||
+      contains(github.event.head_commit.message, '[run ios]')
 
     env:
       # Kotlin/Native downloads a large prebuilt toolchain; keep it in the
@@ -98,13 +107,18 @@ jobs:
           swift --version
           java -version
 
-      # Build both frameworks in one Gradle invocation so the daemon, build
-      # cache, and Kotlin/Native caches are warm for the xcodebuild steps.
+      # Build frameworks in one Gradle invocation. On feature branches / PRs,
+      # we default to simulatorArm64 to cut compile time in half (~15m vs ~32m).
+      # Physical device slice (iosArm64) is compiled when requested via workflow_dispatch,
+      # on main, or when explicitly requested.
       - name: Build Kotlin/Native frameworks
         run: |
-          ./gradlew --build-cache --stacktrace \
-            :composeApp:linkDebugFrameworkIosSimulatorArm64 \
-            :composeApp:linkDebugFrameworkIosArm64
+          TARGETS=":composeApp:linkDebugFrameworkIosSimulatorArm64"
+          if [ "${{ github.event.inputs.build_device }}" = "true" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TARGETS="$TARGETS :composeApp:linkDebugFrameworkIosArm64"
+          fi
+          echo "Compiling targets: $TARGETS"
+          ./gradlew --build-cache --stacktrace $TARGETS
 
       - name: Build Xcode app (simulator, unsigned)
         run: |
@@ -123,6 +137,7 @@ jobs:
             build
 
       - name: Compile Xcode app (generic device, unsigned)
+        if: github.event.inputs.build_device == 'true' || github.ref == 'refs/heads/main'
         run: |
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \

@@ -53,7 +53,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 data class FeedSnapshot(
     val tracks: List<Track>,
@@ -140,7 +139,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val track = mediaItem?.mediaMetadata?.extras?.getString(PlaybackService.KEY_TRACK_JSON)
-                ?.let { runCatching { TrackJson.fromJson(JSONObject(it)) }.getOrNull() }
+                ?.let { runCatching { TrackJson.fromJson(it) }.getOrNull() }
             if (track != null) {
                 _progress.value = PlaybackProgress()
                 updatePlayer {
@@ -171,7 +170,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                 controller.addListener(playerListener)
                 val currentItem = controller.currentMediaItem
                 val track = currentItem?.mediaMetadata?.extras?.getString(PlaybackService.KEY_TRACK_JSON)
-                    ?.let { runCatching { TrackJson.fromJson(JSONObject(it)) }.getOrNull() }
+                    ?.let { runCatching { TrackJson.fromJson(it) }.getOrNull() }
                 if (track != null) {
                     updatePlayer {
                         copy(

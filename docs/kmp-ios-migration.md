@@ -83,13 +83,14 @@ If two KMP modules become too much overhead, `shared` and `composeApp` can be me
 - runs `xcodebuild` for the simulator and for a generic iOS device with signing disabled;
 - uploads the simulator `.app` artifact.
 
-The workflow is tuned for repeated use:
+The workflow is tuned for repeated use and runner conservation:
 
 - `gradle/actions/setup-gradle` persists the Gradle dependency and build caches;
 - `~/.konan` (Kotlin/Native toolchain and platform libs) is cached by Kotlin version;
 - Xcode `DerivedData` is cached per branch with a fallback chain;
-- both iOS frameworks are linked in one Gradle invocation before `xcodebuild`;
-- simulator and device builds disable the Swift index store, and PRs read the cache without writing it.
+- `cancel-in-progress: false` ensures long-running linking jobs complete and save their caches to disk;
+- Trigger policy: runs on PRs, pushes to `main`, manual dispatch (`gh workflow run ios.yml`), or commits containing `[ios]` / `[run ios]` in their message. Does not trigger on `app/**` changes;
+- Simulator-first compilation: on feature branches, only `:composeApp:linkDebugFrameworkIosSimulatorArm64` is linked by default, cutting compile time in half (~15m). Physical device (`iosArm64`) is built on `main` or when `build_device: true` is dispatched.
 
 On `macos-latest`, a cold run takes roughly 9-11 minutes; a warm run with the Kotlin/Native and DerivedData caches restored takes about 2 minutes.
 
@@ -213,7 +214,7 @@ Goal: search and play/download soundgasm and whyp on both platforms.
 Tasks:
 
 - [x] Move models to `shared/commonMain`: `Track`, `AudioHost`, `SearchRequest`, `SearchSyntax`, `AudioLinks`, `TagSuggestion`.
-- [ ] Replace `org.json` with `kotlinx.serialization`; keep JSON field names so saved/history/downloads remain readable.
+- [x] Replace `org.json` with `kotlinx.serialization`; keep JSON field names so saved/history/downloads remain readable.
 - [ ] Replace OkHttp with Ktor:
   - `androidMain`: OkHttp engine, preserving current behavior;
   - `iosMain`: Darwin engine;

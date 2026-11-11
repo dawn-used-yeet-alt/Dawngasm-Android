@@ -44,7 +44,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 /**
  * Background [MediaSessionService] managing audio playback via [ExoPlayer],
@@ -240,7 +239,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildMetadata(track: Track): MediaMetadata {
         val extras = Bundle().apply {
-            putString(KEY_TRACK_JSON, TrackJson.toJson(track).toString())
+            putString(KEY_TRACK_JSON, TrackJson.toJson(track))
         }
         return MediaMetadata.Builder()
             .setTitle(track.title)
@@ -348,7 +347,7 @@ class PlaybackService : MediaSessionService() {
                 COMMAND_PLAY_TRACK -> {
                     val trackJson = args.getString(KEY_TRACK_JSON)
                     if (trackJson != null) {
-                        val track = TrackJson.fromJson(JSONObject(trackJson))
+                        val track = TrackJson.fromJson(trackJson)
                         val queueJson = args.getString(KEY_QUEUE_JSON)
                         val queue = TrackJson.listFromJson(queueJson).ifEmpty { listOf(track) }
                         playTrack(track, queue)

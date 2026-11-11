@@ -1,6 +1,28 @@
 package dev.dawngasm.app.model
 
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+
+object AudioHostSerializer : KSerializer<AudioHost> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("dev.dawngasm.app.model.AudioHost", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: AudioHost) {
+        encoder.encodeString(value.label)
+    }
+
+    override fun deserialize(decoder: Decoder): AudioHost {
+        return AudioHost.fromLabel(decoder.decodeString())
+    }
+}
+
 /** Supported audio hosts. */
+@Serializable(with = AudioHostSerializer::class)
 enum class AudioHost(val label: String) {
     SOUNDGASM("soundgasm"),
     WHYP("whyp"),
@@ -21,6 +43,7 @@ enum class AudioHost(val label: String) {
  * offline. It is deliberately absent from the API model; the resolver only
  * deals with remote links.
  */
+@Serializable
 data class Track(
     val id: String,
     val title: String,

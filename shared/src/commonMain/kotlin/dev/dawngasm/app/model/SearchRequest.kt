@@ -1,5 +1,7 @@
 package dev.dawngasm.app.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * One complete search, combining free text with tag filters and feed order.
  *
@@ -7,6 +9,7 @@ package dev.dawngasm.app.model
  * structured `tags` / `excludeTags` parameters instead of relying on text
  * matching inside titles.
  */
+@Serializable
 data class SearchRequest(
     val text: String = "",
     val includeTags: List<String> = emptyList(),
