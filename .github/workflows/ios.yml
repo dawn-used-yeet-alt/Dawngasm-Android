@@ -66,11 +66,18 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
           cache-cleanup: on-success
 
+      - name: Read Kotlin version
+        id: kotlin
+        shell: bash
+        run: |
+          VERSION=$(grep -E '^kotlin[[:space:]]*=' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Cache Kotlin/Native toolchain and platform libs
         uses: actions/cache@v6
         with:
           path: .konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ steps.kotlin.outputs.version }}
           restore-keys: |
             konan-${{ runner.os }}-${{ runner.arch }}-
 
