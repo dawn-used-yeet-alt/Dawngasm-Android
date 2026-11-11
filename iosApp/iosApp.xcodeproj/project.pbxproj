@@ -24,7 +24,6 @@
 		D4A100000000000000000015 /* Hotaudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotaudio.swift; sourceTree = "<group>"; };
 		D4A100000000000000000016 /* IosHotaudioBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosHotaudioBridge.swift; sourceTree = "<group>"; };
 		D4A100000000000000000017 /* HotaudioFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = HotaudioFFI.xcframework; path = Frameworks/HotaudioFFI.xcframework; sourceTree = "<group>"; };
-		D4A100000000000000000018 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,7 +54,6 @@
 				D4A100000000000000000012 /* ContentView.swift */,
 				D4A100000000000000000015 /* Hotaudio.swift */,
 				D4A100000000000000000016 /* IosHotaudioBridge.swift */,
-				D4A100000000000000000018 /* iosApp-Bridging-Header.h */,
 				D4A100000000000000000013 /* Assets.xcassets */,
 				D4A100000000000000000014 /* Info.plist */,
 			);
@@ -310,10 +308,6 @@
 					"$(SRCROOT)/Frameworks",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Frameworks/headers",
-				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -329,11 +323,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.dawngasm.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Frameworks/headers",
-				);
-				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -356,10 +345,6 @@
 					"$(SRCROOT)/Frameworks",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Frameworks/headers",
-				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -375,11 +360,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.dawngasm.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_INCLUDE_PATHS = (
-					"$(inherited)",
-					"$(SRCROOT)/Frameworks/headers",
-				);
-				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
