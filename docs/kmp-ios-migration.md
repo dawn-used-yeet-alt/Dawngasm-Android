@@ -38,6 +38,7 @@ The migration order is deliberate:
 - Platform-specific code goes behind `expect`/`actual` in `androidMain` or `iosMain`.
 - Android visuals and behavior must not change unless a phase explicitly says so.
 - Pin Kotlin, Compose Multiplatform, AGP, Ktor, and kotlinx versions in `gradle/libs.versions.toml`; verify the Kotlin/Compose Multiplatform compatibility matrix before merging Phase 1.
+- Compose Multiplatform 1.12.x requires AGP 9.1+ and `compileSdk = 37` for its Android artifacts. Phase 1 stays on Compose Multiplatform 1.11.1 with AGP 8.13.2 and `compileSdk = 36` so the existing Android app stays green. Moving to CMP 1.12+ is a separate AGP 9 / Gradle 9 / SDK 37 upgrade.
 - Keep `hotaudioExtractorRef` as the single source of truth for Rust bindings and native libraries.
 
 ## Target module layout
@@ -117,7 +118,7 @@ Goal: the iOS app builds and launches a placeholder; Android still builds unchan
 Tasks:
 
 - [ ] Add the Kotlin Multiplatform and Compose Multiplatform plugins to the version catalog and root build.
-- [ ] Create `:shared` with `androidTarget()`, `iosArm64()`, `iosSimulatorArm64()`, and `iosX64()`; add `commonMain`, `androidMain`, `iosMain`, and `commonTest`.
+- [ ] Create `:shared` with `androidTarget()`, `iosArm64()`, and `iosSimulatorArm64()`; add `commonMain`, `androidMain`, `iosMain`, and `commonTest`.
 - [ ] Create `:composeApp` with Compose Multiplatform, an Android library target, and the same iOS targets. Configure a static framework named `ComposeApp`.
 - [ ] Create `iosApp/iosApp.xcodeproj` and a SwiftUI host that imports `ComposeApp` and shows the placeholder screen.
 - [ ] Add `MainViewController()` in `composeApp/iosMain` and a placeholder `DawngasmApp()` in `composeApp/commonMain`.
@@ -149,6 +150,7 @@ Goal: Home, Library, Settings, Search, and the mini player render identically on
 
 Tasks:
 
+- [ ] Upgrade the toolchain to AGP 9.1+, Gradle 9.x, `compileSdk = 37`, the AGP KMP library plugin, and Compose Multiplatform 1.12+ before the shared Android UI depends on it.
 - [ ] Move the theme to `composeApp/commonMain`: colors, typography, dimens, shapes.
 - [ ] Replace Android-only theme hooks with `expect`/`actual`:
   - status bar / navigation bar appearance (`WindowCompat`, `LocalView`);
@@ -270,7 +272,7 @@ Acceptance:
 - **HTTP client:** Ktor is the pragmatic shared client. Keep the OkHttp engine on Android to minimize behavior changes.
 - **JSON:** `org.json` is Android/JVM-only. Migrating to `kotlinx.serialization` is required; preserve existing field names so stored data survives.
 - **Compose parity:** screenshot tests are the guardrail. Do not "improve" spacing or typography during the port.
-- **Version alignment:** Kotlin 2.4.x + Compose Multiplatform + AGP must be checked together before Phase 1 merges.
+- **Version alignment:** Kotlin 2.4.x + Compose Multiplatform + AGP must be checked together before Phase 1 merges. CMP 1.11.1 is the newest release whose Android artifacts accept AGP 8.13.2 and SDK 36; CMP 1.12+ needs AGP 9.1 and SDK 37, which is deferred until after the Phase 1 scaffold is stable.
 - **iOS CI cost:** macOS minutes are limited. Cache Gradle and Kotlin/Native, and avoid running iOS CI on unrelated changes.
 - **hotaudio:** the Rust crate already has iOS bindings. The hard parts are TLS initialization and feeding a growing file to AVPlayer, not building the crate.
 - **No local Mac:** all iOS compilation is CI-only. Local development remains Android-first; iOS screenshots and build logs come from CI artifacts.

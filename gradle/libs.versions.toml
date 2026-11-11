@@ -1,8 +1,8 @@
 [versions]
 agp = "8.13.2"
 kotlin = "2.4.21"
-composeMultiplatform = "1.12.2"
-composeMaterial3 = "1.12.0-alpha03"
+composeMultiplatform = "1.11.1"
+composeMaterial3 = "1.11.0-alpha07"
 coreKtx = "1.17.0"
 activityCompose = "1.12.0"
 lifecycle = "2.10.0"
