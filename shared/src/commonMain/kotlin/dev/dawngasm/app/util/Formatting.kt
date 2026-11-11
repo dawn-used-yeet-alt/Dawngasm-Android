@@ -2,7 +2,7 @@ package dev.dawngasm.app.util
 
 import kotlin.math.max
 
-fun relativeTime(epochSeconds: Long, nowSeconds: Long = currentTimeMillis() / 1000L): String {
+fun relativeTime(epochSeconds: Long, nowSeconds: Long = Clock.nowEpochMillis() / 1000L): String {
     if (epochSeconds <= 0) return ""
     val seconds = max(0L, nowSeconds - epochSeconds)
     return when {

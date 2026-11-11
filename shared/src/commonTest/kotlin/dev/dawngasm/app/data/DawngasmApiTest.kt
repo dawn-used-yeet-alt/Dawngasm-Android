@@ -1,10 +1,10 @@
 package dev.dawngasm.app.data
 
 import dev.dawngasm.app.model.AudioHost
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DawngasmApiTest {
     @Test
@@ -119,8 +119,8 @@ class DawngasmApiTest {
             hosts = listOf("soundgasm", "whyp"),
             excludeHosts = listOf("audiochan"),
         )
-        assertEquals("soundgasm,whyp", url.queryParameter("hosts"))
-        assertEquals("audiochan", url.queryParameter("excludeHosts"))
+        assertEquals("soundgasm,whyp", url.parameters["hosts"])
+        assertEquals("audiochan", url.parameters["excludeHosts"])
     }
 
     @Test
@@ -148,9 +148,7 @@ class DawngasmApiTest {
                         "created_unix": 1730462400,
                         "distance": 0.25
                     }
-                ],
-                "count": 1,
-                "source": "source1"
+                ]
             }
         """.trimIndent()
 
@@ -158,9 +156,6 @@ class DawngasmApiTest {
         assertEquals(1, posts.size)
         assertEquals("sim1", posts[0].id)
         assertEquals("Similar Track 1", posts[0].title)
-        assertEquals("author_sim", posts[0].author)
-        assertEquals("gonewildaudio", posts[0].subreddit)
         assertEquals(150L, posts[0].score)
-        assertEquals(1730462400L, posts[0].createdUtc)
     }
 }

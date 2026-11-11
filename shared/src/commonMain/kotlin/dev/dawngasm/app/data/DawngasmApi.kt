@@ -5,16 +5,32 @@ import dev.dawngasm.app.model.AudioLinks
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
-import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
+import dev.dawngasm.app.util.Clock
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.URLBuilder
+import io.ktor.http.Url
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
+import io.ktor.http.path
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 
 class ApiException(message: String) : Exception(message)
 
@@ -37,7 +53,8 @@ data class SearchPage(
 class DawngasmApi(
     private val baseUrl: String = DEFAULT_BASE_URL,
 ) {
-    private val tagCache = ConcurrentHashMap<String, Pair<Long, List<TagSuggestion>>>()
+    private val tagCache = mutableMapOf<String, Pair<Long, List<TagSuggestion>>>()
+    private val tagCacheMutex = Mutex()
 
     suspend fun search(
         request: SearchRequest,
@@ -65,8 +82,8 @@ class DawngasmApi(
         limit: Int = PAGE_LIMIT,
         hosts: List<String> = emptyList(),
         excludeHosts: List<String> = emptyList(),
-    ): SearchPage = withContext(Dispatchers.IO) {
-        if (page > MAX_PAGE_INDEX) return@withContext SearchPage(emptyList(), false, page)
+    ): SearchPage {
+        if (page > MAX_PAGE_INDEX) return SearchPage(emptyList(), false, page)
 
         val url = buildSearchUrl(
             baseUrl = baseUrl,
@@ -110,32 +127,36 @@ class DawngasmApi(
                 createdUtc = post.createdUtc,
             )
         }
-        SearchPage(tracks.values.toList(), parsed.hasMore, page)
+        return SearchPage(tracks.values.toList(), parsed.hasMore, page)
     }
 
     /**
      * Tag autocomplete backed by `/tags?prefix=`. Results are cached briefly so
      * typing and backspacing does not hammer the index.
      */
-    suspend fun tagSuggestions(prefix: String, limit: Int = TAG_LIMIT): List<TagSuggestion> =
-        withContext(Dispatchers.IO) {
-            val key = "${prefix.trim().lowercase()}|$limit"
-            val now = System.currentTimeMillis()
-            tagCache[key]?.takeIf { now - it.first < TAG_CACHE_TTL_MS }?.let {
-                return@withContext it.second
+    suspend fun tagSuggestions(prefix: String, limit: Int = TAG_LIMIT): List<TagSuggestion> {
+        val key = "${prefix.trim().lowercase()}|$limit"
+        val now = Clock.nowEpochMillis()
+        tagCacheMutex.withLock {
+            val cached = tagCache[key]
+            if (cached != null && now - cached.first < TAG_CACHE_TTL_MS) {
+                return cached.second
             }
-
-            val url = "$baseUrl/tags".toHttpUrl().newBuilder()
-                .addQueryParameter("limit", limit.toString())
-                .apply {
-                    val clean = prefix.trim().lowercase()
-                    if (clean.isNotEmpty()) addQueryParameter("prefix", clean)
-                }
-                .build()
-            val tags = parseTags(get(url))
-            tagCache[key] = now to tags
-            tags
         }
+
+        val url = URLBuilder(baseUrl).apply {
+            path("tags")
+            parameters.append("limit", limit.toString())
+            val clean = prefix.trim().lowercase()
+            if (clean.isNotEmpty()) parameters.append("prefix", clean)
+        }.build()
+
+        val tags = parseTags(get(url))
+        tagCacheMutex.withLock {
+            tagCache[key] = now to tags
+        }
+        return tags
+    }
 
     /**
      * Semantically similar posts backed by `/similar?post_id=`.
@@ -143,7 +164,7 @@ class DawngasmApi(
     suspend fun similar(
         postId: String,
         limit: Int = PAGE_LIMIT,
-    ): List<Track> = withContext(Dispatchers.IO) {
+    ): List<Track> {
         val url = buildSimilarUrl(
             baseUrl = baseUrl,
             postId = postId,
@@ -151,7 +172,7 @@ class DawngasmApi(
         )
 
         val parsed = parseSimilar(get(url))
-        if (parsed.isEmpty()) return@withContext emptyList()
+        if (parsed.isEmpty()) return emptyList()
 
         val audioMap = fetchAudioForPosts(parsed.map { it.id })
 
@@ -170,86 +191,87 @@ class DawngasmApi(
                 createdUtc = post.createdUtc,
             )
         }
-        tracks.values.toList()
+        return tracks.values.toList()
     }
 
-    private fun get(url: HttpUrl): String {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", Network.APP_USER_AGENT)
-            .header("Accept", "application/json")
-            .build()
-        Network.client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw ApiException(apiError(response.code, body))
-            return body
+    private suspend fun get(url: Url): String {
+        val response = Network.httpClient.get(url) {
+            header("User-Agent", Network.APP_USER_AGENT)
+            header("Accept", "application/json")
         }
+        val body = response.bodyAsText()
+        if (!response.status.isSuccess()) throw ApiException(apiError(response.status.value, body))
+        return body
     }
 
-    private fun postJson(url: HttpUrl, payload: String): String {
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", Network.APP_USER_AGENT)
-            .header("Accept", "application/json")
-            .post(payload.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
-        Network.client.newCall(request).execute().use { response ->
-            val body = response.body?.string().orEmpty()
-            if (!response.isSuccessful) throw ApiException(apiError(response.code, body))
-            return body
+    private suspend fun postJson(url: Url, payload: String): String {
+        val response = Network.httpClient.post(url) {
+            header("User-Agent", Network.APP_USER_AGENT)
+            header("Accept", "application/json")
+            contentType(ContentType.Application.Json)
+            setBody(payload)
         }
+        val body = response.bodyAsText()
+        if (!response.status.isSuccess()) throw ApiException(apiError(response.status.value, body))
+        return body
     }
 
-    private fun fetchDetails(ids: List<String>): Map<String, Pair<String, String>> {
+    private suspend fun fetchDetails(ids: List<String>): Map<String, Pair<String, String>> {
         if (ids.isEmpty()) return emptyMap()
         val placeholders = ids.joinToString(",") { "?" }
         val sql = "SELECT id, url, selftext FROM post WHERE id IN ($placeholders)"
-        val payload = JSONObject()
-            .put("sql", sql)
-            .put("args", JSONArray(ids))
-            .toString()
-        val root = parseRoot(postJson("$baseUrl/query".toHttpUrl(), payload))
-        val columns = root.optJSONArray("columns") ?: return emptyMap()
-        val rows = root.optJSONArray("rows") ?: return emptyMap()
-        val names = (0 until columns.length()).map { columns.optString(it) }
+        val payload = buildJsonObject {
+            put("sql", sql)
+            put("args", buildJsonArray {
+                for (id in ids) add(JsonPrimitive(id))
+            })
+        }.toString()
+        val root = parseRoot(postJson(Url("$baseUrl/query"), payload))
+        val columns = root["columns"] as? JsonArray ?: return emptyMap()
+        val rows = root["rows"] as? JsonArray ?: return emptyMap()
+        val names = columns.map { runCatching { it.jsonPrimitive.content }.getOrDefault("") }
         val idCol = names.indexOf("id").takeIf { it >= 0 } ?: return emptyMap()
         val urlCol = names.indexOf("url").takeIf { it >= 0 } ?: return emptyMap()
         val textCol = names.indexOf("selftext").takeIf { it >= 0 } ?: return emptyMap()
 
-        val details = HashMap<String, Pair<String, String>>(rows.length())
-        for (index in 0 until rows.length()) {
-            val row = rows.optJSONArray(index) ?: continue
-            val id = row.optString(idCol)
-            if (id.isNotBlank()) details[id] = row.optString(urlCol) to row.optString(textCol)
+        val details = HashMap<String, Pair<String, String>>(rows.size)
+        for (rowElement in rows) {
+            val row = rowElement as? JsonArray ?: continue
+            val id = runCatching { row.getOrNull(idCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
+            val url = runCatching { row.getOrNull(urlCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
+            val text = runCatching { row.getOrNull(textCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
+            if (id.isNotBlank()) details[id] = url to text
         }
         return details
     }
 
-    private fun fetchAudioForPosts(ids: List<String>): Map<String, Pair<AudioHost, String>> {
+    private suspend fun fetchAudioForPosts(ids: List<String>): Map<String, Pair<AudioHost, String>> {
         if (ids.isEmpty()) return emptyMap()
         val result = HashMap<String, Pair<AudioHost, String>>(ids.size)
 
         val placeholders = ids.joinToString(",") { "?" }
         val sql = "SELECT post_id, host, url FROM post_audio WHERE post_id IN ($placeholders) ORDER BY position ASC"
-        val payload = JSONObject()
-            .put("sql", sql)
-            .put("args", JSONArray(ids))
-            .toString()
+        val payload = buildJsonObject {
+            put("sql", sql)
+            put("args", buildJsonArray {
+                for (id in ids) add(JsonPrimitive(id))
+            })
+        }.toString()
         runCatching {
-            val root = parseRoot(postJson("$baseUrl/query".toHttpUrl(), payload))
-            val columns = root.optJSONArray("columns") ?: return@runCatching
-            val rows = root.optJSONArray("rows") ?: return@runCatching
-            val names = (0 until columns.length()).map { columns.optString(it) }
+            val root = parseRoot(postJson(Url("$baseUrl/query"), payload))
+            val columns = root["columns"] as? JsonArray ?: return@runCatching
+            val rows = root["rows"] as? JsonArray ?: return@runCatching
+            val names = columns.map { runCatching { it.jsonPrimitive.content }.getOrDefault("") }
             val idCol = names.indexOf("post_id").takeIf { it >= 0 } ?: return@runCatching
             val hostCol = names.indexOf("host").takeIf { it >= 0 } ?: return@runCatching
             val urlCol = names.indexOf("url").takeIf { it >= 0 } ?: return@runCatching
 
-            for (index in 0 until rows.length()) {
-                val row = rows.optJSONArray(index) ?: continue
-                val id = row.optString(idCol)
+            for (rowElement in rows) {
+                val row = rowElement as? JsonArray ?: continue
+                val id = runCatching { row.getOrNull(idCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
                 if (id.isBlank() || result.containsKey(id)) continue
-                val hostStr = row.optString(hostCol)
-                val urlStr = row.optString(urlCol)
+                val hostStr = runCatching { row.getOrNull(hostCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
+                val urlStr = runCatching { row.getOrNull(urlCol)?.jsonPrimitive?.content }.getOrNull().orEmpty()
                 val host = AudioHost.fromLabel(hostStr).takeIf { it != AudioHost.UNKNOWN }
                     ?: AudioLinks.hostOf(urlStr)
                 if (host != AudioHost.UNKNOWN && urlStr.isNotBlank()) {
@@ -273,11 +295,11 @@ class DawngasmApi(
 
     internal fun parseSearch(body: String): ParsedSearch {
         val root = parseRoot(body)
-        val columns = root.optJSONArray("columns")
+        val columns = root["columns"] as? JsonArray
             ?: throw ApiException("The index returned no columns")
-        val rows = root.optJSONArray("rows")
+        val rows = root["rows"] as? JsonArray
             ?: throw ApiException("The index returned no rows")
-        val names = (0 until columns.length()).map { columns.optString(it) }
+        val names = columns.map { runCatching { it.jsonPrimitive.content }.getOrDefault("") }
         val idCol = names.indexOf("id").takeIf { it >= 0 }
             ?: throw ApiException("The index returned no id column")
         val titleCol = names.indexOf("title").takeIf { it >= 0 }
@@ -291,25 +313,33 @@ class DawngasmApi(
         val audioCol = names.indexOf("audio")
 
         val hasAudioCol = audioCol >= 0
-        val posts = ArrayList<RawPost>(rows.length())
-        for (index in 0 until rows.length()) {
-            val row = rows.optJSONArray(index) ?: continue
-            val id = row.optString(idCol)
+        val posts = ArrayList<RawPost>(rows.size)
+        for (rowElement in rows) {
+            val row = rowElement as? JsonArray ?: continue
+            fun strAt(col: Int): String {
+                if (col < 0 || col >= row.size) return ""
+                return runCatching { row[col].jsonPrimitive.content }.getOrDefault("")
+            }
+            fun longAt(col: Int, default: Long = 0L): Long {
+                if (col < 0 || col >= row.size) return default
+                return runCatching { row[col].jsonPrimitive.longOrNull }.getOrNull() ?: default
+            }
+
+            val id = strAt(idCol)
             if (id.isBlank()) continue
 
             var resolvedHost: AudioHost? = null
             var resolvedAudioUrl: String? = null
 
             if (hasAudioCol) {
-                val audioArr = row.optJSONArray(audioCol)
-                if (audioArr == null || audioArr.length() == 0) {
-                    // Posts where audio is empty ([]) are filtered out immediately
+                val audioArr = row.getOrNull(audioCol) as? JsonArray
+                if (audioArr == null || audioArr.isEmpty()) {
                     continue
                 }
-                for (aIdx in 0 until audioArr.length()) {
-                    val audioObj = audioArr.optJSONObject(aIdx) ?: continue
-                    val hStr = audioObj.optString("host")
-                    val uStr = audioObj.optString("url")
+                for (item in audioArr) {
+                    val audioObj = item as? JsonObject ?: continue
+                    val hStr = runCatching { audioObj["host"]?.jsonPrimitive?.content }.getOrNull().orEmpty()
+                    val uStr = runCatching { audioObj["url"]?.jsonPrimitive?.content }.getOrNull().orEmpty()
                     val host = AudioHost.fromLabel(hStr).takeIf { it != AudioHost.UNKNOWN }
                         ?: AudioLinks.hostOf(uStr)
                     if (host != AudioHost.UNKNOWN && uStr.isNotBlank()) {
@@ -319,46 +349,46 @@ class DawngasmApi(
                     }
                 }
                 if (resolvedAudioUrl == null) {
-                    // No recognized/supported playable audio link in the audio array
                     continue
                 }
             }
 
             posts += RawPost(
                 id = id,
-                title = row.optString(titleCol),
-                author = if (authorCol >= 0) row.optString(authorCol) else "",
-                subreddit = if (subredditCol >= 0) row.optString(subredditCol) else "",
-                score = if (scoreCol >= 0) row.optLong(scoreCol, 0L) else 0L,
-                createdUtc = if (createdCol >= 0) row.optLong(createdCol, 0L) else 0L,
-                url = if (urlCol >= 0) row.optString(urlCol) else "",
-                selftext = if (textCol >= 0) row.optString(textCol) else "",
+                title = strAt(titleCol),
+                author = if (authorCol >= 0) strAt(authorCol) else "",
+                subreddit = if (subredditCol >= 0) strAt(subredditCol) else "",
+                score = if (scoreCol >= 0) longAt(scoreCol, 0L) else 0L,
+                createdUtc = if (createdCol >= 0) longAt(createdCol, 0L) else 0L,
+                url = if (urlCol >= 0) strAt(urlCol) else "",
+                selftext = if (textCol >= 0) strAt(textCol) else "",
                 resolvedHost = resolvedHost,
                 resolvedAudioUrl = resolvedAudioUrl,
             )
         }
+        val hasMore = root["hasMore"]?.let { runCatching { it.jsonPrimitive.booleanOrNull }.getOrNull() } ?: false
         return ParsedSearch(
             posts = posts,
-            hasMore = root.optBoolean("hasMore", false),
+            hasMore = hasMore,
             needsBodies = !hasAudioCol && (urlCol < 0 || textCol < 0),
         )
     }
 
     internal fun parseSimilar(body: String): List<RawPost> {
         val root = parseRoot(body)
-        val postsArray = root.optJSONArray("posts") ?: return emptyList()
-        val posts = ArrayList<RawPost>(postsArray.length())
-        for (i in 0 until postsArray.length()) {
-            val obj = postsArray.optJSONObject(i) ?: continue
-            val id = obj.optString("id")
+        val postsArray = root["posts"] as? JsonArray ?: return emptyList()
+        val posts = ArrayList<RawPost>(postsArray.size)
+        for (item in postsArray) {
+            val obj = item as? JsonObject ?: continue
+            val id = runCatching { obj["id"]?.jsonPrimitive?.content }.getOrNull().orEmpty()
             if (id.isBlank()) continue
             posts += RawPost(
                 id = id,
-                title = obj.optString("title"),
-                author = obj.optString("author"),
-                subreddit = obj.optString("subreddit"),
-                score = obj.optLong("score", 0L),
-                createdUtc = obj.optLong("created_unix", 0L),
+                title = runCatching { obj["title"]?.jsonPrimitive?.content }.getOrNull().orEmpty(),
+                author = runCatching { obj["author"]?.jsonPrimitive?.content }.getOrNull().orEmpty(),
+                subreddit = runCatching { obj["subreddit"]?.jsonPrimitive?.content }.getOrNull().orEmpty(),
+                score = runCatching { obj["score"]?.jsonPrimitive?.longOrNull }.getOrNull() ?: 0L,
+                createdUtc = runCatching { obj["created_unix"]?.jsonPrimitive?.longOrNull }.getOrNull() ?: 0L,
                 url = "",
                 selftext = "",
             )
@@ -366,18 +396,21 @@ class DawngasmApi(
         return posts
     }
 
-    private fun parseRoot(body: String): JSONObject {
-        val root = runCatching { JSONObject(body) }
+    private fun parseRoot(body: String): JsonObject {
+        val element = runCatching { Json.parseToJsonElement(body) }
             .getOrElse { throw ApiException("The index returned invalid JSON") }
-        val error = root.optString("error")
-        if (error.isNotBlank() && error != "null") throw ApiException(error)
+        val root = element as? JsonObject
+            ?: throw ApiException("The index returned invalid JSON")
+        val error = root["error"]?.let { runCatching { it.jsonPrimitive.content }.getOrNull() }
+        if (!error.isNullOrBlank() && error != "null") throw ApiException(error)
         return root
     }
 
     private fun apiError(status: Int, body: String): String {
-        val root = runCatching { JSONObject(body) }.getOrNull()
-        val message = root?.optString("error")?.takeIf { it.isNotBlank() } ?: "unexpected response"
-        val retry = root?.optInt("retryAfterSeconds", 0) ?: 0
+        val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull()
+        val message = root?.get("error")?.let { runCatching { it.jsonPrimitive.content }.getOrNull() }
+            ?.takeIf { it.isNotBlank() } ?: "unexpected response"
+        val retry = root?.get("retryAfterSeconds")?.let { runCatching { it.jsonPrimitive.intOrNull }.getOrNull() } ?: 0
         return when {
             status == 429 && retry > 0 -> "Rate limited — retry in ${retry}s ($message)"
             status == 404 -> "No similar posts found for this track"
@@ -410,7 +443,6 @@ class DawngasmApi(
         const val MAX_PAGE_INDEX = 99
         const val TAG_LIMIT = 12
         private const val TAG_CACHE_TTL_MS = 10 * 60 * 1000L
-        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
         fun buildSearchUrl(
             baseUrl: String = DEFAULT_BASE_URL,
@@ -423,41 +455,42 @@ class DawngasmApi(
             limit: Int = PAGE_LIMIT,
             hosts: List<String> = emptyList(),
             excludeHosts: List<String> = emptyList(),
-        ): HttpUrl = "$baseUrl/search".toHttpUrl().newBuilder()
-            .addQueryParameter("limit", limit.toString())
-            .addQueryParameter("page", (page + 1).toString())
-            .addQueryParameter("sort", apiSort(sort))
-            .addQueryParameter("window", apiWindow(window))
-            .apply {
-                if (query.isNotBlank()) addQueryParameter("text", query.trim())
-                val included = includeTags.filter { it.isNotBlank() }.joinToString(",")
-                if (included.isNotEmpty()) addQueryParameter("tags", included)
-                val excluded = excludeTags.filter { it.isNotBlank() }.joinToString(",")
-                if (excluded.isNotEmpty()) addQueryParameter("excludeTags", excluded)
-                val includedHosts = hosts.filter { it.isNotBlank() }.joinToString(",")
-                if (includedHosts.isNotEmpty()) addQueryParameter("hosts", includedHosts)
-                val excludedHostsList = excludeHosts.filter { it.isNotBlank() }.joinToString(",")
-                if (excludedHostsList.isNotEmpty()) addQueryParameter("excludeHosts", excludedHostsList)
-            }
-            .build()
+        ): Url = URLBuilder(baseUrl).apply {
+            path("search")
+            parameters.append("limit", limit.toString())
+            parameters.append("page", (page + 1).toString())
+            parameters.append("sort", apiSort(sort))
+            parameters.append("window", apiWindow(window))
+            if (query.isNotBlank()) parameters.append("text", query.trim())
+            val included = includeTags.filter { it.isNotBlank() }.joinToString(",")
+            if (included.isNotEmpty()) parameters.append("tags", included)
+            val excluded = excludeTags.filter { it.isNotBlank() }.joinToString(",")
+            if (excluded.isNotEmpty()) parameters.append("excludeTags", excluded)
+            val includedHosts = hosts.filter { it.isNotBlank() }.joinToString(",")
+            if (includedHosts.isNotEmpty()) parameters.append("hosts", includedHosts)
+            val excludedHostsList = excludeHosts.filter { it.isNotBlank() }.joinToString(",")
+            if (excludedHostsList.isNotEmpty()) parameters.append("excludeHosts", excludedHostsList)
+        }.build()
 
         fun buildSimilarUrl(
             baseUrl: String = DEFAULT_BASE_URL,
             postId: String,
             limit: Int = PAGE_LIMIT,
-        ): HttpUrl = "$baseUrl/similar".toHttpUrl().newBuilder()
-            .addQueryParameter("post_id", postId)
-            .addQueryParameter("limit", limit.coerceIn(1, 200).toString())
-            .build()
+        ): Url = URLBuilder(baseUrl).apply {
+            path("similar")
+            parameters.append("post_id", postId)
+            parameters.append("limit", limit.coerceIn(1, 200).toString())
+        }.build()
 
         fun parseTags(body: String): List<TagSuggestion> {
-            val root = runCatching { JSONObject(body) }.getOrNull() ?: return emptyList()
-            val array = root.optJSONArray("tags") ?: return emptyList()
+            val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return emptyList()
+            val array = root["tags"] as? JsonArray ?: return emptyList()
             return buildList {
-                for (index in 0 until array.length()) {
-                    val item = array.optJSONObject(index) ?: continue
-                    val tag = item.optString("tag").trim()
-                    if (tag.isNotEmpty()) add(TagSuggestion(tag, item.optLong("count", 0L)))
+                for (item in array) {
+                    val obj = item as? JsonObject ?: continue
+                    val tag = runCatching { obj["tag"]?.jsonPrimitive?.content?.trim() }.getOrNull().orEmpty()
+                    val count = runCatching { obj["count"]?.jsonPrimitive?.longOrNull }.getOrNull() ?: 0L
+                    if (tag.isNotEmpty()) add(TagSuggestion(tag, count))
                 }
             }
         }

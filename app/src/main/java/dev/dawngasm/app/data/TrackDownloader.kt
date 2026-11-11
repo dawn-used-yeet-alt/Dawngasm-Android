@@ -27,6 +27,8 @@ data class SavedDownload(
 class TrackDownloader(
     private val context: Context,
 ) {
+    private val fileSaver = AndroidFileSaver(context)
+
     suspend fun download(
         track: Track,
         audio: ResolvedAudio,
@@ -71,26 +73,9 @@ class TrackDownloader(
         }
     }
 
-    fun folderLabel(treeUri: String?): String {
-        if (treeUri == null) return "App storage (Music/Dawngasm)"
-        val uri = runCatching { treeUri.toUri() }.getOrNull() ?: return "Custom folder"
-        return runCatching { DocumentFile.fromTreeUri(context, uri)?.name }
-            .getOrNull()
-            ?.takeIf { it.isNotBlank() }
-            ?: "Custom folder"
-    }
+    fun folderLabel(treeUri: String?): String = fileSaver.folderLabel(treeUri)
 
-    fun exists(localUri: String?): Boolean {
-        if (localUri.isNullOrBlank()) return false
-        val uri = runCatching { localUri.toUri() }.getOrNull() ?: return false
-        return when (uri.scheme) {
-            "file" -> uri.path?.let { File(it).exists() } == true
-            "content" -> runCatching {
-                DocumentFile.fromSingleUri(context, uri)?.exists() == true
-            }.getOrDefault(false)
-            else -> false
-        }
-    }
+    fun exists(localUri: String?): Boolean = fileSaver.exists(localUri)
 
     private fun saveToTree(
         treeUri: String,
