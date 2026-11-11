@@ -470,7 +470,7 @@ class IosAppPresenter(
                     PlatformFileOps.readBytes(path)
                         ?: throw IllegalStateException("Could not read downloaded hotaudio stream")
                 } else {
-                    val response = Network.client.get(audio.url) {
+                    val response = Network.httpClient.get(audio.url) {
                         audio.headers.forEach { (name, value) -> header(name, value) }
                         header("User-Agent", Network.BROWSER_USER_AGENT)
                     }
