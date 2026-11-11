@@ -101,10 +101,10 @@ Limitations:
 
 ## Phase 0 - Plan and guardrails
 
-- [ ] Add this plan.
-- [ ] Add `.github/workflows/ios.yml` with the preflight guard.
-- [ ] Confirm Android CI is unchanged and still green.
-- [ ] Decide module names, package names, and the `expect`/`actual` package layout.
+- [x] Add this plan.
+- [x] Add `.github/workflows/ios.yml` with the preflight guard.
+- [x] Confirm Android CI is unchanged and still green.
+- [x] Decide module names, package names, and the `expect`/`actual` package layout.
 - [ ] Freeze current Android screenshots as the parity baseline: Home, Library, Settings, Search sheet, Mini player, hotaudio clearance, audiochan clearance.
 
 Acceptance:
@@ -119,15 +119,15 @@ Goal: the iOS app builds and launches a placeholder; Android still builds unchan
 
 Tasks:
 
-- [ ] Add the Kotlin Multiplatform and Compose Multiplatform plugins to the version catalog and root build.
-- [ ] Create `:shared` with `androidTarget()`, `iosArm64()`, and `iosSimulatorArm64()`; add `commonMain`, `androidMain`, `iosMain`, and `commonTest`.
-- [ ] Create `:composeApp` with Compose Multiplatform, an Android library target, and the same iOS targets. Configure a static framework named `ComposeApp`.
-- [ ] Create `iosApp/iosApp.xcodeproj` and a SwiftUI host that imports `ComposeApp` and shows the placeholder screen.
-- [ ] Add `MainViewController()` in `composeApp/iosMain` and a placeholder `DawngasmApp()` in `composeApp/commonMain`.
-- [ ] Keep `:app` working; point it at the placeholder only if needed for wiring.
+- [x] Add the Kotlin Multiplatform and Compose Multiplatform plugins to the version catalog and root build.
+- [x] Create `:shared` with `androidTarget()`, `iosArm64()`, and `iosSimulatorArm64()`; add `commonMain`, `androidMain`, `iosMain`, and `commonTest`.
+- [x] Create `:composeApp` with Compose Multiplatform, an Android library target, and the same iOS targets. Configure a static framework named `ComposeApp`.
+- [x] Create `iosApp/iosApp.xcodeproj` and a SwiftUI host that imports `ComposeApp` and shows the placeholder screen.
+- [x] Add `MainViewController()` in `composeApp/iosMain` and a placeholder `DawngasmApp()` in `composeApp/commonMain`.
+- [x] Keep `:app` working; point it at the placeholder only if needed for wiring.
 - [ ] Add `expect`/`actual` skeletons for the platform services the later phases need: `PlatformLog`, `Settings`, `HttpClientFactory`, `AudioPlayer`, `FileSystem`, `AppInfo`.
-- [ ] Run `./gradlew :app:lintDebug :shared:lintDebug :composeApp:lintDebug` and fix every new issue in the KMP modules.
-- [ ] Run the iOS workflow and fix framework search paths, Xcode scheme, and signing-disabled build issues.
+- [x] Run `./gradlew :app:lintDebug :shared:lintDebug :composeApp:lintDebug` and fix every new issue in the KMP modules.
+- [x] Run the iOS workflow and fix framework search paths, Xcode scheme, and signing-disabled build issues.
 - [ ] Add a minimal launch smoke test (XCUITest) if it can be made reliable in CI.
 
 Acceptance:
@@ -152,7 +152,7 @@ Goal: Home, Library, Settings, Search, and the mini player render identically on
 
 Tasks:
 
-- [ ] Upgrade the toolchain to AGP 9.1+, Gradle 9.x, `compileSdk = 37`, the AGP KMP library plugin, and Compose Multiplatform 1.12+ before the shared Android UI depends on it.
+- [ ] Upgrade the toolchain to AGP 9.1+, Gradle 9.x, `compileSdk = 37`, the AGP KMP library plugin, and Compose Multiplatform 1.12+. Deferred: the UI is ported on Compose Multiplatform 1.11.1 first so the existing AGP 8.13 / SDK 36 Android app stays green. The upgrade is a separate change once the shared UI is stable.
 - [ ] Move the theme to `composeApp/commonMain`: colors, typography, dimens, shapes.
 - [ ] Replace Android-only theme hooks with `expect`/`actual`:
   - status bar / navigation bar appearance (`WindowCompat`, `LocalView`);
@@ -178,7 +178,7 @@ Acceptance:
 - Android screenshots match the Phase 0 baseline; no layout, color, typography, spacing, or animation changes.
 - iOS renders Home, Library, Settings, Search sheet, and mini player with sample data.
 - Navigation, back behavior, snackbars, search sheet, and tab transitions behave the same.
-- `commonMain` contains no `androidx.compose` imports; only Compose Multiplatform APIs.
+- `commonMain` contains no Android-only APIs (`android.*`, `androidx.activity.*`, `androidx.lifecycle.*`, `LocalContext`, `LocalView`, `BuildConfig`); only Compose Multiplatform APIs and `expect`/`actual` contracts.
 
 ## Phase 3 - Shared data, soundgasm, whyp, and iOS playback
 

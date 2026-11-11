@@ -140,6 +140,7 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource.okhttp)
     implementation(libs.androidx.documentfile)
+    implementation(project(":composeApp"))
     implementation(libs.okhttp)
     implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
     implementation(libs.rustls.platform.verifier)

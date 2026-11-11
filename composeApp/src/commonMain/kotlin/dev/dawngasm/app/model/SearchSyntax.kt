@@ -1,7 +1,5 @@
 package dev.dawngasm.app.model
 
-import java.util.Locale
-
 /** One inline search recommendation shown under the search field. */
 data class SearchSuggestion(
     val token: String,
@@ -44,7 +42,7 @@ object SearchSyntax {
         val text = mutableListOf<String>()
 
         for (word in words) {
-            val lower = word.lowercase(Locale.ROOT)
+            val lower = word.lowercase()
             when {
                 lower.startsWith("sort:") -> {
                     val value = lower.removePrefix("sort:")
@@ -69,7 +67,7 @@ object SearchSyntax {
     }
 
     fun normalizeWindow(raw: String): String? {
-        val value = raw.trim().lowercase(Locale.ROOT)
+        val value = raw.trim().lowercase()
         if (value in WINDOWS) return value
         val match = customWindow.matchEntire(value) ?: return null
         val days = match.groupValues[1].toIntOrNull() ?: return null
@@ -104,7 +102,7 @@ object SearchSyntax {
             tag = tag.substring(1, tag.length - 1).trim()
         }
         return tag
-            .lowercase(Locale.ROOT)
+            .lowercase()
             .replace(Regex("\\s+"), " ")
             .takeIf { it.isNotEmpty() }
     }
@@ -116,7 +114,7 @@ object SearchSyntax {
     fun parseTagList(raw: String): List<String> =
         raw.split(',')
             .mapNotNull { normalizeTag(it) }
-            .distinctBy { it.lowercase(Locale.ROOT) }
+            .distinctBy { it.lowercase() }
 
     fun activeToken(input: String): String {
         if (input.isEmpty() || input.last().isWhitespace()) return ""
@@ -145,7 +143,7 @@ object SearchSyntax {
     fun withoutToken(input: String, prefix: String): String {
         val words = input.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         return words.filterNot { word ->
-            val lower = word.lowercase(Locale.ROOT)
+            val lower = word.lowercase()
             if (!lower.startsWith(prefix)) return@filterNot false
             when (prefix) {
                 "sort:" -> lower.removePrefix(prefix) in SORTS
@@ -158,7 +156,7 @@ object SearchSyntax {
     }
 
     fun suggestions(input: String): List<SearchSuggestion> {
-        val active = activeToken(input).lowercase(Locale.ROOT)
+        val active = activeToken(input).lowercase()
         if (active.isEmpty()) return emptyList()
 
         return when {

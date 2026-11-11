@@ -82,7 +82,6 @@ import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.util.compactScore
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -128,7 +127,7 @@ fun SearchSheet(
     fun addTag(csv: String, raw: String): String {
         val tag = SearchSyntax.normalizeTag(raw) ?: return csv
         return (SearchSyntax.parseTagList(csv) + tag)
-            .distinctBy { it.lowercase(Locale.ROOT) }
+            .distinctBy { it.lowercase() }
             .joinToString(",")
     }
 
@@ -152,7 +151,7 @@ fun SearchSheet(
         }
         searching = true
         delay(TAG_LOOKUP_DEBOUNCE_MS)
-        val selectedLower = activeSelected.mapTo(HashSet()) { it.lowercase(Locale.ROOT) }
+        val selectedLower = activeSelected.mapTo(HashSet()) { it.lowercase() }
         val result = try {
             tagLookup(prefix)
         } catch (cancelled: CancellationException) {
@@ -161,8 +160,8 @@ fun SearchSheet(
             emptyList()
         }
         suggestions = result
-            .filter { it.tag.lowercase(Locale.ROOT) !in selectedLower }
-            .distinctBy { it.tag.lowercase(Locale.ROOT) }
+            .filter { it.tag.lowercase() !in selectedLower }
+            .distinctBy { it.tag.lowercase() }
             .take(MAX_TAG_SUGGESTIONS)
         searching = false
     }

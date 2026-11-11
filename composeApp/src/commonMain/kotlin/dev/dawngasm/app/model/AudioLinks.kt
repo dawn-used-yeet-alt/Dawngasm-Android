@@ -1,7 +1,5 @@
 package dev.dawngasm.app.model
 
-import java.util.Locale
-
 /**
  * Host detection mirrors the desktop client's link parsing: normalise the
  * escaped text the index stores, then try the hosts in a fixed order so a post
@@ -61,7 +59,7 @@ object AudioLinks {
     }
 
     fun hostOf(url: String): AudioHost {
-        val lower = url.lowercase(Locale.ROOT)
+        val lower = url.lowercase()
         return when {
             lower.contains("soundgasm.net/u/") -> AudioHost.SOUNDGASM
             lower.contains("whyp.it/tracks/") || lower.contains("whyp.it/t/") -> AudioHost.WHYP
@@ -76,7 +74,7 @@ object AudioLinks {
 
     /** Bracketed tags from a post title, lower-cased and de-duplicated. */
     fun tagsInTitle(title: String): List<String> = tagPattern.findAll(title)
-        .map { it.groupValues[1].trim().lowercase(Locale.ROOT) }
+        .map { it.groupValues[1].trim().lowercase() }
         .filter { it.isNotEmpty() }
         .distinct()
         .take(12)

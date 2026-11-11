@@ -1,10 +1,5 @@
 package dev.dawngasm.app.ui.screens
 
-import android.app.Activity
-import android.content.Intent
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -24,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
@@ -33,8 +30,8 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -53,23 +50,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
-import dev.dawngasm.app.AudiochanClearanceActivity
-import dev.dawngasm.app.BuildConfig
-import dev.dawngasm.app.HotaudioClearanceActivity
-import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
+import dev.dawngasm.app.platform.SettingsPlatformActions
+import dev.dawngasm.app.ui.theme.Dimens
 import dev.dawngasm.app.util.compactScore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import dev.dawngasm.app.ui.theme.Dimens
 
 private const val TAG_LOOKUP_DEBOUNCE_MS = 180L
 
@@ -81,35 +72,18 @@ fun SettingsScreen(
     downloadTreeUri: String?,
     tagLookup: suspend (String) -> List<TagSuggestion>,
     hotaudioConnected: Boolean,
-    onHotaudioClearanceChanged: () -> Unit,
-    onClearHotaudioClearance: () -> Unit,
     audiochanConnected: Boolean,
-    onAudiochanClearanceChanged: () -> Unit,
+    onClearHotaudioClearance: () -> Unit,
     onClearAudiochanClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
     onRemoveBlockedTag: (String) -> Unit,
     onDownloadTreeChange: (String?) -> Unit,
     onClearDownloads: () -> Unit,
+    platform: SettingsPlatformActions,
+    appVersion: String,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val clearanceLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) onHotaudioClearanceChanged()
-    }
-    val audiochanLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) onAudiochanClearanceChanged()
-    }
-    val prefs = remember { AppPreferences(context) }
-    val clearanceIp = remember(hotaudioConnected) {
-        if (hotaudioConnected) prefs.hotaudioClientIp() else null
-    }
-    val clearanceFamily = remember(hotaudioConnected) {
-        if (hotaudioConnected) prefs.hotaudioIpFamily()?.uppercase() else null
-    }
+    val clearanceDetail = platform.hotaudioClearanceDetail()
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
@@ -143,20 +117,6 @@ fun SettingsScreen(
             .distinctBy { it.tag.lowercase() }
             .take(4)
         tagSearching = false
-    }
-
-    val folderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-    ) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                )
-            }
-            onDownloadTreeChange(uri.toString())
-        }
     }
 
     LazyColumn(
@@ -336,7 +296,7 @@ fun SettingsScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { folderPicker.launch(null) },
+                            onClick = { platform.chooseDownloadFolder() },
                             shape = CircleShape,
                         ) {
                             Text("Choose folder")
@@ -381,13 +341,10 @@ fun SettingsScreen(
                     val clearanceStatus = if (hotaudioConnected) {
                         buildString {
                             append("Clearance saved")
-                            if (!clearanceIp.isNullOrBlank()) {
+                            if (!clearanceDetail.isNullOrBlank()) {
                                 append(" (")
-                                if (!clearanceFamily.isNullOrBlank()) append("$clearanceFamily: ")
-                                append(clearanceIp)
+                                append(clearanceDetail)
                                 append(")")
-                            } else if (!clearanceFamily.isNullOrBlank()) {
-                                append(" ($clearanceFamily)")
                             }
                         }
                     } else {
@@ -404,11 +361,7 @@ fun SettingsScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = {
-                                clearanceLauncher.launch(
-                                    Intent(context, HotaudioClearanceActivity::class.java),
-                                )
-                            },
+                            onClick = { platform.openHotaudioClearance() },
                             shape = CircleShape,
                         ) {
                             Text(if (hotaudioConnected) "Check again" else "Open hotaudio check")
@@ -446,11 +399,7 @@ fun SettingsScreen(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = {
-                                audiochanLauncher.launch(
-                                    Intent(context, AudiochanClearanceActivity::class.java),
-                                )
-                            },
+                            onClick = { platform.openAudiochanClearance() },
                             shape = CircleShape,
                         ) {
                             Text(if (audiochanConnected) "Check again" else "Open audiochan check")
@@ -469,7 +418,7 @@ fun SettingsScreen(
             SectionCard(
                 icon = Icons.Outlined.Info,
                 title = "About",
-                subtitle = "Version ${BuildConfig.VERSION_NAME}",
+                subtitle = "Version $appVersion",
             ) {
                 Text(
                     text = "A native Material 3 Expressive client for the Dawngasm audio index. " +

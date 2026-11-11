@@ -1,9 +1,8 @@
 package dev.dawngasm.app.util
 
-import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
-fun relativeTime(epochSeconds: Long, nowSeconds: Long = System.currentTimeMillis() / 1000L): String {
+fun relativeTime(epochSeconds: Long, nowSeconds: Long = currentTimeMillis() / 1000L): String {
     if (epochSeconds <= 0) return ""
     val seconds = max(0L, nowSeconds - epochSeconds)
     return when {
@@ -18,10 +17,10 @@ fun relativeTime(epochSeconds: Long, nowSeconds: Long = System.currentTimeMillis
 
 fun formatDuration(ms: Long): String {
     if (ms <= 0) return "0:00"
-    val total = TimeUnit.MILLISECONDS.toSeconds(ms)
+    val total = ms / 1000
     val minutes = total / 60
     val seconds = total % 60
-    return "%d:%02d".format(minutes, seconds)
+    return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
 fun compactScore(score: Long): String = when {

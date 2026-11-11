@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.Track
+import dev.dawngasm.app.model.TrackJson
 
 /**
  * Small SharedPreferences-backed store. Saved/history/downloads are full track
@@ -108,22 +109,22 @@ class AppPreferences(context: Context) {
         }
     }
 
-    fun saved(): List<Track> = Track.listFromJson(prefs.getString(KEY_SAVED, null))
+    fun saved(): List<Track> = TrackJson.listFromJson(prefs.getString(KEY_SAVED, null))
 
     fun saveSaved(tracks: List<Track>) {
-        prefs.edit { putString(KEY_SAVED, Track.listToJson(tracks)) }
+        prefs.edit { putString(KEY_SAVED, TrackJson.listToJson(tracks)) }
     }
 
-    fun history(): List<Track> = Track.listFromJson(prefs.getString(KEY_HISTORY, null))
+    fun history(): List<Track> = TrackJson.listFromJson(prefs.getString(KEY_HISTORY, null))
 
     fun saveHistory(tracks: List<Track>) {
-        prefs.edit { putString(KEY_HISTORY, Track.listToJson(tracks)) }
+        prefs.edit { putString(KEY_HISTORY, TrackJson.listToJson(tracks)) }
     }
 
-    fun downloads(): List<Track> = Track.listFromJson(prefs.getString(KEY_DOWNLOADS, null))
+    fun downloads(): List<Track> = TrackJson.listFromJson(prefs.getString(KEY_DOWNLOADS, null))
 
     fun saveDownloads(tracks: List<Track>) {
-        prefs.edit { putString(KEY_DOWNLOADS, Track.listToJson(tracks)) }
+        prefs.edit { putString(KEY_DOWNLOADS, TrackJson.listToJson(tracks)) }
     }
 
     private fun readTags(key: String): List<String> {
