@@ -222,8 +222,8 @@ Tasks:
 - [x] Replace `java.util.Locale` with Kotlin `lowercase()`/`uppercase()`.
 - [ ] Replace JVM-only helpers: `TimeUnit`, `Date`, `ConcurrentHashMap`, `AtomicLong`, `Thread.sleep`, `System.currentTimeMillis`, `System.getProperty`.
 - [ ] Replace `java.io.File` and `RandomAccessFile` with okio `FileSystem` / `Path`.
-- [ ] Settings: use `multiplatform-settings` or an `expect`/`actual` store; migrate the existing `dawngasm` SharedPreferences keys to iOS defaults.
-- [ ] Logging: `PlatformLog` actuals (Android `Log`, iOS `os_log`).
+- [x] Settings: use `multiplatform-settings` or an `expect`/`actual` store; migrate the existing `dawngasm` SharedPreferences keys to iOS defaults.
+- [x] Logging: `PlatformLog` actuals (Android `Log`, iOS `os_log`).
 - [ ] Define `AudioPlayer` and move the playback contract to `shared`:
   - Android actual keeps Media3/ExoPlayer and the existing `PlaybackService`/MediaSession behavior;
   - iOS actual uses AVPlayer + AVAudioSession.
