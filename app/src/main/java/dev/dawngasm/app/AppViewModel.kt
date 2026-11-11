@@ -32,6 +32,8 @@ import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
+import dev.dawngasm.app.model.TrackJson
+import dev.dawngasm.app.platform.DawngasmActions
 import dev.dawngasm.app.state.AppUiState
 import dev.dawngasm.app.state.PlaybackProgress
 import dev.dawngasm.app.state.PlayerUiState
@@ -51,7 +53,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 data class FeedSnapshot(
     val tracks: List<Track>,
@@ -70,7 +71,7 @@ data class FeedSnapshot(
 )
 
 @OptIn(UnstableApi::class)
-class AppViewModel(application: Application) : AndroidViewModel(application) {
+class AppViewModel(application: Application) : AndroidViewModel(application), DawngasmActions {
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
     private val resolver = AudioResolver(application)
@@ -138,7 +139,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val track = mediaItem?.mediaMetadata?.extras?.getString(PlaybackService.KEY_TRACK_JSON)
-                ?.let { runCatching { Track.fromJson(JSONObject(it)) }.getOrNull() }
+                ?.let { runCatching { TrackJson.fromJson(it) }.getOrNull() }
             if (track != null) {
                 _progress.value = PlaybackProgress()
                 updatePlayer {
@@ -169,7 +170,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 controller.addListener(playerListener)
                 val currentItem = controller.currentMediaItem
                 val track = currentItem?.mediaMetadata?.extras?.getString(PlaybackService.KEY_TRACK_JSON)
-                    ?.let { runCatching { Track.fromJson(JSONObject(it)) }.getOrNull() }
+                    ?.let { runCatching { TrackJson.fromJson(it) }.getOrNull() }
                 if (track != null) {
                     updatePlayer {
                         copy(
@@ -215,22 +216,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- feed ---------------------------------------------------------------
 
-    fun refresh() {
+    override fun refresh() {
         val state = _uiState.value
-        if (state.similarSourceTrack != null) {
-            loadSimilar(state.similarSourceTrack, reset = true, refreshing = true)
+        val source = state.similarSourceTrack
+        if (source != null) {
+            loadSimilar(source, reset = true, refreshing = true)
         } else {
             loadFeed(reset = true, refreshing = true)
         }
     }
 
-    fun loadMore() {
+    override fun loadMore() {
         val state = _uiState.value
         if (state.similarSourceTrack != null || state.isLoading || state.isLoadingMore || !state.hasMore) return
         loadFeed(reset = false)
     }
 
-    fun applySearch(request: SearchRequest) {
+    override fun applySearch(request: SearchRequest) {
         // Keep inline top:/sort:/host: support for anyone who still types it, while
         // the sheet's dropdowns provide the visible controls.
         val parsed = SearchSyntax.parse(request.text)
@@ -254,7 +256,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadFeed(reset = true)
     }
 
-    fun clearSearch() {
+    override fun clearSearch() {
         if (_uiState.value.similarSourceTrack != null) {
             navigateBack()
             return
@@ -277,7 +279,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadFeed(reset = true)
     }
 
-    fun showSimilar(track: Track, scrollIndex: Int = 0, scrollOffset: Int = 0) {
+    override fun showSimilar(track: Track, scrollIndex: Int, scrollOffset: Int) {
         val state = _uiState.value
         feedStack.addLast(
             FeedSnapshot(
@@ -348,8 +350,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun navigateBack(): Boolean {
-        if (feedStack.isEmpty()) return false
+    override fun navigateBack() {
+        if (feedStack.isEmpty()) return
         val previous = feedStack.removeLast()
         feedJob?.cancel()
         feedGeneration.incrementAndGet()
@@ -375,18 +377,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 pendingScrollRestore = previous.scrollIndex to previous.scrollOffset,
             )
         }
-        return true
     }
 
-    fun onScrollRestored() {
+    override fun onScrollRestored() {
         _uiState.update { it.copy(pendingScrollRestore = null) }
     }
 
     /** Tag autocomplete for the search sheet. Failures simply show no rows. */
-    suspend fun suggestTags(prefix: String): List<TagSuggestion> =
+    override suspend fun suggestTags(prefix: String): List<TagSuggestion> =
         runCatching { api.tagSuggestions(prefix) }.getOrDefault(emptyList())
 
-    fun addBlockedTag(raw: String) {
+    override fun addBlockedTag(raw: String) {
         val tag = raw.trim().lowercase()
         if (tag.isBlank()) return
         val next = (_uiState.value.blockedTags + tag).distinct()
@@ -395,7 +396,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadFeed(reset = true)
     }
 
-    fun removeBlockedTag(tag: String) {
+    override fun removeBlockedTag(tag: String) {
         val next = _uiState.value.blockedTags.filterNot { it == tag }
         _uiState.update { it.copy(blockedTags = next) }
         prefs.saveBlockedTags(next)
@@ -482,7 +483,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- library ------------------------------------------------------------
 
-    fun toggleSave(track: Track) {
+    override fun toggleSave(track: Track) {
         val current = _uiState.value.saved
         val next = if (current.any { it.id == track.id }) {
             current.filterNot { it.id == track.id }
@@ -493,7 +494,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(saved = next) }
     }
 
-    fun clearDownloads() {
+    override fun clearDownloads() {
         prefs.saveDownloads(emptyList())
         _uiState.update { it.copy(downloads = emptyList()) }
     }
@@ -507,7 +508,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- downloads ----------------------------------------------------------
 
-    fun download(track: Track) {
+    override fun download(track: Track) {
         val state = _uiState.value
         if (track.id in state.downloadingIds) return
         val existing = state.downloads.firstOrNull { it.id == track.id }
@@ -536,7 +537,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setDownloadTree(uri: String?) {
+    override fun setDownloadTree(uri: String?) {
         prefs.saveDownloadTreeUri(uri)
         _uiState.update {
             it.copy(
@@ -547,7 +548,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Refresh the hotaudio clearance status after the WebView activity. */
-    fun refreshHotaudioClearance() {
+    override fun refreshHotaudioClearance() {
         HotaudioLog.i("refreshHotaudioClearance")
         val clearance = prefs.hotaudioClearance()
         if (clearance != null) {
@@ -563,7 +564,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(hotaudioConnected = clearance != null) }
     }
 
-    fun clearHotaudioClearance() {
+    override fun clearHotaudioClearance() {
         HotaudioLog.i("clearHotaudioClearance")
         prefs.clearHotaudioClearance()
         try {
@@ -577,7 +578,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Refresh the audiochan clearance status after the WebView activity. */
-    fun refreshAudiochanClearance() {
+    override fun refreshAudiochanClearance() {
         HotaudioLog.i("refreshAudiochanClearance")
         val clearance = prefs.audiochanClearance()
         if (clearance != null) {
@@ -587,7 +588,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(audiochanConnected = clearance != null) }
     }
 
-    fun clearAudiochanClearance() {
+    override fun clearAudiochanClearance() {
         HotaudioLog.i("clearAudiochanClearance")
         prefs.clearAudiochanClearance()
         _uiState.update { it.copy(audiochanConnected = false) }
@@ -595,12 +596,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- playback -----------------------------------------------------------
 
-    fun play(track: Track, list: List<Track>? = null) {
+    override fun play(track: Track, queue: List<Track>?) {
         HotaudioLog.i("AppViewModel.play track=${track.id} title=${track.title}")
-        val queue = list ?: _uiState.value.tracks
+        val activeQueue = queue ?: _uiState.value.tracks
         val args = Bundle().apply {
-            putString(PlaybackService.KEY_TRACK_JSON, track.toJson().toString())
-            putString(PlaybackService.KEY_QUEUE_JSON, Track.listToJson(queue))
+            putString(PlaybackService.KEY_TRACK_JSON, TrackJson.toJson(track).toString())
+            putString(PlaybackService.KEY_QUEUE_JSON, TrackJson.listToJson(activeQueue))
         }
         val command = SessionCommand(PlaybackService.COMMAND_PLAY_TRACK, Bundle.EMPTY)
 
@@ -630,15 +631,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         recordHistory(track)
     }
 
-    fun togglePlayPause() {
+    override fun togglePlayPause() {
         val controller = mediaController ?: return
         val state = _uiState.value.player
-        if (state.currentTrack == null || state.isLoading) return
+        val currentTrack = state.currentTrack ?: return
+        if (state.isLoading) return
         if (controller.isPlaying) {
             controller.pause()
         } else {
             if (controller.currentMediaItem == null) {
-                play(state.currentTrack)
+                play(currentTrack, null)
             } else {
                 if (controller.playbackState == Player.STATE_ENDED) controller.seekTo(0L)
                 controller.play()
@@ -646,7 +648,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long) {
         val controller = mediaController ?: return
         val duration = _progress.value.durationMs
         val target = if (duration > 0L) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
@@ -654,7 +656,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _progress.value = _progress.value.copy(positionMs = target)
     }
 
-    fun nextTrack() {
+    override fun nextTrack() {
         mediaController?.seekToNext()
     }
 
@@ -662,7 +664,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         mediaController?.seekToPrevious()
     }
 
-    fun dismissPlayer() {
+    override fun dismissPlayer() {
         HotaudioLog.i("dismissPlayer")
         val controller = mediaController
         if (controller != null) {

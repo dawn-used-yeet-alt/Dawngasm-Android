@@ -15,12 +15,15 @@ captures/
 
 # Kotlin
 .kotlin/
+.konan/
 *.class
 
 # Generated hotaudio artifacts (built by the Gradle tasks / CI cache)
 app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
 app/src/main/java/net/hotaudio/extractor/.hotaudio-bindings-ref
 app/src/main/jniLibs/
+iosApp/Frameworks/
+iosApp/iosApp/Hotaudio.swift
 
 # Signing material — never commit these
 *.jks
@@ -28,6 +31,12 @@ app/src/main/jniLibs/
 release.jks
 keystore.properties
 signing.properties
+
+# Xcode
+DerivedData/
+*.xcuserstate
+**/xcuserdata/
+**/.swiftpm/
 
 # Logs and OS junk
 *.log
@@ -37,3 +46,4 @@ Thumbs.db
 # Local environment
 .env
 .env.*
+build-apks/

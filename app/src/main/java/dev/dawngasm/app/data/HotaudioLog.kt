@@ -1,6 +1,6 @@
 package dev.dawngasm.app.data
 
-import android.util.Log
+import dev.dawngasm.app.util.PlatformLog
 
 /**
  * One place for hotaudio diagnostics. Everything is tagged `Hotaudio` so a
@@ -11,18 +11,18 @@ object HotaudioLog {
     const val TAG = "Hotaudio"
 
     fun d(message: String) {
-        Log.d(TAG, message)
+        PlatformLog.d(TAG, message)
     }
 
     fun i(message: String) {
-        Log.i(TAG, message)
+        PlatformLog.i(TAG, message)
     }
 
     fun w(message: String, throwable: Throwable? = null) {
-        if (throwable != null) Log.w(TAG, message, throwable) else Log.w(TAG, message)
+        PlatformLog.w(TAG, message, throwable)
     }
 
     fun e(message: String, throwable: Throwable? = null) {
-        if (throwable != null) Log.e(TAG, message, throwable) else Log.e(TAG, message)
+        PlatformLog.e(TAG, message, throwable)
     }
 }

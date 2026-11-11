@@ -1,0 +1,300 @@
+name: iOS
+
+# iOS compilation is macOS-only. This workflow uses GitHub-hosted macOS runners so
+# the project can be built for iOS without a local Mac. Builds are unsigned:
+# simulator and generic-device compilation only. Device installation/TestFlight
+# needs signing secrets and is handled in a later phase.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_device:
+        description: "Also compile for physical iOS device (in addition to simulator; adds ~15m)"
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+      - kmp-ios-migration
+    paths:
+      - "composeApp/**"
+      - "shared/**"
+      - "iosApp/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "composeApp/**"
+      - "shared/**"
+      - "iosApp/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/ios.yml"
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Compile iOS (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'pull_request' ||
+      contains(github.event.head_commit.message, '[ios]') ||
+      contains(github.event.head_commit.message, '[run ios]')
+
+    env:
+      # Kotlin/Native downloads a large prebuilt toolchain; keep it in the
+      # default location so the cache below can persist it between runs.
+      KONAN_DATA_DIR: ${{ github.workspace }}/.konan
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          # PRs only read the shared Gradle cache; branch/main pushes populate it.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          cache-cleanup: on-success
+
+      - name: Read Kotlin version
+        id: kotlin
+        shell: bash
+        run: |
+          VERSION=$(grep -E '^kotlin[[:space:]]*=' gradle/libs.versions.toml | head -1 | cut -d'"' -f2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Kotlin/Native toolchain and platform libs
+        uses: actions/cache@v6
+        with:
+          path: .konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ steps.kotlin.outputs.version }}
+          restore-keys: |
+            konan-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ runner.temp }}/DerivedData-simulator
+            ${{ runner.temp }}/DerivedData-device
+          key: xcode-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            xcode-${{ runner.os }}-${{ github.ref_name }}-
+            xcode-${{ runner.os }}-
+
+      - name: Show toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+          java -version
+
+      # Build frameworks in one Gradle invocation. On feature branches / PRs,
+      # we default to simulatorArm64 to cut compile time in half (~15m vs ~32m).
+      # Physical device slice (iosArm64) is compiled when requested via workflow_dispatch,
+      # on main, or when explicitly requested.
+      - name: Build Kotlin/Native frameworks
+        run: |
+          TARGETS=":composeApp:linkDebugFrameworkIosSimulatorArm64"
+          if [ "${{ github.event.inputs.build_device }}" = "true" ] || [ "${{ github.ref }}" = "refs/heads/main" ] || [[ "${{ github.event.head_commit.message }}" == *"[package ios]"* ]] || [[ "${{ github.event.head_commit.message }}" == *"[ipa]"* ]]; then
+            TARGETS="$TARGETS :composeApp:linkDebugFrameworkIosArm64"
+          fi
+          echo "Compiling targets: $TARGETS"
+          ./gradlew --build-cache --stacktrace $TARGETS
+
+      - name: Resolve hotaudio extractor reference
+        shell: bash
+        run: |
+          HOTAUDIO_REF=$(grep -o 'val hotaudioExtractorRef = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2 || echo "v2.3.0")
+          echo "HOTAUDIO_REF=$HOTAUDIO_REF" >> "$GITHUB_ENV"
+          echo "Using hotaudio extractor ref: $HOTAUDIO_REF"
+
+      - name: Cache Hotaudio XCFramework and Swift bindings
+        id: cache-hotaudio
+        uses: actions/cache@v4
+        with:
+          path: |
+            iosApp/Frameworks/HotaudioFFI.xcframework
+            iosApp/iosApp/Hotaudio.swift
+          key: hotaudio-xcframework-${{ runner.os }}-v3-dual-${{ env.HOTAUDIO_REF }}
+
+      - name: Set up Rust toolchain for iOS
+        if: steps.cache-hotaudio.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
+
+      - name: Build HotaudioFFI XCFramework and Swift bindings
+        if: steps.cache-hotaudio.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          bash scripts/build-hotaudio-ios.sh "$HOTAUDIO_REF"
+
+      - name: Build Xcode app (simulator, unsigned)
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-simulator" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Compile Xcode app (generic device, unsigned)
+        id: compile_device
+        if: github.event.inputs.build_device == 'true' || github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '[package ios]') || contains(github.event.head_commit.message, '[ipa]')
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-device" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA (for TrollStore / AltStore / SideStore / Jailbreak)
+        if: steps.compile_device.outcome == 'success'
+        run: |
+          DEVICE_APP=$(find "$RUNNER_TEMP/DerivedData-device/Build/Products/Debug-iphoneos" -name "*.app" | head -n 1)
+          if [ -n "$DEVICE_APP" ]; then
+            echo "Packaging unsigned IPA from $DEVICE_APP..."
+            mkdir -p "$RUNNER_TEMP/ipa-package/Payload"
+            cp -r "$DEVICE_APP" "$RUNNER_TEMP/ipa-package/Payload/"
+            (cd "$RUNNER_TEMP/ipa-package" && zip -qr "$GITHUB_WORKSPACE/Dawngasm.ipa" Payload)
+            echo "Successfully created Dawngasm.ipa ($(du -h "$GITHUB_WORKSPACE/Dawngasm.ipa" | cut -f1))"
+          else
+            echo "No device .app found; skipping IPA packaging."
+          fi
+
+      - name: Upload unsigned IPA
+        if: steps.compile_device.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Dawngasm-iOS-unsigned-ipa
+          path: Dawngasm.ipa
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Capture iOS simulator screenshots
+        run: |
+          echo "Finding an available iPhone simulator..."
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "::warning::No available iPhone simulator found; skipping simulator screenshot capture."
+            exit 0
+          fi
+          echo "Selected simulator: $SIMULATOR_UDID"
+
+          # Clean up simulator on exit
+          trap 'xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true' EXIT
+
+          # Boot simulator headlessly and wait for SpringBoard
+          echo "Booting simulator $SIMULATOR_UDID..."
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+          # Locate built .app
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData-simulator/Build/Products/Debug-iphonesimulator" -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Built .app not found in $RUNNER_TEMP/DerivedData-simulator/Build/Products/Debug-iphonesimulator"
+            exit 1
+          fi
+          echo "Installing $APP_PATH on simulator $SIMULATOR_UDID..."
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+
+          # Launch the app and stream logs
+          echo "Launching dev.dawngasm.app..."
+          SCREENSHOT_DIR="$RUNNER_TEMP/screenshots-ios"
+          mkdir -p "$SCREENSHOT_DIR"
+          xcrun simctl launch --console-pty "$SIMULATOR_UDID" dev.dawngasm.app > "$SCREENSHOT_DIR/app_console.log" 2>&1 &
+          APP_BG_PID=$!
+
+          # Wait for Compose Multiplatform UI to render
+          echo "Waiting for app to initialize and render..."
+          for i in {1..20}; do
+            if xcrun simctl spawn "$SIMULATOR_UDID" launchctl list | grep -q "dev.dawngasm.app"; then
+              echo "App process detected running at tick $i"
+              break
+            fi
+            sleep 1
+          done
+          sleep 10
+
+          if ! xcrun simctl spawn "$SIMULATOR_UDID" launchctl list | grep -q "dev.dawngasm.app"; then
+            echo "::warning::App does not appear to be running in simulator!"
+            echo "--- App console output ---"
+            cat "$SCREENSHOT_DIR/app_console.log" || true
+            echo "--- Diagnostic reports ---"
+            ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || true
+            for report in ~/Library/Logs/DiagnosticReports/*; do
+              if [ -f "$report" ]; then
+                echo "Report: $report"
+                cat "$report" || true
+              fi
+            done
+          fi
+
+          # Capture screenshot
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/ios_home.png"
+          echo "Captured iOS screenshot at $SCREENSHOT_DIR/ios_home.png"
+
+          # Clean up app
+          kill $APP_BG_PID 2>/dev/null || true
+          xcrun simctl terminate "$SIMULATOR_UDID" dev.dawngasm.app 2>/dev/null || true
+
+      - name: Upload iOS screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-screenshots
+          path: ${{ runner.temp }}/screenshots-ios/*
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload simulator app
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-simulator-app
+          path: ${{ runner.temp }}/DerivedData-simulator/Build/Products/Debug-iphonesimulator/*.app
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Xcode logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-xcode-logs
+          path: |
+            ${{ runner.temp }}/DerivedData-simulator/Logs/**
+            ${{ runner.temp }}/DerivedData-device/Logs/**
+          if-no-files-found: ignore
+          retention-days: 7

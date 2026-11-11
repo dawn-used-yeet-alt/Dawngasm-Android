@@ -35,7 +35,7 @@ runs:
 
     - name: Cache debug keystore
       if: inputs.cache-debug-keystore == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.android
         key: android-debug-keystore-v1
@@ -62,7 +62,7 @@ runs:
         echo "Using hotaudio extractor ref: $HOTAUDIO_REF"
 
     - name: Cache generated hotaudio bindings and native libs
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: |
           app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
@@ -78,7 +78,7 @@ runs:
 
     - name: Cache Rust registry and tools
       if: inputs.setup-rust == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/bin

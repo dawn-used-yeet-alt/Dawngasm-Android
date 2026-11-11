@@ -35,6 +35,7 @@ import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlaybackQueue
 import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.Track
+import dev.dawngasm.app.model.TrackJson
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -43,7 +44,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
 /**
  * Background [MediaSessionService] managing audio playback via [ExoPlayer],
@@ -213,7 +213,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun broadcastError(track: Track, message: String) {
         val args = Bundle().apply {
-            putString(KEY_TRACK_JSON, track.toJson().toString())
+            putString(KEY_TRACK_JSON, TrackJson.toJson(track).toString())
             putString(KEY_ERROR_MESSAGE, message)
         }
         mediaSession?.broadcastCustomCommand(
@@ -239,7 +239,7 @@ class PlaybackService : MediaSessionService() {
 
     private fun buildMetadata(track: Track): MediaMetadata {
         val extras = Bundle().apply {
-            putString(KEY_TRACK_JSON, track.toJson().toString())
+            putString(KEY_TRACK_JSON, TrackJson.toJson(track))
         }
         return MediaMetadata.Builder()
             .setTitle(track.title)
@@ -347,9 +347,9 @@ class PlaybackService : MediaSessionService() {
                 COMMAND_PLAY_TRACK -> {
                     val trackJson = args.getString(KEY_TRACK_JSON)
                     if (trackJson != null) {
-                        val track = Track.fromJson(JSONObject(trackJson))
+                        val track = TrackJson.fromJson(trackJson)
                         val queueJson = args.getString(KEY_QUEUE_JSON)
-                        val queue = Track.listFromJson(queueJson).ifEmpty { listOf(track) }
+                        val queue = TrackJson.listFromJson(queueJson).ifEmpty { listOf(track) }
                         playTrack(track, queue)
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))

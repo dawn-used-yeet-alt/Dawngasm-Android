@@ -1,0 +1,38 @@
+name: Record Screenshots
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: record-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  record-screenshots:
+    name: Record Screenshots (Roborazzi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'false'
+          cache-read-only: 'false'
+
+      - name: Record Roborazzi reference screenshots
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:recordRoborazziDebug
+
+      - name: Upload reference screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: roborazzi-reference-screenshots
+          path: app/src/test/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
