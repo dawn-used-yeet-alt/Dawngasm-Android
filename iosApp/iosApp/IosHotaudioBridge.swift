@@ -5,31 +5,35 @@ public class IosHotaudioBridge: HotaudioBridge {
     public init() {}
 
     public func setClearance(cookie: String, userAgent: String) {
-        Hotaudio.setClearance(cookie: cookie, userAgent: userAgent)
+        iosApp.setClearance(cookie: cookie, userAgent: userAgent)
     }
 
     public func clearClearance() {
-        Hotaudio.clearClearance()
+        iosApp.clearClearance()
     }
 
     public func setIpFamily(family: String) {
-        Hotaudio.setIpFamily(family: family)
+        iosApp.setIpFamily(family: family)
     }
 
     public func downloadToFile(
         pageUrl: String,
         destinationPath: String,
         initialKeysJson: String?,
-        onProgress: @escaping (String, Int64, Int64) -> Void,
+        onProgress: @escaping (String, KotlinLong, KotlinLong) -> Void,
         isCancelled: @escaping () -> KotlinBoolean
     ) throws -> HotaudioDownloadResult {
-        class BridgeProgressListener: ProgressListener {
-            let callback: (String, Int64, Int64) -> Void
-            init(callback: @escaping (String, Int64, Int64) -> Void) {
+        final class BridgeProgressListener: @unchecked Sendable, ProgressListener {
+            let callback: (String, KotlinLong, KotlinLong) -> Void
+            init(callback: @escaping (String, KotlinLong, KotlinLong) -> Void) {
                 self.callback = callback
             }
             func onProgress(progress: Progress) {
-                callback(progress.phase, Int64(progress.loaded), Int64(progress.total))
+                callback(
+                    progress.phase,
+                    KotlinLong(value: Int64(progress.loaded)),
+                    KotlinLong(value: Int64(progress.total))
+                )
             }
         }
 
@@ -59,7 +63,7 @@ public class IosHotaudioBridge: HotaudioBridge {
             initialKeysJson: initialKeysJson
         )
 
-        let info = try Hotaudio.downloadToFile(
+        let info = try iosApp.downloadToFile(
             pageUrl: pageUrl,
             path: destinationPath,
             options: options,

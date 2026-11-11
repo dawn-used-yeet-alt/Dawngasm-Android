@@ -12,6 +12,7 @@
 		D4A100000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000013 /* Assets.xcassets */; };
 		D4A100000000000000000004 /* Hotaudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000015 /* Hotaudio.swift */; };
 		D4A100000000000000000005 /* IosHotaudioBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000016 /* IosHotaudioBridge.swift */; };
+		D4A100000000000000000006 /* HotaudioFFI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000017 /* HotaudioFFI.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +23,8 @@
 		D4A100000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D4A100000000000000000015 /* Hotaudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hotaudio.swift; sourceTree = "<group>"; };
 		D4A100000000000000000016 /* IosHotaudioBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosHotaudioBridge.swift; sourceTree = "<group>"; };
+		D4A100000000000000000017 /* HotaudioFFI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = HotaudioFFI.xcframework; path = Frameworks/HotaudioFFI.xcframework; sourceTree = "<group>"; };
+		D4A100000000000000000018 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -29,6 +32,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A100000000000000000006 /* HotaudioFFI.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -39,6 +43,7 @@
 			isa = PBXGroup;
 			children = (
 				D4A100000000000000000031 /* iosApp */,
+				D4A100000000000000000033 /* Frameworks */,
 				D4A100000000000000000032 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,10 +55,19 @@
 				D4A100000000000000000012 /* ContentView.swift */,
 				D4A100000000000000000015 /* Hotaudio.swift */,
 				D4A100000000000000000016 /* IosHotaudioBridge.swift */,
+				D4A100000000000000000018 /* iosApp-Bridging-Header.h */,
 				D4A100000000000000000013 /* Assets.xcassets */,
 				D4A100000000000000000014 /* Info.plist */,
 			);
 			path = iosApp;
+			sourceTree = "<group>";
+		};
+		D4A100000000000000000033 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D4A100000000000000000017 /* HotaudioFFI.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		D4A100000000000000000032 /* Products */ = {
@@ -296,6 +310,10 @@
 					"$(SRCROOT)/Frameworks",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/headers",
+				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -307,12 +325,15 @@
 					"$(inherited)",
 					"-framework",
 					ComposeApp,
-					"-framework",
-					HotaudioFFI,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.dawngasm.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/headers",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -335,6 +356,10 @@
 					"$(SRCROOT)/Frameworks",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/headers",
+				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -346,12 +371,15 @@
 					"$(inherited)",
 					"-framework",
 					ComposeApp,
-					"-framework",
-					HotaudioFFI,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.dawngasm.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/headers",
+				);
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/iosApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

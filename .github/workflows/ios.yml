@@ -133,8 +133,9 @@ jobs:
         with:
           path: |
             iosApp/Frameworks/HotaudioFFI.xcframework
+            iosApp/Frameworks/headers
             iosApp/iosApp/Hotaudio.swift
-          key: hotaudio-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ env.HOTAUDIO_REF }}-v1
+          key: hotaudio-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ env.HOTAUDIO_REF }}-v2
 
       - name: Set up Rust toolchain for iOS
         if: steps.cache-hotaudio.outputs.cache-hit != 'true'
@@ -190,6 +191,11 @@ jobs:
             -headers "$HEADERS_DIR" \
             $EXTRA_LIBS \
             -output "$DEST_DIR/HotaudioFFI.xcframework"
+
+          echo "Staging headers for bridging header and Swift include paths..."
+          mkdir -p "$DEST_DIR/headers"
+          cp "$HEADERS_DIR/HotaudioFFI.h" "$DEST_DIR/headers/HotaudioFFI.h"
+          cp "$HEADERS_DIR/module.modulemap" "$DEST_DIR/headers/module.modulemap"
 
           echo "Copying generated Hotaudio.swift to iosApp..."
           mkdir -p "$GITHUB_WORKSPACE/iosApp/iosApp"
