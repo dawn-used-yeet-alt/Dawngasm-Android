@@ -15,6 +15,7 @@ captures/
 
 # Kotlin
 .kotlin/
+.konan/
 *.class
 
 # Generated hotaudio artifacts (built by the Gradle tasks / CI cache)

@@ -64,10 +64,10 @@ jobs:
         with:
           # PRs only read the shared Gradle cache; branch/main pushes populate it.
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-          gradle-home-cache-cleanup: true
+          cache-cleanup: true
 
       - name: Cache Kotlin/Native toolchain and platform libs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -75,7 +75,7 @@ jobs:
             konan-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Cache Xcode DerivedData
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ runner.temp }}/DerivedData-simulator
