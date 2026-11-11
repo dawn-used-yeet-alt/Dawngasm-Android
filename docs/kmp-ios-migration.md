@@ -99,6 +99,31 @@ Limitations:
 - macOS runners are slower and more expensive than Ubuntu runners. The workflow is limited to relevant paths plus manual dispatch.
 - Phase 5 extends this workflow with Rust iOS targets, an XCFramework build, and hotaudio simulator smoke tests.
 
+## Screenshot and golden parity testing workflow
+
+Pixel-perfect parity between Android and iOS is guarded by automated screenshot workflows in GitHub Actions:
+
+### Android golden testing (Roborazzi + Robolectric)
+
+- **Test suite:** `app/src/test/java/dev/dawngasm/app/screenshot/AppScreenshotTest.kt` renders `sampleAppUiState()` in light theme under pinned Robolectric qualifiers (`w411dp-h891dp-xxhdpi`, SDK 36, NATIVE graphics mode).
+- **Screens covered:** Home, Library, Settings, Search Sheet, Mini Player.
+- **Recording baselines:**
+  - On demand or via CI, `./gradlew :app:recordRoborazziDebug` outputs baseline PNGs into `app/src/test/screenshots/`.
+  - The dedicated `.github/workflows/record-screenshots.yml` workflow (and `ci.yml` `record_screenshots` dispatch input) executes this task in CI and uploads `roborazzi-reference-screenshots` as workflow artifacts so they can be committed to the repository.
+- **Verification:**
+  - The `verify-screenshots` job in `.github/workflows/ci.yml` runs `./gradlew :app:verifyRoborazziDebug` on every push and pull request.
+  - If screens diverge from the committed baselines, the build fails and visual diff reports from `app/build/outputs/roborazzi/` and `app/build/reports/roborazzi/` are uploaded as `roborazzi-diff-report`.
+
+### iOS simulator screenshot capture (`xcrun simctl`)
+
+- **Workflow:** `.github/workflows/ios.yml` boots an available iPhone simulator headlessly after building the simulator `.app`.
+- **Execution:**
+  - Installs `iosApp.app` and launches `dev.dawngasm.app`.
+  - Waits 5 seconds for the Compose Multiplatform UI to render `sampleAppUiState()`.
+  - Captures the active screen using `xcrun simctl io "$SIMULATOR_UDID" screenshot "$RUNNER_TEMP/screenshots-ios/ios_home.png"`.
+  - Terminates the app and cleanly shuts down the simulator.
+- **Artifacts:** Uploads screenshots as `ios-screenshots` for visual inspection and cross-platform parity checks against the Android golden baselines.
+
 ## Phase 0 - Plan and guardrails
 
 - [x] Add this plan.
@@ -169,8 +194,9 @@ Tasks:
   - haptics, keyboard controller, IME actions -> CMP equivalents or expect/actual;
   - `BuildConfig.VERSION_NAME` -> `appVersion`.
 - [ ] Keep `MainActivity` thin: `setContent { DawngasmApp() }`.
-- [ ] Add Android screenshot/golden tests for the main screens.
-- [ ] Capture iOS simulator screenshots in CI and upload them as artifacts.
+- [x] Add Android screenshot/golden tests for the main screens (`AppScreenshotTest` with Roborazzi + Robolectric).
+- [x] Add CI jobs for reference screenshot capture (`recordRoborazziDebug`) and verification (`verifyRoborazziDebug`).
+- [x] Capture iOS simulator screenshots in CI and upload them as artifacts (`xcrun simctl`).
 - [ ] Compare against the Phase 0 baseline at the same device size and theme.
 
 Acceptance:

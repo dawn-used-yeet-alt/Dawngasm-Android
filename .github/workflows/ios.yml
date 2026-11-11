@@ -138,6 +138,57 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build
 
+      - name: Capture iOS simulator screenshots
+        run: |
+          echo "Finding an available iPhone simulator..."
+          SIMULATOR_UDID=$(xcrun simctl list devices available | grep -E "iPhone" | head -n 1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+          if [ -z "$SIMULATOR_UDID" ]; then
+            echo "::warning::No available iPhone simulator found; skipping simulator screenshot capture."
+            exit 0
+          fi
+          echo "Selected simulator: $SIMULATOR_UDID"
+
+          # Clean up simulator on exit
+          trap 'xcrun simctl shutdown "$SIMULATOR_UDID" 2>/dev/null || true' EXIT
+
+          # Boot simulator headlessly and wait for SpringBoard
+          echo "Booting simulator $SIMULATOR_UDID..."
+          xcrun simctl boot "$SIMULATOR_UDID"
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
+          # Locate built .app
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData-simulator/Build/Products/Debug-iphonesimulator" -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::Built .app not found in $RUNNER_TEMP/DerivedData-simulator/Build/Products/Debug-iphonesimulator"
+            exit 1
+          fi
+          echo "Installing $APP_PATH on simulator $SIMULATOR_UDID..."
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+
+          # Launch the app
+          echo "Launching dev.dawngasm.app..."
+          xcrun simctl launch "$SIMULATOR_UDID" dev.dawngasm.app
+
+          # Wait for Compose Multiplatform UI to render
+          sleep 5
+
+          # Capture screenshot
+          SCREENSHOT_DIR="$RUNNER_TEMP/screenshots-ios"
+          mkdir -p "$SCREENSHOT_DIR"
+          xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/ios_home.png"
+          echo "Captured iOS screenshot at $SCREENSHOT_DIR/ios_home.png"
+
+          # Clean up app
+          xcrun simctl terminate "$SIMULATOR_UDID" dev.dawngasm.app 2>/dev/null || true
+
+      - name: Upload iOS screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-screenshots
+          path: ${{ runner.temp }}/screenshots-ios/*.png
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload simulator app
         uses: actions/upload-artifact@v7
         with:

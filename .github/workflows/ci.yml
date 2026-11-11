@@ -7,6 +7,12 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
+    inputs:
+      record_screenshots:
+        description: 'Record Roborazzi screenshots instead of verifying'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -99,10 +105,72 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  verify-screenshots:
+    name: Verify Screenshots (Roborazzi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.pull_request.draft != true && github.event.inputs.record_screenshots != 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'false'
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Verify Roborazzi Screenshots
+        run: |
+          if [ ! -d "app/src/test/screenshots" ] || [ -z "$(find app/src/test/screenshots -name '*.png' 2>/dev/null)" ]; then
+            echo "::warning::No reference screenshots found in app/src/test/screenshots. Run the record task first to generate baselines."
+            exit 0
+          fi
+          ./gradlew --no-daemon --build-cache --stacktrace :app:verifyRoborazziDebug
+
+      - name: Upload Roborazzi Verification Artifacts on Failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: roborazzi-diff-report
+          path: |
+            app/build/outputs/roborazzi/**
+            app/build/reports/roborazzi/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  record-screenshots:
+    name: Record Screenshots (Roborazzi)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event.inputs.record_screenshots == 'true' || github.event.inputs.record_screenshots == true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up build environment
+        uses: ./.github/actions/setup-build-env
+        with:
+          setup-rust: 'false'
+          cache-read-only: 'false'
+
+      - name: Record Roborazzi reference screenshots
+        run: ./gradlew --no-daemon --build-cache --stacktrace :app:recordRoborazziDebug
+
+      - name: Upload reference screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: roborazzi-reference-screenshots
+          path: app/src/test/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
+
   build-release:
     name: Build Release APK
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: [lint, test-and-build-debug]
+    needs: [lint, test-and-build-debug, verify-screenshots]
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
