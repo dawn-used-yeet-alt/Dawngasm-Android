@@ -245,13 +245,13 @@ Goal: audiochan playback and downloads work on both platforms.
 
 Tasks:
 
-- [ ] Define `expect @Composable ClearanceWebView(url, requiredCookie, onCaptured, onClose)`.
-- [ ] Android actual: reuse the existing `AudiochanClearanceActivity` WebView, Turnstile injection, and cookie capture.
-- [ ] iOS actual: `WKWebView` + `WKHTTPCookieStore` + `WKScriptMessageHandler`; inject the same Turnstile widget and capture `__Secure-audiochan_playback` plus the User-Agent.
-- [ ] Persist clearance cookies in the platform settings store and inject them into the Ktor client (Darwin/OkHttp).
-- [ ] Move the audiochan resolver to shared: slug parsing, GET/POST fallback, play-intent, stream-url, JSON field extraction.
-- [ ] Make the Settings "audiochan check" entry work on both platforms and keep the connected state in sync.
-- [ ] Add tests for slug parsing, JSON extraction, and cookie merging.
+- [x] Define `expect @Composable ClearanceWebView(url, modifier, onLoadingChange, onVerified, onClearanceCaptured, captureSignal)`.
+- [x] Android actual: `ClearanceWebView.android.kt` reusing `android.webkit.WebView`, Turnstile injection, and cookie capture.
+- [x] iOS actual: `ClearanceWebView.ios.kt` using `WKWebView` + `WKHTTPCookieStore` + `WKScriptMessageHandler`; inject the same Turnstile widget and capture `__Secure-audiochan_playback` plus the User-Agent.
+- [x] Persist clearance cookies in the platform settings store (`AppPreferences`) and inject them into the Ktor client (Darwin/OkHttp via `Network.syncCookie`).
+- [x] Move the audiochan resolver to shared: slug parsing, GET/POST fallback, play-intent, stream-url, JSON field extraction in `CommonAudioResolver.kt`.
+- [x] Make the Settings "audiochan check" entry work on both platforms and keep the connected state in sync.
+- [x] Add tests for slug parsing, JSON extraction, and cookie merging (`CookieUtilsTest`, `AudioResolverTest`).
 
 Acceptance:
 
