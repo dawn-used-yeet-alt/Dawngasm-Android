@@ -219,7 +219,7 @@ Tasks:
   - `androidMain`: OkHttp engine, preserving current behavior;
   - `iosMain`: Darwin engine;
   - shared cookie-jar abstraction for the audiochan flow.
-- [ ] Replace `java.util.Locale` with Kotlin `lowercase()`/`uppercase()`.
+- [x] Replace `java.util.Locale` with Kotlin `lowercase()`/`uppercase()`.
 - [ ] Replace JVM-only helpers: `TimeUnit`, `Date`, `ConcurrentHashMap`, `AtomicLong`, `Thread.sleep`, `System.currentTimeMillis`, `System.getProperty`.
 - [ ] Replace `java.io.File` and `RandomAccessFile` with okio `FileSystem` / `Path`.
 - [ ] Settings: use `multiplatform-settings` or an `expect`/`actual` store; migrate the existing `dawngasm` SharedPreferences keys to iOS defaults.

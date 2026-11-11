@@ -5,7 +5,6 @@ import dev.dawngasm.app.model.AudioLinks
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,7 +119,7 @@ class DawngasmApi(
      */
     suspend fun tagSuggestions(prefix: String, limit: Int = TAG_LIMIT): List<TagSuggestion> =
         withContext(Dispatchers.IO) {
-            val key = "${prefix.trim().lowercase(Locale.ROOT)}|$limit"
+            val key = "${prefix.trim().lowercase()}|$limit"
             val now = System.currentTimeMillis()
             tagCache[key]?.takeIf { now - it.first < TAG_CACHE_TTL_MS }?.let {
                 return@withContext it.second
@@ -129,7 +128,7 @@ class DawngasmApi(
             val url = "$baseUrl/tags".toHttpUrl().newBuilder()
                 .addQueryParameter("limit", limit.toString())
                 .apply {
-                    val clean = prefix.trim().lowercase(Locale.ROOT)
+                    val clean = prefix.trim().lowercase()
                     if (clean.isNotEmpty()) addQueryParameter("prefix", clean)
                 }
                 .build()
