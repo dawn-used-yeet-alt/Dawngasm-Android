@@ -230,7 +230,7 @@ Tasks:
 - [x] Move `DawngasmApi`, `Network`, the soundgasm/whyp parts of `AudioResolver`, and `PlaybackQueue` to shared.
 - [x] Downloads: `FileSaver` expect/actual. Android keeps SAF/`DocumentFile`; iOS writes to app Documents and uses the document picker.
 - [x] Move model/parser tests to `commonTest` with `kotlin.test`; keep Android instrumentation tests where they still add value.
-- [ ] Run shared tests and the iOS build in CI.
+- [x] Run shared tests and the iOS build in CI.
 
 Acceptance:
 
