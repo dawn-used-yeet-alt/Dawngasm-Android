@@ -198,7 +198,7 @@ jobs:
           path: |
             iosApp/Frameworks/HotaudioFFI.xcframework
             iosApp/iosApp/Hotaudio.swift
-          key: hotaudio-xcframework-${{ runner.os }}-${{ env.HOTAUDIO_REF }}
+          key: hotaudio-xcframework-${{ runner.os }}-v3-dual-${{ env.HOTAUDIO_REF }}
 
       - name: Set up Rust toolchain for iOS
         if: steps.cache-hotaudio.outputs.cache-hit != 'true'

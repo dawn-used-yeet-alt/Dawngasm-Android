@@ -129,72 +129,24 @@ jobs:
 
       - name: Cache Hotaudio XCFramework and Swift bindings
         id: cache-hotaudio
-        uses: actions/cache@v6
+        uses: actions/cache@v4
         with:
           path: |
             iosApp/Frameworks/HotaudioFFI.xcframework
             iosApp/iosApp/Hotaudio.swift
-          key: hotaudio-xcframework-${{ runner.os }}-${{ runner.arch }}-${{ env.HOTAUDIO_REF }}-v2
+          key: hotaudio-xcframework-${{ runner.os }}-v3-dual-${{ env.HOTAUDIO_REF }}
 
       - name: Set up Rust toolchain for iOS
         if: steps.cache-hotaudio.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios-sim
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
 
       - name: Build HotaudioFFI XCFramework and Swift bindings
         if: steps.cache-hotaudio.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          set -euo pipefail
-          BUILD_DIR="$RUNNER_TEMP/hotaudio-build"
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
-
-          echo "Cloning hotaudio-extractor $HOTAUDIO_REF..."
-          git clone --depth 1 --branch "$HOTAUDIO_REF" \
-            https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git \
-            "$BUILD_DIR"
-
-          cd "$BUILD_DIR"
-
-          echo "Building bindings with scripts/build-bindings.sh..."
-          bash scripts/build-bindings.sh --release
-
-          echo "Building libhotaudio_ffi.a for aarch64-apple-ios-sim..."
-          cargo build --manifest-path bindings/Cargo.toml --locked --release -p hotaudio-ffi \
-            --target aarch64-apple-ios-sim
-
-          HEADERS_DIR="$RUNNER_TEMP/hotaudio-headers"
-          rm -rf "$HEADERS_DIR"
-          mkdir -p "$HEADERS_DIR"
-          cp bindings/out/HotaudioFFI.h "$HEADERS_DIR/HotaudioFFI.h"
-          cp bindings/out/HotaudioFFI.modulemap "$HEADERS_DIR/module.modulemap"
-
-          EXTRA_LIBS=""
-          if [ "${{ github.event.inputs.build_device }}" = "true" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            echo "Building libhotaudio_ffi.a for aarch64-apple-ios (device)..."
-            rustup target add aarch64-apple-ios || true
-            cargo build --manifest-path bindings/Cargo.toml --locked --release -p hotaudio-ffi \
-              --target aarch64-apple-ios
-            EXTRA_LIBS="-library bindings/target/aarch64-apple-ios/release/libhotaudio_ffi.a -headers $HEADERS_DIR"
-          fi
-
-          echo "Creating HotaudioFFI.xcframework..."
-          DEST_DIR="$GITHUB_WORKSPACE/iosApp/Frameworks"
-          mkdir -p "$DEST_DIR"
-          rm -rf "$DEST_DIR/HotaudioFFI.xcframework"
-
-          xcodebuild -create-xcframework \
-            -library bindings/target/aarch64-apple-ios-sim/release/libhotaudio_ffi.a \
-            -headers "$HEADERS_DIR" \
-            $EXTRA_LIBS \
-            -output "$DEST_DIR/HotaudioFFI.xcframework"
-
-          echo "Copying generated Hotaudio.swift to iosApp..."
-          mkdir -p "$GITHUB_WORKSPACE/iosApp/iosApp"
-          cp bindings/out/Hotaudio.swift "$GITHUB_WORKSPACE/iosApp/iosApp/Hotaudio.swift"
-          echo "Hotaudio XCFramework build complete."
+          bash scripts/build-hotaudio-ios.sh "$HOTAUDIO_REF"
 
       - name: Build Xcode app (simulator, unsigned)
         run: |
