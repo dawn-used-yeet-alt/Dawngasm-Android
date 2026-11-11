@@ -4,6 +4,7 @@ import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.PlaybackQueue
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.util.PlatformLog
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,6 +25,7 @@ import platform.AVFoundation.setActive
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSURL
 
+@OptIn(ExperimentalForeignApi::class)
 class IosAudioPlayer(
     private val resolver: AudioResolver = AudioResolver(),
 ) : AudioPlayer {
@@ -43,7 +45,8 @@ class IosAudioPlayer(
     }
 
     override fun play(track: Track, queue: List<Track>?) {
-        this.queue.load(track, queue ?: listOf(track))
+        val trackList = queue ?: listOf(track)
+        this.queue.setQueue(trackList, track)
         _state.update {
             it.copy(
                 currentTrack = track,
@@ -115,13 +118,18 @@ class IosAudioPlayer(
     }
 
     override fun nextTrack() {
-        val next = queue.next() ?: return
-        play(next, queue.currentQueue())
+        val next = queue.moveToNext() ?: return
+        play(next, queue.tracks)
     }
 
     override fun previousTrack() {
-        val prev = queue.previous() ?: return
-        play(prev, queue.currentQueue())
+        val (prev, seekToZero) = queue.getPreviousTrack(_state.value.positionMs)
+        if (seekToZero || prev == null) {
+            seekTo(0L)
+        } else {
+            queue.setQueue(queue.tracks, prev)
+            play(prev, queue.tracks)
+        }
     }
 
     override fun stop() {
