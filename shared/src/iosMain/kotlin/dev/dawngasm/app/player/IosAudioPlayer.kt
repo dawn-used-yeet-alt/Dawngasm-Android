@@ -59,7 +59,7 @@ class IosAudioPlayer(
                 durationMs = 0L,
             )
         }
-        IosAudioIntegration.observer?.onTrackChanged(track)
+        IosAudioIntegration.observer?.onTrackChanged(track.title, track.displayAuthor)
         IosAudioIntegration.observer?.onPlaybackStateChanged(
             isPlaying = false,
             positionMs = 0L,
@@ -193,6 +193,7 @@ class IosAudioPlayer(
                 positionMs = 0L,
             )
         }
+        IosAudioIntegration.observer?.onTrackChanged(null, null)
         IosAudioIntegration.observer?.onPlaybackStateChanged(
             isPlaying = false,
             positionMs = 0L,

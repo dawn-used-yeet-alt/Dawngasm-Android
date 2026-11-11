@@ -1,9 +1,7 @@
 package dev.dawngasm.app.player
 
-import dev.dawngasm.app.model.Track
-
 interface IosAudioPlayerObserver {
-    fun onTrackChanged(track: Track?)
+    fun onTrackChanged(title: String?, author: String?)
     fun onPlaybackStateChanged(isPlaying: Boolean, positionMs: Long, durationMs: Long)
 }
 

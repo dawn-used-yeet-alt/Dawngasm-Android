@@ -6,7 +6,8 @@ import ComposeApp
 final class IosNowPlayingManager: NSObject, IosAudioPlayerObserver, @unchecked Sendable {
     static let shared = IosNowPlayingManager()
 
-    private var currentTrack: Track?
+    private var currentTitle: String?
+    private var currentAuthor: String?
     private var isPlaying: Bool = false
     private var positionMs: Int64 = 0
     private var durationMs: Int64 = 0
@@ -112,10 +113,11 @@ final class IosNowPlayingManager: NSObject, IosAudioPlayerObserver, @unchecked S
 
     // MARK: - IosAudioPlayerObserver
 
-    func onTrackChanged(track: Track?) {
+    func onTrackChanged(title: String?, author: String?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.currentTrack = track
+            self.currentTitle = title
+            self.currentAuthor = author
             self.updateNowPlayingInfo()
         }
     }
@@ -131,17 +133,20 @@ final class IosNowPlayingManager: NSObject, IosAudioPlayerObserver, @unchecked S
     }
 
     private func updateNowPlayingInfo() {
-        guard let track = currentTrack else {
+        guard let title = currentTitle, !title.isEmpty else {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
         }
 
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: track.title,
-            MPMediaItemPropertyArtist: track.author,
+            MPMediaItemPropertyTitle: title,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: Double(positionMs) / 1000.0,
         ]
+
+        if let author = currentAuthor, !author.isEmpty {
+            info[MPMediaItemPropertyArtist] = author
+        }
 
         if durationMs > 0 {
             info[MPMediaItemPropertyPlaybackDuration] = Double(durationMs) / 1000.0
