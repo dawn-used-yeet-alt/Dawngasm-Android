@@ -180,27 +180,51 @@ jobs:
           echo "Installing $APP_PATH on simulator $SIMULATOR_UDID..."
           xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 
-          # Launch the app
+          # Launch the app and stream logs
           echo "Launching dev.dawngasm.app..."
-          xcrun simctl launch "$SIMULATOR_UDID" dev.dawngasm.app
-
-          # Wait for Compose Multiplatform UI to render
-          sleep 5
-
-          # Capture screenshot
           SCREENSHOT_DIR="$RUNNER_TEMP/screenshots-ios"
           mkdir -p "$SCREENSHOT_DIR"
+          xcrun simctl launch --console-pty "$SIMULATOR_UDID" dev.dawngasm.app > "$SCREENSHOT_DIR/app_console.log" 2>&1 &
+          APP_BG_PID=$!
+
+          # Wait for Compose Multiplatform UI to render
+          echo "Waiting for app to initialize and render..."
+          for i in {1..20}; do
+            if xcrun simctl spawn "$SIMULATOR_UDID" launchctl list | grep -q "dev.dawngasm.app"; then
+              echo "App process detected running at tick $i"
+              break
+            fi
+            sleep 1
+          done
+          sleep 10
+
+          if ! xcrun simctl spawn "$SIMULATOR_UDID" launchctl list | grep -q "dev.dawngasm.app"; then
+            echo "::warning::App does not appear to be running in simulator!"
+            echo "--- App console output ---"
+            cat "$SCREENSHOT_DIR/app_console.log" || true
+            echo "--- Diagnostic reports ---"
+            ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || true
+            for report in ~/Library/Logs/DiagnosticReports/*; do
+              if [ -f "$report" ]; then
+                echo "Report: $report"
+                cat "$report" || true
+              fi
+            done
+          fi
+
+          # Capture screenshot
           xcrun simctl io "$SIMULATOR_UDID" screenshot "$SCREENSHOT_DIR/ios_home.png"
           echo "Captured iOS screenshot at $SCREENSHOT_DIR/ios_home.png"
 
           # Clean up app
+          kill $APP_BG_PID 2>/dev/null || true
           xcrun simctl terminate "$SIMULATOR_UDID" dev.dawngasm.app 2>/dev/null || true
 
       - name: Upload iOS screenshots
         uses: actions/upload-artifact@v7
         with:
           name: ios-screenshots
-          path: ${{ runner.temp }}/screenshots-ios/*.png
+          path: ${{ runner.temp }}/screenshots-ios/*
           if-no-files-found: warn
           retention-days: 14
 
