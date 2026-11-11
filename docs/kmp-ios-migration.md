@@ -91,6 +91,8 @@ The workflow is tuned for repeated use:
 - both iOS frameworks are linked in one Gradle invocation before `xcodebuild`;
 - simulator and device builds disable the Swift index store, and PRs read the cache without writing it.
 
+On `macos-latest`, a cold run takes roughly 9-11 minutes; a warm run with the Kotlin/Native and DerivedData caches restored takes about 2 minutes.
+
 Limitations:
 
 - Unsigned builds cannot be installed on a physical device or uploaded to TestFlight. That needs an Apple Developer account and signing secrets in Phase 6.
