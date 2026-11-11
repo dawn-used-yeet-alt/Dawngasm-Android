@@ -64,7 +64,7 @@ jobs:
         with:
           # PRs only read the shared Gradle cache; branch/main pushes populate it.
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-          cache-cleanup: true
+          cache-cleanup: on-success
 
       - name: Cache Kotlin/Native toolchain and platform libs
         uses: actions/cache@v6
