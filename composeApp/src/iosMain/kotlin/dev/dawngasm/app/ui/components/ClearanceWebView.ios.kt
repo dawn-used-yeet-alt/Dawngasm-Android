@@ -41,17 +41,9 @@ private class IosNavigationDelegate(
     private val onLoading: (Boolean) -> Unit,
     private val onPageFinished: (WKWebView) -> Unit,
 ) : NSObject(), WKNavigationDelegateProtocol {
-    override fun webView(webView: WKWebView, didStartProvisionalNavigation: WKNavigation?) {
-        onLoading(true)
-    }
-
     override fun webView(webView: WKWebView, didFinishNavigation: WKNavigation?) {
         onLoading(false)
         onPageFinished(webView)
-    }
-
-    override fun webView(webView: WKWebView, didFailNavigation: WKNavigation?, withError: NSError) {
-        onLoading(false)
     }
 
     override fun webView(

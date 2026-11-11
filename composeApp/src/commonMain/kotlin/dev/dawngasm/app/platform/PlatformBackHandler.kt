@@ -8,4 +8,4 @@ import androidx.compose.runtime.Composable
  * Phase 6 gesture pass.
  */
 @Composable
-expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
+expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)

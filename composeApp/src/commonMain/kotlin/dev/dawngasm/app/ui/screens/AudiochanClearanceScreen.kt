@@ -42,7 +42,7 @@ fun AudiochanClearanceScreen(
     var verified by remember { mutableStateOf(false) }
     var captureSignal by remember { mutableStateOf(0) }
 
-    PlatformBackHandler {
+    PlatformBackHandler(enabled = true) {
         onClose()
     }
 
