@@ -116,4 +116,35 @@ class SearchSyntaxTest {
         assertEquals("rain", SearchSyntax.withoutToken("rain host:soundgasm", "host:"))
         assertEquals("rain", SearchSyntax.withoutToken("rain -host:whyp", "-host:"))
     }
+
+    @Test
+    fun parsesAuthorTokens() {
+        val parsed = SearchSyntax.parse("spit author:Ivy_WildeVA by:beegeewanders sort:new")
+        assertEquals("spit", parsed.text)
+        assertEquals("new", parsed.sort)
+        assertEquals(listOf("Ivy_WildeVA", "beegeewanders"), parsed.authors)
+    }
+
+    @Test
+    fun normalisesAuthorNames() {
+        assertEquals("Ivy_WildeVA", SearchSyntax.normalizeAuthor("u/Ivy_WildeVA"))
+        assertEquals("Ivy_WildeVA", SearchSyntax.normalizeAuthor("U/Ivy_WildeVA"))
+        assertEquals("beegeewanders", SearchSyntax.normalizeAuthor(" beegeewanders "))
+        assertNull(SearchSyntax.normalizeAuthor("   "))
+        assertNull(SearchSyntax.normalizeAuthor("u/"))
+    }
+
+    @Test
+    fun parsesAuthorList() {
+        assertEquals(
+            listOf("Ivy_WildeVA", "beegeewanders"),
+            SearchSyntax.parseAuthorList("u/Ivy_WildeVA, beegeewanders, "),
+        )
+    }
+
+    @Test
+    fun stripsAuthorTokensWithWithoutToken() {
+        assertEquals("spit", SearchSyntax.withoutToken("spit author:Ivy_WildeVA", "author:"))
+        assertEquals("spit", SearchSyntax.withoutToken("spit by:beegeewanders", "by:"))
+    }
 }

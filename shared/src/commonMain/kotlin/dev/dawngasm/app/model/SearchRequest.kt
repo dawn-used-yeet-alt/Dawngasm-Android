@@ -18,12 +18,14 @@ data class SearchRequest(
     val window: String = SearchSyntax.DEFAULT_WINDOW,
     val hosts: List<String> = emptyList(),
     val excludeHosts: List<String> = emptyList(),
+    val authors: List<String> = emptyList(),
 ) {
-    /** Human-readable query, e.g. `rain [f4m] -[m4f] host:soundgasm -host:whyp`. */
+    /** Human-readable query, e.g. `rain [f4m] -[m4f] author:Ivy_WildeVA host:soundgasm -host:whyp`. */
     fun summary(): String = buildList {
         text.trim().takeIf { it.isNotEmpty() }?.let(::add)
         includeTags.forEach { add("[$it]") }
         excludeTags.forEach { add("-[${it}]") }
+        authors.forEach { add("author:$it") }
         hosts.forEach { add("host:$it") }
         excludeHosts.forEach { add("-host:$it") }
     }.joinToString(" ")
@@ -36,5 +38,6 @@ data class SearchRequest(
             sort != SearchSyntax.DEFAULT_SORT ||
             window != SearchSyntax.DEFAULT_WINDOW ||
             hosts.isNotEmpty() ||
-            excludeHosts.isNotEmpty()
+            excludeHosts.isNotEmpty() ||
+            authors.isNotEmpty()
 }

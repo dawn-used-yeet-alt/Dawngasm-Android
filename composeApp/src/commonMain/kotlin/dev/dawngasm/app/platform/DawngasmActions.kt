@@ -1,5 +1,6 @@
 package dev.dawngasm.app.platform
 
+import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
@@ -33,6 +34,7 @@ interface DawngasmActions {
     fun refreshAudiochanClearance()
     fun clearAudiochanClearance()
     suspend fun suggestTags(prefix: String): List<TagSuggestion>
+    suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion>
 }
 
 /**

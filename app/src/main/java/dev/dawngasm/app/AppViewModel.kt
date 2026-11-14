@@ -28,6 +28,7 @@ import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.TrackDownloader
+import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
@@ -63,6 +64,7 @@ data class FeedSnapshot(
     val window: String,
     val hosts: List<String>,
     val excludeHosts: List<String>,
+    val authors: List<String> = emptyList(),
     val feedPage: Int,
     val hasMore: Boolean,
     val similarSourceTrack: Track? = null,
@@ -238,6 +240,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         val parsed = SearchSyntax.parse(request.text)
         val combinedHosts = (request.hosts + parsed.hosts).distinct()
         val combinedExcludeHosts = (request.excludeHosts + parsed.excludeHosts).distinct()
+        val combinedAuthors = (request.authors + parsed.authors).distinct()
         feedStack.clear()
         _uiState.update {
             it.copy(
@@ -248,6 +251,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                 window = parsed.window ?: request.window,
                 hosts = combinedHosts,
                 excludeHosts = combinedExcludeHosts,
+                authors = combinedAuthors,
                 similarSourceTrack = null,
                 canGoBack = false,
             )
@@ -271,6 +275,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                 window = SearchSyntax.DEFAULT_WINDOW,
                 hosts = emptyList(),
                 excludeHosts = emptyList(),
+                authors = emptyList(),
                 similarSourceTrack = null,
                 canGoBack = false,
             )
@@ -291,6 +296,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                 window = state.window,
                 hosts = state.hosts,
                 excludeHosts = state.excludeHosts,
+                authors = state.authors,
                 feedPage = feedPage,
                 hasMore = state.hasMore,
                 similarSourceTrack = state.similarSourceTrack,
@@ -367,6 +373,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                 window = previous.window,
                 hosts = previous.hosts,
                 excludeHosts = previous.excludeHosts,
+                authors = previous.authors,
                 hasMore = previous.hasMore,
                 similarSourceTrack = previous.similarSourceTrack,
                 isLoading = false,
@@ -386,6 +393,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     /** Tag autocomplete for the search sheet. Failures simply show no rows. */
     override suspend fun suggestTags(prefix: String): List<TagSuggestion> =
         runCatching { api.tagSuggestions(prefix) }.getOrDefault(emptyList())
+
+    /** Author autocomplete for the search sheet. Failures simply show no rows. */
+    override suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion> =
+        runCatching { api.authorSuggestions(prefix) }.getOrDefault(emptyList())
 
     override fun addBlockedTag(raw: String) {
         val tag = raw.trim().lowercase()
@@ -440,6 +451,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
                     page = page,
                     hosts = state.hosts,
                     excludeHosts = state.excludeHosts,
+                    authors = state.authors,
                 )
                 if (generation != feedGeneration.get()) return@launch
                 feedPage = result.page

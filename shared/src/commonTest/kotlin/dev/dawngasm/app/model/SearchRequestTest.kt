@@ -74,4 +74,15 @@ class SearchRequestTest {
         assertEquals("rain host:soundgasm host:whyp -host:audiochan", request.summary())
         assertTrue(request.hasFilters())
     }
+
+    @Test
+    fun summaryIncludesAuthors() {
+        val request = SearchRequest(
+            text = "spit",
+            authors = listOf("Ivy_WildeVA", "beegeewanders"),
+            hosts = listOf("soundgasm"),
+        )
+        assertEquals("spit author:Ivy_WildeVA author:beegeewanders host:soundgasm", request.summary())
+        assertTrue(request.hasFilters())
+    }
 }
