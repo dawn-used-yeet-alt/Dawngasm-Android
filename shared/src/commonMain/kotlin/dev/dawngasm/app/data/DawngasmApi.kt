@@ -2,6 +2,7 @@ package dev.dawngasm.app.data
 
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.AudioLinks
+import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
@@ -55,6 +56,8 @@ class DawngasmApi(
 ) {
     private val tagCache = mutableMapOf<String, Pair<Long, List<TagSuggestion>>>()
     private val tagCacheMutex = Mutex()
+    private val authorCache = mutableMapOf<String, Pair<Long, List<AuthorSuggestion>>>()
+    private val authorCacheMutex = Mutex()
 
     suspend fun search(
         request: SearchRequest,
@@ -70,6 +73,7 @@ class DawngasmApi(
         limit = limit,
         hosts = request.hosts,
         excludeHosts = request.excludeHosts,
+        authors = request.authors,
     )
 
     suspend fun search(
@@ -82,6 +86,7 @@ class DawngasmApi(
         limit: Int = PAGE_LIMIT,
         hosts: List<String> = emptyList(),
         excludeHosts: List<String> = emptyList(),
+        authors: List<String> = emptyList(),
     ): SearchPage {
         if (page > MAX_PAGE_INDEX) return SearchPage(emptyList(), false, page)
 
@@ -96,6 +101,7 @@ class DawngasmApi(
             limit = limit,
             hosts = hosts,
             excludeHosts = excludeHosts,
+            authors = authors,
         )
 
         val parsed = parseSearch(get(url))
@@ -156,6 +162,34 @@ class DawngasmApi(
             tagCache[key] = now to tags
         }
         return tags
+    }
+
+    /**
+     * Username autocomplete backed by `/authors?prefix=`. Results are cached briefly so
+     * typing and backspacing does not hammer the index.
+     */
+    suspend fun authorSuggestions(prefix: String, limit: Int = AUTHOR_LIMIT): List<AuthorSuggestion> {
+        val clean = prefix.trim().removePrefix("u/").removePrefix("U/").lowercase()
+        val key = "$clean|$limit"
+        val now = Clock.nowEpochMillis()
+        authorCacheMutex.withLock {
+            val cached = authorCache[key]
+            if (cached != null && now - cached.first < TAG_CACHE_TTL_MS) {
+                return cached.second
+            }
+        }
+
+        val url = URLBuilder(baseUrl).apply {
+            path("authors")
+            parameters.append("limit", limit.toString())
+            if (clean.isNotEmpty()) parameters.append("prefix", clean)
+        }.build()
+
+        val authors = parseAuthors(get(url))
+        authorCacheMutex.withLock {
+            authorCache[key] = now to authors
+        }
+        return authors
     }
 
     /**
@@ -442,6 +476,7 @@ class DawngasmApi(
         const val PAGE_LIMIT = 100
         const val MAX_PAGE_INDEX = 99
         const val TAG_LIMIT = 12
+        const val AUTHOR_LIMIT = 12
         private const val TAG_CACHE_TTL_MS = 10 * 60 * 1000L
 
         fun buildSearchUrl(
@@ -455,6 +490,7 @@ class DawngasmApi(
             limit: Int = PAGE_LIMIT,
             hosts: List<String> = emptyList(),
             excludeHosts: List<String> = emptyList(),
+            authors: List<String> = emptyList(),
         ): Url = URLBuilder(baseUrl).apply {
             path("search")
             parameters.append("limit", limit.toString())
@@ -470,6 +506,8 @@ class DawngasmApi(
             if (includedHosts.isNotEmpty()) parameters.append("hosts", includedHosts)
             val excludedHostsList = excludeHosts.filter { it.isNotBlank() }.joinToString(",")
             if (excludedHostsList.isNotEmpty()) parameters.append("excludeHosts", excludedHostsList)
+            val authorList = authors.filter { it.isNotBlank() }.joinToString(",")
+            if (authorList.isNotEmpty()) parameters.append("author", authorList)
         }.build()
 
         fun buildSimilarUrl(
@@ -491,6 +529,19 @@ class DawngasmApi(
                     val tag = runCatching { obj["tag"]?.jsonPrimitive?.content?.trim() }.getOrNull().orEmpty()
                     val count = runCatching { obj["count"]?.jsonPrimitive?.longOrNull }.getOrNull() ?: 0L
                     if (tag.isNotEmpty()) add(TagSuggestion(tag, count))
+                }
+            }
+        }
+
+        fun parseAuthors(body: String): List<AuthorSuggestion> {
+            val root = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return emptyList()
+            val array = root["authors"] as? JsonArray ?: return emptyList()
+            return buildList {
+                for (item in array) {
+                    val obj = item as? JsonObject ?: continue
+                    val author = runCatching { obj["author"]?.jsonPrimitive?.content?.trim() }.getOrNull().orEmpty()
+                    val count = runCatching { obj["count"]?.jsonPrimitive?.longOrNull }.getOrNull() ?: 0L
+                    if (author.isNotEmpty()) add(AuthorSuggestion(author, count))
                 }
             }
         }

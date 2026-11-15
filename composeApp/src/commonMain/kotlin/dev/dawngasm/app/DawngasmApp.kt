@@ -226,9 +226,12 @@ fun DawngasmApp(
             initialQuery = state.query,
             initialTags = state.includeTags,
             initialExcludeTags = state.excludeTags,
+            initialAuthors = state.authors,
+            initialHosts = state.hosts,
             defaultSort = state.sort,
             defaultWindow = state.window,
             tagLookup = actions::suggestTags,
+            authorLookup = actions::suggestAuthors,
             onDismiss = { searchOpen = false },
             onApply = { request ->
                 actions.applySearch(request)

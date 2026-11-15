@@ -1,6 +1,7 @@
 package dev.dawngasm.app.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -37,12 +38,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -68,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -75,9 +77,11 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
@@ -85,13 +89,19 @@ import dev.dawngasm.app.util.compactScore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
-private const val MAX_TAG_SUGGESTIONS = 6
-private const val TAG_LOOKUP_DEBOUNCE_MS = 180L
+private const val MAX_SUGGESTIONS = 6
+private const val LOOKUP_DEBOUNCE_MS = 180L
 
-private enum class ActiveTagField {
-    Include,
-    Exclude,
+private enum class ActiveSearchField {
+    IncludeTags,
+    ExcludeTags,
+    Author,
 }
+
+private data class SheetSuggestion(
+    val label: String,
+    val count: Long,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +112,9 @@ fun SearchSheet(
     defaultSort: String,
     defaultWindow: String,
     tagLookup: suspend (String) -> List<TagSuggestion>,
+    authorLookup: suspend (String) -> List<AuthorSuggestion> = { emptyList() },
+    initialAuthors: List<String> = emptyList(),
+    initialHosts: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onApply: (SearchRequest) -> Unit,
 ) {
@@ -110,19 +123,25 @@ fun SearchSheet(
     var text by rememberSaveable { mutableStateOf(initialQuery) }
     var includeCsv by rememberSaveable { mutableStateOf(initialTags.joinToString(",")) }
     var excludeCsv by rememberSaveable { mutableStateOf(initialExcludeTags.joinToString(",")) }
+    var authorCsv by rememberSaveable { mutableStateOf(initialAuthors.joinToString(",")) }
+    var selectedHosts by rememberSaveable { mutableStateOf(initialHosts) }
+
     var includeDraft by rememberSaveable { mutableStateOf("") }
     var excludeDraft by rememberSaveable { mutableStateOf("") }
+    var authorDraft by rememberSaveable { mutableStateOf("") }
+
     var sort by rememberSaveable { mutableStateOf(defaultSort) }
     var window by rememberSaveable { mutableStateOf(defaultWindow) }
 
-    var activeTagField by rememberSaveable { mutableStateOf<ActiveTagField?>(null) }
-    var suggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
+    var activeField by rememberSaveable { mutableStateOf<ActiveSearchField?>(null) }
+    var suggestions by remember { mutableStateOf(emptyList<SheetSuggestion>()) }
     var searching by remember { mutableStateOf(false) }
 
-    // Tags live in the query preview; each field is only a transient input, so
-    // a chosen tag clears the box and leaves it ready for the next one.
+    // Tags and authors live in the query preview; each field is only a transient input, so
+    // a chosen item clears the box and leaves it ready for the next one.
     val includeTags = remember(includeCsv) { SearchSyntax.parseTagList(includeCsv) }
     val excludeTags = remember(excludeCsv) { SearchSyntax.parseTagList(excludeCsv) }
+    val authors = remember(authorCsv) { SearchSyntax.parseAuthorList(authorCsv) }
 
     fun addTag(csv: String, raw: String): String {
         val tag = SearchSyntax.normalizeTag(raw) ?: return csv
@@ -131,57 +150,109 @@ fun SearchSheet(
             .joinToString(",")
     }
 
-    val activeDraft = when (activeTagField) {
-        ActiveTagField.Exclude -> excludeDraft
-        ActiveTagField.Include -> includeDraft
-        null -> ""
-    }
-    val activeSelected = when (activeTagField) {
-        ActiveTagField.Exclude -> excludeTags
-        ActiveTagField.Include -> includeTags
-        null -> emptyList()
+    fun addAuthor(csv: String, raw: String): String {
+        val author = SearchSyntax.normalizeAuthor(raw) ?: return csv
+        return (SearchSyntax.parseAuthorList(csv) + author)
+            .distinctBy { it.lowercase() }
+            .joinToString(",")
     }
 
-    LaunchedEffect(activeDraft, activeSelected) {
-        val prefix = SearchSyntax.normalizeTag(activeDraft)
-        if (prefix.isNullOrEmpty()) {
+    val activeDraft = when (activeField) {
+        ActiveSearchField.ExcludeTags -> excludeDraft
+        ActiveSearchField.IncludeTags -> includeDraft
+        ActiveSearchField.Author -> authorDraft
+        null -> ""
+    }
+
+    LaunchedEffect(activeField, activeDraft, includeTags, excludeTags, authors) {
+        val field = activeField
+        if (field == null) {
             suggestions = emptyList()
             searching = false
             return@LaunchedEffect
         }
-        searching = true
-        delay(TAG_LOOKUP_DEBOUNCE_MS)
-        val selectedLower = activeSelected.mapTo(HashSet()) { it.lowercase() }
-        val result = try {
-            tagLookup(prefix)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
+
+        when (field) {
+            ActiveSearchField.IncludeTags, ActiveSearchField.ExcludeTags -> {
+                val prefix = SearchSyntax.normalizeTag(activeDraft)
+                if (prefix.isNullOrEmpty()) {
+                    suggestions = emptyList()
+                    searching = false
+                    return@LaunchedEffect
+                }
+                searching = true
+                delay(LOOKUP_DEBOUNCE_MS)
+                val activeSelected = if (field == ActiveSearchField.IncludeTags) includeTags else excludeTags
+                val selectedLower = activeSelected.mapTo(HashSet()) { it.lowercase() }
+                val result = try {
+                    tagLookup(prefix)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                suggestions = result
+                    .filter { it.tag.lowercase() !in selectedLower }
+                    .distinctBy { it.tag.lowercase() }
+                    .take(MAX_SUGGESTIONS)
+                    .map { SheetSuggestion(it.tag, it.count) }
+                searching = false
+            }
+            ActiveSearchField.Author -> {
+                val prefix = SearchSyntax.normalizeAuthor(authorDraft)
+                if (prefix.isNullOrEmpty()) {
+                    suggestions = emptyList()
+                    searching = false
+                    return@LaunchedEffect
+                }
+                searching = true
+                delay(LOOKUP_DEBOUNCE_MS)
+                val selectedLower = authors.mapTo(HashSet()) { it.lowercase() }
+                val result = try {
+                    authorLookup(prefix)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                suggestions = result
+                    .filter { it.author.lowercase() !in selectedLower }
+                    .distinctBy { it.author.lowercase() }
+                    .take(MAX_SUGGESTIONS)
+                    .map { SheetSuggestion(it.author, it.count) }
+                searching = false
+            }
         }
-        suggestions = result
-            .filter { it.tag.lowercase() !in selectedLower }
-            .distinctBy { it.tag.lowercase() }
-            .take(MAX_TAG_SUGGESTIONS)
-        searching = false
     }
 
-    fun selectSuggestion(tag: String) {
-        when (activeTagField) {
-            ActiveTagField.Exclude -> {
-                excludeCsv = addTag(excludeCsv, tag)
+    fun selectSuggestion(item: String) {
+        when (activeField) {
+            ActiveSearchField.ExcludeTags -> {
+                excludeCsv = addTag(excludeCsv, item)
                 excludeDraft = ""
             }
-            ActiveTagField.Include -> {
-                includeCsv = addTag(includeCsv, tag)
+            ActiveSearchField.IncludeTags -> {
+                includeCsv = addTag(includeCsv, item)
                 includeDraft = ""
+            }
+            ActiveSearchField.Author -> {
+                authorCsv = addAuthor(authorCsv, item)
+                authorDraft = ""
             }
             null -> {}
         }
         suggestions = emptyList()
     }
 
-    val preview = SearchRequest(text, includeTags, excludeTags, sort, window).summary()
+    val preview = SearchRequest(
+        text = text,
+        includeTags = includeTags,
+        excludeTags = excludeTags,
+        sort = sort,
+        window = window,
+        hosts = selectedHosts,
+        authors = authors,
+    ).summary()
 
     fun apply() {
         keyboard?.hide()
@@ -192,6 +263,8 @@ fun SearchSheet(
                 excludeTags = excludeTags.distinct(),
                 sort = sort,
                 window = window,
+                hosts = selectedHosts,
+                authors = authors.distinct(),
             ),
         )
     }
@@ -245,11 +318,12 @@ fun SearchSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     suggestions.forEachIndexed { index, suggestion ->
-                        key(suggestion.tag) {
+                        key(suggestion.label) {
                             ExpressiveSuggestionPill(
-                                suggestion = suggestion,
+                                label = suggestion.label,
+                                count = suggestion.count,
                                 index = index,
-                                onClick = { selectSuggestion(suggestion.tag) },
+                                onClick = { selectSuggestion(suggestion.label) },
                             )
                         }
                     }
@@ -270,6 +344,7 @@ fun SearchSheet(
                         .onFocusChanged {
                             if (it.isFocused) {
                                 suggestions = emptyList()
+                                activeField = null
                             }
                         }
                         .testTag("search_field"),
@@ -302,17 +377,17 @@ fun SearchSheet(
                         draft = excludeDraft,
                         onDraftChange = {
                             excludeDraft = it
-                            activeTagField = ActiveTagField.Exclude
+                            activeField = ActiveSearchField.ExcludeTags
                         },
                         onFocus = {
-                            activeTagField = ActiveTagField.Exclude
+                            activeField = ActiveSearchField.ExcludeTags
                         },
                         onAddTag = {
                             excludeCsv = addTag(excludeCsv, it)
                             excludeDraft = ""
                             suggestions = emptyList()
                         },
-                        searching = searching && activeTagField == ActiveTagField.Exclude,
+                        searching = searching && activeField == ActiveSearchField.ExcludeTags,
                         modifier = Modifier.weight(1f),
                     )
                     DropdownField(
@@ -337,17 +412,17 @@ fun SearchSheet(
                         draft = includeDraft,
                         onDraftChange = {
                             includeDraft = it
-                            activeTagField = ActiveTagField.Include
+                            activeField = ActiveSearchField.IncludeTags
                         },
                         onFocus = {
-                            activeTagField = ActiveTagField.Include
+                            activeField = ActiveSearchField.IncludeTags
                         },
                         onAddTag = {
                             includeCsv = addTag(includeCsv, it)
                             includeDraft = ""
                             suggestions = emptyList()
                         },
-                        searching = searching && activeTagField == ActiveTagField.Include,
+                        searching = searching && activeField == ActiveSearchField.IncludeTags,
                         modifier = Modifier.weight(1f),
                     )
                     DropdownField(
@@ -356,6 +431,42 @@ fun SearchSheet(
                         icon = Icons.Rounded.Schedule,
                         options = WINDOW_OPTIONS,
                         onSelect = { window = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    TagPickerField(
+                        label = "Author",
+                        supportingText = "eg Ivy_WildeVA",
+                        draft = authorDraft,
+                        onDraftChange = {
+                            authorDraft = it
+                            activeField = ActiveSearchField.Author
+                        },
+                        onFocus = {
+                            activeField = ActiveSearchField.Author
+                        },
+                        onAddTag = {
+                            val parsed = SearchSyntax.parseAuthorList(it)
+                            if (parsed.isNotEmpty()) {
+                                authorCsv = (authors + parsed).distinctBy { a -> a.lowercase() }.joinToString(",")
+                            }
+                            authorDraft = ""
+                            suggestions = emptyList()
+                        },
+                        searching = searching && activeField == ActiveSearchField.Author,
+                        modifier = Modifier.weight(1f),
+                    )
+                    HostDropdownField(
+                        label = "Host",
+                        selectedHosts = selectedHosts,
+                        onHostsChange = { selectedHosts = it },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -379,7 +490,7 @@ fun SearchSheet(
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
@@ -395,7 +506,25 @@ fun SearchSheet(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
                             )
+                            IconButton(
+                                onClick = {
+                                    text = ""
+                                    includeCsv = ""
+                                    excludeCsv = ""
+                                    authorCsv = ""
+                                    selectedHosts = emptyList()
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Clear all filters",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -424,7 +553,8 @@ fun SearchSheet(
 
 @Composable
 private fun ExpressiveSuggestionPill(
-    suggestion: TagSuggestion,
+    label: String,
+    count: Long,
     index: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -487,7 +617,7 @@ private fun ExpressiveSuggestionPill(
                     onClick()
                 },
             )
-            .testTag("tag_suggestion_pill_${suggestion.tag}"),
+            .testTag("suggestion_pill_$label"),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
@@ -509,14 +639,14 @@ private fun ExpressiveSuggestionPill(
                 modifier = Modifier.size(15.dp),
             )
             Text(
-                text = suggestion.tag,
+                text = label,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
-            if (suggestion.count > 0) {
+            if (count > 0) {
                 Text(
-                    text = compactScore(suggestion.count),
+                    text = compactScore(count),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -570,12 +700,87 @@ private fun TagPickerField(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    if (SearchSyntax.normalizeTag(draft) != null) {
+                    if (draft.isNotBlank()) {
                         onAddTag(draft)
                     }
                 },
             ),
         )
+    }
+}
+
+@Composable
+private fun SelectionPillMenuItem(
+    title: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    groupPosition: CardGroupPosition = CardGroupPosition.Standalone,
+) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "pillMenuBg",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(180),
+        label = "pillMenuContent",
+    )
+
+    val shape = if (isSelected) {
+        ExpressiveMenuItemShapes.forPosition(groupPosition)
+    } else {
+        CircleShape
+    }
+
+    val (topPadding, bottomPadding) = when (groupPosition) {
+        CardGroupPosition.Top -> 2.dp to 1.5.dp
+        CardGroupPosition.Middle -> 1.5.dp to 1.5.dp
+        CardGroupPosition.Bottom -> 1.5.dp to 2.dp
+        CardGroupPosition.Standalone -> 2.dp to 2.dp
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+            .padding(top = topPadding, bottom = bottomPadding)
+            .clip(shape)
+            .clickable(
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .testTag("menu_item_$title"),
+        shape = shape,
+        color = backgroundColor,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -620,14 +825,125 @@ private fun DropdownField(
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
         ) {
             options.forEach { (key, title) ->
-                DropdownMenuItem(
-                    text = { Text(title) },
+                val isSelected = title == value || key == value
+                SelectionPillMenuItem(
+                    title = title,
+                    isSelected = isSelected,
                     onClick = {
                         expanded = false
                         onSelect(key)
                     },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HostDropdownField(
+    label: String,
+    selectedHosts: List<String>,
+    onHostsChange: (List<String>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val allHosts = listOf(
+        "soundgasm" to "Soundgasm",
+        "whyp" to "Whyp",
+        "audiochan" to "Audiochan",
+        "hotaudio" to "Hotaudio",
+    )
+
+    val normalizedSelected = remember(selectedHosts) {
+        selectedHosts.map { it.lowercase().trim() }.filter { it.isNotEmpty() }
+    }
+    val isAllSelected = normalizedSelected.isEmpty() || normalizedSelected.size >= allHosts.size
+
+    val displayValue = when {
+        isAllSelected -> "All hosts"
+        normalizedSelected.size == 1 -> allHosts.firstOrNull { it.first == normalizedSelected[0] }?.second ?: normalizedSelected[0]
+        normalizedSelected.size == 2 -> normalizedSelected.mapNotNull { h -> allHosts.firstOrNull { it.first == h }?.second ?: h }.joinToString(", ")
+        else -> "${normalizedSelected.size} hosts"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+            label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Rounded.GraphicEq,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
+                .testTag("host_filter_field"),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
+        ) {
+            val isSelectedList = remember(isAllSelected, normalizedSelected) {
+                buildList {
+                    add(isAllSelected)
+                    allHosts.forEach { (key, _) ->
+                        add(!isAllSelected && normalizedSelected.contains(key))
+                    }
+                }
+            }
+
+            SelectionPillMenuItem(
+                title = "All hosts",
+                isSelected = isAllSelected,
+                onClick = {
+                    onHostsChange(emptyList())
+                },
+                groupPosition = computeSelectionGroupPosition(0, isSelectedList),
+            )
+            allHosts.forEachIndexed { hostIndex, (key, title) ->
+                val itemIndex = hostIndex + 1
+                val isSelected = !isAllSelected && normalizedSelected.contains(key)
+                SelectionPillMenuItem(
+                    title = title,
+                    isSelected = isSelected,
+                    onClick = {
+                        val current = if (isAllSelected) emptyList() else normalizedSelected
+                        val next = if (current.contains(key)) {
+                            current - key
+                        } else {
+                            current + key
+                        }
+                        if (next.size >= allHosts.size || next.isEmpty()) {
+                            onHostsChange(emptyList())
+                        } else {
+                            onHostsChange(next)
+                        }
+                    },
+                    groupPosition = computeSelectionGroupPosition(itemIndex, isSelectedList),
                 )
             }
         }

@@ -22,6 +22,7 @@ data class AppUiState(
     val window: String = "week",
     val hosts: List<String> = emptyList(),
     val excludeHosts: List<String> = emptyList(),
+    val authors: List<String> = emptyList(),
     val blockedTags: List<String> = emptyList(),
     val downloadTreeUri: String? = null,
     val downloadFolderLabel: String = "App storage (Music/Dawngasm)",
@@ -44,6 +45,7 @@ data class AppUiState(
             window = window,
             hosts = hosts,
             excludeHosts = excludeHosts,
+            authors = authors,
         )
 
     val searchSummary: String

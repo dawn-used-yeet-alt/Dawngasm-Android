@@ -1,6 +1,7 @@
 package dev.dawngasm.app
 
 import dev.dawngasm.app.model.AudioHost
+import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
 import dev.dawngasm.app.model.Track
@@ -89,6 +90,7 @@ object NoOpDawngasmActions : DawngasmActions {
     override fun refreshAudiochanClearance() = Unit
     override fun clearAudiochanClearance() = Unit
     override suspend fun suggestTags(prefix: String): List<TagSuggestion> = emptyList()
+    override suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion> = emptyList()
 }
 
 /** No-op settings platform for the iOS demo shell until Phase 4. */

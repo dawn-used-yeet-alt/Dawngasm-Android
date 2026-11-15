@@ -31,6 +31,7 @@ object SearchSyntax {
         val window: String?,
         val hosts: List<String> = emptyList(),
         val excludeHosts: List<String> = emptyList(),
+        val authors: List<String> = emptyList(),
     )
 
     fun parse(input: String): Parsed {
@@ -39,6 +40,7 @@ object SearchSyntax {
         var window: String? = null
         val hosts = mutableListOf<String>()
         val excludeHosts = mutableListOf<String>()
+        val authors = mutableListOf<String>()
         val text = mutableListOf<String>()
 
         for (word in words) {
@@ -60,10 +62,18 @@ object SearchSyntax {
                     val value = lower.removePrefix("host:").trim()
                     if (value.isNotEmpty()) hosts += value else text += word
                 }
+                lower.startsWith("author:") -> {
+                    val value = normalizeAuthor(word.substring(7))
+                    if (value != null) authors += value else text += word
+                }
+                lower.startsWith("by:") -> {
+                    val value = normalizeAuthor(word.substring(3))
+                    if (value != null) authors += value else text += word
+                }
                 else -> text += word
             }
         }
-        return Parsed(text.joinToString(" "), sort, window, hosts, excludeHosts)
+        return Parsed(text.joinToString(" "), sort, window, hosts, excludeHosts, authors)
     }
 
     fun normalizeWindow(raw: String): String? {
@@ -116,6 +126,25 @@ object SearchSyntax {
             .mapNotNull { normalizeTag(it) }
             .distinctBy { it.lowercase() }
 
+    /**
+     * Cleans a typed or suggested username: `u/Ivy_WildeVA` becomes `Ivy_WildeVA`.
+     */
+    fun normalizeAuthor(raw: String): String? {
+        var clean = raw.trim()
+        if (clean.startsWith("u/", ignoreCase = true)) {
+            clean = clean.substring(2).trim()
+        }
+        return clean.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * Turns a comma-separated author value into clean usernames.
+     */
+    fun parseAuthorList(raw: String): List<String> =
+        raw.split(',')
+            .mapNotNull { normalizeAuthor(it) }
+            .distinctBy { it.lowercase() }
+
     fun activeToken(input: String): String {
         if (input.isEmpty() || input.last().isWhitespace()) return ""
         val trimmed = input.trimEnd()
@@ -150,6 +179,8 @@ object SearchSyntax {
                 "top:" -> normalizeWindow(lower.removePrefix(prefix)) != null
                 "host:" -> lower.removePrefix(prefix).isNotBlank()
                 "-host:" -> lower.removePrefix(prefix).isNotBlank()
+                "author:" -> lower.removePrefix(prefix).isNotBlank()
+                "by:" -> lower.removePrefix(prefix).isNotBlank()
                 else -> false
             }
         }.joinToString(" ")

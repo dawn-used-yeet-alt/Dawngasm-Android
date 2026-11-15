@@ -62,6 +62,25 @@ class DawngasmApiTest {
     }
 
     @Test
+    fun parsesAuthorAutocompleteRows() {
+        val body = """
+            {"authors":[{"author":"Ivy_WildeVA","count":209},{"author":"beegeewanders","count":120}]}
+        """.trimIndent()
+        val authors = DawngasmApi.parseAuthors(body)
+        assertEquals(2, authors.size)
+        assertEquals("Ivy_WildeVA", authors[0].author)
+        assertEquals(209L, authors[0].count)
+        assertEquals("beegeewanders", authors[1].author)
+        assertEquals(120L, authors[1].count)
+    }
+
+    @Test
+    fun ignoresBrokenAuthorResponses() {
+        assertTrue(DawngasmApi.parseAuthors("not json").isEmpty())
+        assertTrue(DawngasmApi.parseAuthors("""{"authors":[]}""").isEmpty())
+    }
+
+    @Test
     fun parsesSearchResponseWithAudioColumn() {
         val body = """
             {
@@ -121,6 +140,15 @@ class DawngasmApiTest {
         )
         assertEquals("soundgasm,whyp", url.parameters["hosts"])
         assertEquals("audiochan", url.parameters["excludeHosts"])
+    }
+
+    @Test
+    fun buildSearchUrlIncludesAuthors() {
+        val url = DawngasmApi.buildSearchUrl(
+            baseUrl = "https://example.com",
+            authors = listOf("Ivy_WildeVA", "beegeewanders"),
+        )
+        assertEquals("Ivy_WildeVA,beegeewanders", url.parameters["author"])
     }
 
     @Test
