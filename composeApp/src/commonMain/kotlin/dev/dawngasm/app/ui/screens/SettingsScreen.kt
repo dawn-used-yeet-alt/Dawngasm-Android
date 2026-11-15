@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Radio
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -47,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -83,6 +85,8 @@ fun SettingsScreen(
     tagLookup: suspend (String) -> List<TagSuggestion>,
     hotaudioConnected: Boolean,
     audiochanConnected: Boolean,
+    mediaSessionServiceEnabled: Boolean = true,
+    onToggleMediaSessionService: (Boolean) -> Unit = {},
     onClearHotaudioClearance: () -> Unit,
     onClearAudiochanClearance: () -> Unit,
     onAddBlockedTag: (String) -> Unit,
@@ -383,6 +387,35 @@ fun SettingsScreen(
                     Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
                     Spacer(modifier = Modifier.size(8.dp))
                     Text("Remove downloaded entries")
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                icon = Icons.Outlined.Radio,
+                title = "Media session service",
+                subtitle = "Keep audio playing in the background with lock screen controls and system notifications.",
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (mediaSessionServiceEnabled) "Enabled" else "Disabled",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (mediaSessionServiceEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Switch(
+                        checked = mediaSessionServiceEnabled,
+                        onCheckedChange = onToggleMediaSessionService,
+                        modifier = Modifier.testTag("media_session_service_switch"),
+                    )
                 }
             }
         }

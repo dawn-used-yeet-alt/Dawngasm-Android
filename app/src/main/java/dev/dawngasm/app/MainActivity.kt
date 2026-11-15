@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 
@@ -37,6 +38,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNotificationPermissionIfNeeded() {
+        val prefs = AppPreferences(this)
+        if (!prefs.mediaSessionServiceEnabled()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 this,

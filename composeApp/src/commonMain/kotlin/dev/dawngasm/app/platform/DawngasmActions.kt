@@ -33,6 +33,7 @@ interface DawngasmActions {
     fun clearHotaudioClearance()
     fun refreshAudiochanClearance()
     fun clearAudiochanClearance()
+    fun toggleMediaSessionService(enabled: Boolean)
     suspend fun suggestTags(prefix: String): List<TagSuggestion>
     suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion>
 }
