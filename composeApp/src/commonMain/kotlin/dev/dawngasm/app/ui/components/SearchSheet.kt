@@ -42,9 +42,7 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -70,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -77,6 +76,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -708,6 +708,66 @@ private fun TagPickerField(
     }
 }
 
+@Composable
+private fun SelectionPillMenuItem(
+    title: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color.Transparent
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "pillMenuBg",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        animationSpec = tween(180),
+        label = "pillMenuContent",
+    )
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .clip(CircleShape)
+            .clickable(
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .testTag("menu_item_$title"),
+        shape = CircleShape,
+        color = backgroundColor,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DropdownField(
@@ -749,10 +809,15 @@ private fun DropdownField(
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
         ) {
             options.forEach { (key, title) ->
-                DropdownMenuItem(
-                    text = { Text(title) },
+                val isSelected = title == value || key == value
+                SelectionPillMenuItem(
+                    title = title,
+                    isSelected = isSelected,
                     onClick = {
                         expanded = false
                         onSelect(key)
@@ -822,30 +887,22 @@ private fun HostDropdownField(
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
         ) {
-            DropdownMenuItem(
-                text = { Text("All hosts") },
-                leadingIcon = {
-                    Checkbox(
-                        checked = isAllSelected,
-                        onCheckedChange = null,
-                    )
-                },
+            SelectionPillMenuItem(
+                title = "All hosts",
+                isSelected = isAllSelected,
                 onClick = {
-                    expanded = false
                     onHostsChange(emptyList())
                 },
             )
             allHosts.forEach { (key, title) ->
-                val checked = !isAllSelected && normalizedSelected.contains(key)
-                DropdownMenuItem(
-                    text = { Text(title) },
-                    leadingIcon = {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = null,
-                        )
-                    },
+                val isSelected = !isAllSelected && normalizedSelected.contains(key)
+                SelectionPillMenuItem(
+                    title = title,
+                    isSelected = isSelected,
                     onClick = {
                         val current = if (isAllSelected) emptyList() else normalizedSelected
                         val next = if (current.contains(key)) {
