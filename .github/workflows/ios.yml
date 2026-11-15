@@ -48,10 +48,17 @@ jobs:
     timeout-minutes: 45
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/main' ||
-      github.event_name == 'pull_request' ||
-      contains(github.event.head_commit.message, '[ios]') ||
-      contains(github.event.head_commit.message, '[run ios]')
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/kmp-ios-migration')) ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft != true && (
+          contains(github.event.pull_request.labels.*.name, 'run-ios') ||
+          contains(github.event.pull_request.labels.*.name, 'ios') ||
+          contains(github.event.pull_request.title, '[ios]') ||
+          contains(github.event.head_commit.message, '[ios]') ||
+          contains(github.event.head_commit.message, '[run ios]')
+        )
+      )
 
     env:
       # Kotlin/Native downloads a large prebuilt toolchain; keep it in the

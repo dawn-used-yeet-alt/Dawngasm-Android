@@ -8,6 +8,11 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
+      run_screenshots:
+        description: 'Run Roborazzi screenshot verification'
+        required: false
+        type: boolean
+        default: true
       record_screenshots:
         description: 'Record Roborazzi screenshots instead of verifying'
         required: false
@@ -111,7 +116,21 @@ jobs:
     name: Verify Screenshots (Roborazzi)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event.pull_request.draft != true && github.event.inputs.record_screenshots != 'true'
+    if: >
+      github.event.inputs.record_screenshots != 'true' && (
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.run_screenshots == 'true' || github.event.inputs.run_screenshots == true || github.event.inputs.run_screenshots == '')) ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.draft != true && (
+            contains(github.event.pull_request.labels.*.name, 'run-screenshots') ||
+            contains(github.event.pull_request.labels.*.name, 'screenshots') ||
+            contains(github.event.pull_request.title, '[screenshots]') ||
+            contains(github.event.head_commit.message, '[screenshots]') ||
+            contains(github.event.head_commit.message, '[run screenshots]')
+          )
+        )
+      )
 
     steps:
       - name: Checkout repository
