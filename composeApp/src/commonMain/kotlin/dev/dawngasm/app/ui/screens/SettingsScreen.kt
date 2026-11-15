@@ -193,7 +193,9 @@ fun SettingsScreen(
                                                     modifier = Modifier.size(16.dp),
                                                 )
                                             },
-                                            modifier = Modifier.testTag("blocked_tags_expand"),
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .testTag("blocked_tags_expand"),
                                         )
                                     },
                                     collapseIndicator = {
@@ -207,7 +209,9 @@ fun SettingsScreen(
                                                     modifier = Modifier.size(16.dp),
                                                 )
                                             },
-                                            modifier = Modifier.testTag("blocked_tags_collapse"),
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .testTag("blocked_tags_collapse"),
                                         )
                                     },
                                 ),
