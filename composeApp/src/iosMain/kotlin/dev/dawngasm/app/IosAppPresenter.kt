@@ -146,6 +146,7 @@ class IosAppPresenter(
             downloadFolderLabel = fileSaver.folderLabel(null),
             hotaudioConnected = hasHotaudioClearance || sample.hotaudioConnected,
             audiochanConnected = hasAudiochanClearance || sample.audiochanConnected,
+            mediaSessionServiceEnabled = prefs.mediaSessionServiceEnabled(),
             player = sample.player,
         )
     }
@@ -561,6 +562,11 @@ class IosAppPresenter(
     override fun clearAudiochanClearance() {
         prefs.clearAudiochanClearance()
         _uiState.update { it.copy(audiochanConnected = false) }
+    }
+
+    override fun toggleMediaSessionService(enabled: Boolean) {
+        prefs.saveMediaSessionServiceEnabled(enabled)
+        _uiState.update { it.copy(mediaSessionServiceEnabled = enabled) }
     }
 
     // --- playback -----------------------------------------------------------

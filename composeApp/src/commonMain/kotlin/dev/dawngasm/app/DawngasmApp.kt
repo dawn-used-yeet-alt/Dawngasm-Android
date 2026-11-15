@@ -181,6 +181,8 @@ fun DawngasmApp(
                         tagLookup = actions::suggestTags,
                         hotaudioConnected = state.hotaudioConnected,
                         audiochanConnected = state.audiochanConnected,
+                        mediaSessionServiceEnabled = state.mediaSessionServiceEnabled,
+                        onToggleMediaSessionService = actions::toggleMediaSessionService,
                         onClearHotaudioClearance = actions::clearHotaudioClearance,
                         onClearAudiochanClearance = actions::clearAudiochanClearance,
                         onAddBlockedTag = actions::addBlockedTag,

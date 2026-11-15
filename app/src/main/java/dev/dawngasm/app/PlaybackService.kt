@@ -27,6 +27,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.HeaderDataSourceFactory
 import dev.dawngasm.app.data.HotaudioLog
@@ -64,6 +65,7 @@ class PlaybackService : MediaSessionService() {
     private val headerFactory by lazy { HeaderDataSourceFactory(this, Network.client) }
     private val resolver by lazy { AudioResolver(this) }
     private val downloader by lazy { TrackDownloader(this) }
+    private val prefs by lazy { AppPreferences(this) }
 
     override fun onCreate() {
         super.onCreate()
@@ -142,6 +144,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        if (!prefs.mediaSessionServiceEnabled()) {
+            return null
+        }
         return mediaSession
     }
 

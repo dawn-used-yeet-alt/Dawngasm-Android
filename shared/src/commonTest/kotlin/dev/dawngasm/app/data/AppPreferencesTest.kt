@@ -5,6 +5,7 @@ import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -75,5 +76,18 @@ class AppPreferencesTest {
 
         prefs.saveDownloads(listOf(t1))
         assertEquals(listOf(t1), prefs.downloads())
+    }
+
+    @Test
+    fun testMediaSessionServicePersistence() {
+        val settings = MapSettings()
+        val prefs = AppPreferences(settings)
+        assertTrue(prefs.mediaSessionServiceEnabled())
+
+        prefs.saveMediaSessionServiceEnabled(false)
+        assertFalse(prefs.mediaSessionServiceEnabled())
+
+        prefs.saveMediaSessionServiceEnabled(true)
+        assertTrue(prefs.mediaSessionServiceEnabled())
     }
 }

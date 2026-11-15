@@ -107,6 +107,12 @@ class AppPreferences(private val settings: Settings) {
         settings.putString(KEY_DOWNLOADS, TrackJson.listToJson(tracks))
     }
 
+    fun mediaSessionServiceEnabled(): Boolean = settings.getBoolean(KEY_MEDIA_SESSION_SERVICE, true)
+
+    fun saveMediaSessionServiceEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_MEDIA_SESSION_SERVICE, enabled)
+    }
+
     private fun readTags(key: String): List<String> {
         val raw = settings.getStringOrNull(key) ?: return emptyList()
         return raw.split('\u0001').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -127,5 +133,6 @@ class AppPreferences(private val settings: Settings) {
         const val KEY_SAVED = "saved_tracks"
         const val KEY_HISTORY = "history_tracks"
         const val KEY_DOWNLOADS = "downloaded_tracks"
+        const val KEY_MEDIA_SESSION_SERVICE = "media_session_service"
     }
 }

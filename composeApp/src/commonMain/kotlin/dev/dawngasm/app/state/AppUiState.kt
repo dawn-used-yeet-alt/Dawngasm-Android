@@ -28,6 +28,7 @@ data class AppUiState(
     val downloadFolderLabel: String = "App storage (Music/Dawngasm)",
     val hotaudioConnected: Boolean = false,
     val audiochanConnected: Boolean = false,
+    val mediaSessionServiceEnabled: Boolean = true,
     val similarSourceTrack: Track? = null,
     val canGoBack: Boolean = false,
     val pendingScrollRestore: Pair<Int, Int>? = null,

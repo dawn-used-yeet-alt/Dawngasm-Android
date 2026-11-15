@@ -89,6 +89,7 @@ object NoOpDawngasmActions : DawngasmActions {
     override fun clearHotaudioClearance() = Unit
     override fun refreshAudiochanClearance() = Unit
     override fun clearAudiochanClearance() = Unit
+    override fun toggleMediaSessionService(enabled: Boolean) = Unit
     override suspend fun suggestTags(prefix: String): List<TagSuggestion> = emptyList()
     override suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion> = emptyList()
 }
