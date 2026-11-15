@@ -960,7 +960,7 @@ val HOST_OPTIONS = listOf(
     "hotaudio" to "Hotaudio",
 )
 
-internal fun formatHostFilterDisplay(
+fun formatHostFilterDisplay(
     selectedHosts: List<String>,
     allHosts: List<Pair<String, String>> = HOST_OPTIONS,
 ): String {
