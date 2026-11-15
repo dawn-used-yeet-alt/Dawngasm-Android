@@ -169,10 +169,9 @@ fun SettingsScreen(
                             overflow = FlowRowOverflow.expandOrCollapseIndicator(
                                 minRowsToShowCollapse = 4,
                                 expandIndicator = {
-                                    val remaining = totalItemCount - shownItemCount
                                     AssistChip(
                                         onClick = { blockedTagsExpanded = true },
-                                        label = { Text(if (remaining > 0) "+$remaining more" else "Show more") },
+                                        label = { Text("Show more") },
                                         trailingIcon = {
                                             Icon(
                                                 imageVector = Icons.Outlined.ExpandMore,
