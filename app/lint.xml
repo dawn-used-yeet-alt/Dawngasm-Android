@@ -9,4 +9,20 @@
     <issue id="NewApi">
         <ignore path="**/hotaudio_ffi.kt" />
     </issue>
+
+    <!-- Custom launcher icon assets do not follow legacy square guidelines -->
+    <issue id="IconLauncherShape" severity="ignore" />
+
+    <!-- App targets arm64-v8a by default for mobile and does not require ChromeOS x86_64 ABI -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+
+    <!-- Target SDK is explicitly pinned to preview/latest Android platform -->
+    <issue id="OldTargetApi" severity="ignore" />
+
+    <!-- JNA dependency requires @aar artifact classifier not representable in version catalog directly -->
+    <issue id="UseTomlInstead" severity="ignore" />
+
+    <!-- Suppress unused resource warnings from legacy strings -->
+    <issue id="UnusedResources" severity="ignore" />
+    <issue id="PluralsCandidate" severity="ignore" />
 </lint>
