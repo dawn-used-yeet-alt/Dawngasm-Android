@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowOverflow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,10 +26,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -87,6 +91,7 @@ fun SettingsScreen(
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
+    var blockedTagsExpanded by rememberSaveable { mutableStateOf(false) }
 
     fun addBlockedTag(raw: String) {
         val tag = SearchSyntax.normalizeTag(raw) ?: return
@@ -160,6 +165,39 @@ fun SettingsScreen(
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
+                            maxLines = if (blockedTagsExpanded) Int.MAX_VALUE else 4,
+                            overflow = FlowRowOverflow.expandOrCollapseIndicator(
+                                minRowsToShowCollapse = 4,
+                                expandIndicator = {
+                                    val remaining = totalItemCount - shownItemCount
+                                    AssistChip(
+                                        onClick = { blockedTagsExpanded = true },
+                                        label = { Text(if (remaining > 0) "+$remaining more" else "Show more") },
+                                        trailingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.ExpandMore,
+                                                contentDescription = "Show more blocked tags",
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("blocked_tags_expand"),
+                                    )
+                                },
+                                collapseIndicator = {
+                                    AssistChip(
+                                        onClick = { blockedTagsExpanded = false },
+                                        label = { Text("Show less") },
+                                        trailingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.ExpandLess,
+                                                contentDescription = "Show fewer blocked tags",
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        },
+                                        modifier = Modifier.testTag("blocked_tags_collapse"),
+                                    )
+                                },
+                            ),
                         ) {
                             blockedTags.forEach { tag ->
                                 InputChip(
