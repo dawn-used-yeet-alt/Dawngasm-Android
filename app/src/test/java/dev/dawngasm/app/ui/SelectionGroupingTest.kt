@@ -2,6 +2,7 @@ package dev.dawngasm.app.ui
 
 import dev.dawngasm.app.ui.components.CardGroupPosition
 import dev.dawngasm.app.ui.components.computeSelectionGroupPosition
+import dev.dawngasm.app.ui.components.formatHostFilterDisplay
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -55,5 +56,26 @@ class SelectionGroupingTest {
         assertEquals(CardGroupPosition.Middle, computeSelectionGroupPosition(1, list))
         assertEquals(CardGroupPosition.Middle, computeSelectionGroupPosition(2, list))
         assertEquals(CardGroupPosition.Bottom, computeSelectionGroupPosition(3, list))
+    }
+
+    @Test
+    fun hostDisplayEmptyOrAllReturnsAllHosts() {
+        assertEquals("All hosts", formatHostFilterDisplay(emptyList()))
+        assertEquals("All hosts", formatHostFilterDisplay(listOf("soundgasm", "whyp", "audiochan", "hotaudio")))
+    }
+
+    @Test
+    fun hostDisplaySingleReturnsHostName() {
+        assertEquals("Soundgasm", formatHostFilterDisplay(listOf("soundgasm")))
+        assertEquals("Whyp", formatHostFilterDisplay(listOf("whyp")))
+        assertEquals("Audiochan", formatHostFilterDisplay(listOf("audiochan")))
+        assertEquals("Hotaudio", formatHostFilterDisplay(listOf("hotaudio")))
+    }
+
+    @Test
+    fun hostDisplayMultipleReturnsCount() {
+        assertEquals("2 hosts", formatHostFilterDisplay(listOf("soundgasm", "whyp")))
+        assertEquals("2 hosts", formatHostFilterDisplay(listOf("soundgasm", "audiochan")))
+        assertEquals("3 hosts", formatHostFilterDisplay(listOf("soundgasm", "whyp", "hotaudio")))
     }
 }
