@@ -854,23 +854,15 @@ private fun HostDropdownField(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    val allHosts = listOf(
-        "soundgasm" to "Soundgasm",
-        "whyp" to "Whyp",
-        "audiochan" to "Audiochan",
-        "hotaudio" to "Hotaudio",
-    )
+    val allHosts = HOST_OPTIONS
 
     val normalizedSelected = remember(selectedHosts) {
         selectedHosts.map { it.lowercase().trim() }.filter { it.isNotEmpty() }
     }
     val isAllSelected = normalizedSelected.isEmpty() || normalizedSelected.size >= allHosts.size
 
-    val displayValue = when {
-        isAllSelected -> "All hosts"
-        normalizedSelected.size == 1 -> allHosts.firstOrNull { it.first == normalizedSelected[0] }?.second ?: normalizedSelected[0]
-        normalizedSelected.size == 2 -> normalizedSelected.mapNotNull { h -> allHosts.firstOrNull { it.first == h }?.second ?: h }.joinToString(", ")
-        else -> "${normalizedSelected.size} hosts"
+    val displayValue = remember(normalizedSelected, isAllSelected) {
+        formatHostFilterDisplay(normalizedSelected, allHosts)
     }
 
     ExposedDropdownMenuBox(
@@ -960,3 +952,23 @@ private val WINDOW_OPTIONS = listOf(
     "30d" to "Last 30 days",
     "90d" to "Last 90 days",
 )
+
+val HOST_OPTIONS = listOf(
+    "soundgasm" to "Soundgasm",
+    "whyp" to "Whyp",
+    "audiochan" to "Audiochan",
+    "hotaudio" to "Hotaudio",
+)
+
+internal fun formatHostFilterDisplay(
+    selectedHosts: List<String>,
+    allHosts: List<Pair<String, String>> = HOST_OPTIONS,
+): String {
+    val normalized = selectedHosts.map { it.lowercase().trim() }.filter { it.isNotEmpty() }
+    val isAllSelected = normalized.isEmpty() || normalized.size >= allHosts.size
+    return when {
+        isAllSelected -> "All hosts"
+        normalized.size == 1 -> allHosts.firstOrNull { it.first == normalized[0] }?.second ?: normalized[0]
+        else -> "${normalized.size} hosts"
+    }
+}
