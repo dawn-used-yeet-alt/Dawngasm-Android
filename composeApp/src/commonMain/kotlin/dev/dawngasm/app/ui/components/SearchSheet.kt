@@ -715,6 +715,7 @@ private fun SelectionPillMenuItem(
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    groupPosition: CardGroupPosition = CardGroupPosition.Standalone,
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) {
@@ -738,17 +739,31 @@ private fun SelectionPillMenuItem(
         label = "pillMenuContent",
     )
 
+    val shape = if (isSelected) {
+        ExpressiveMenuItemShapes.forPosition(groupPosition)
+    } else {
+        CircleShape
+    }
+
+    val (topPadding, bottomPadding) = when (groupPosition) {
+        CardGroupPosition.Top -> 2.dp to 1.5.dp
+        CardGroupPosition.Middle -> 1.5.dp to 1.5.dp
+        CardGroupPosition.Bottom -> 1.5.dp to 2.dp
+        CardGroupPosition.Standalone -> 2.dp to 2.dp
+    }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
-            .clip(CircleShape)
+            .padding(horizontal = 4.dp)
+            .padding(top = topPadding, bottom = bottomPadding)
+            .clip(shape)
             .clickable(
                 role = Role.Button,
                 onClick = onClick,
             )
             .testTag("menu_item_$title"),
-        shape = CircleShape,
+        shape = shape,
         color = backgroundColor,
     ) {
         Row(
@@ -892,14 +907,25 @@ private fun HostDropdownField(
             shape = MaterialTheme.shapes.large,
             modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
         ) {
+            val isSelectedList = remember(isAllSelected, normalizedSelected) {
+                buildList {
+                    add(isAllSelected)
+                    allHosts.forEach { (key, _) ->
+                        add(!isAllSelected && normalizedSelected.contains(key))
+                    }
+                }
+            }
+
             SelectionPillMenuItem(
                 title = "All hosts",
                 isSelected = isAllSelected,
                 onClick = {
                     onHostsChange(emptyList())
                 },
+                groupPosition = computeSelectionGroupPosition(0, isSelectedList),
             )
-            allHosts.forEach { (key, title) ->
+            allHosts.forEachIndexed { hostIndex, (key, title) ->
+                val itemIndex = hostIndex + 1
                 val isSelected = !isAllSelected && normalizedSelected.contains(key)
                 SelectionPillMenuItem(
                     title = title,
@@ -917,6 +943,7 @@ private fun HostDropdownField(
                             onHostsChange(next)
                         }
                     },
+                    groupPosition = computeSelectionGroupPosition(itemIndex, isSelectedList),
                 )
             }
         }
