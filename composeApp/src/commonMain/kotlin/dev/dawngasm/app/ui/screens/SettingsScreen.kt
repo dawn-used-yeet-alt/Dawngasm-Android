@@ -3,8 +3,10 @@ package dev.dawngasm.app.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -156,12 +158,6 @@ fun SettingsScreen(
                 subtitle = "Posts carrying these tags are hidden by the index.",
             ) {
                 Column(
-                    modifier = Modifier.animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = 0.6f,
-                            stiffness = 800f,
-                        ),
-                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (blockedTags.isEmpty()) {
@@ -271,8 +267,8 @@ fun SettingsScreen(
 
                     AnimatedVisibility(
                         visible = tagSuggestions.isNotEmpty(),
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -495,14 +491,7 @@ private fun SectionCard(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = 0.6f,
-                    stiffness = 800f,
-                ),
-            ),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
