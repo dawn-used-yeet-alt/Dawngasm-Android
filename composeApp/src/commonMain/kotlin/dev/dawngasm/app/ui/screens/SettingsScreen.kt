@@ -2,13 +2,17 @@ package dev.dawngasm.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowOverflow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,16 +29,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +50,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
@@ -87,6 +97,7 @@ fun SettingsScreen(
     var tagDraft by rememberSaveable { mutableStateOf("") }
     var tagSuggestions by remember { mutableStateOf(emptyList<TagSuggestion>()) }
     var tagSearching by remember { mutableStateOf(false) }
+    var blockedTagsExpanded by rememberSaveable { mutableStateOf(false) }
 
     fun addBlockedTag(raw: String) {
         val tag = SearchSyntax.normalizeTag(raw) ?: return
@@ -147,7 +158,6 @@ fun SettingsScreen(
                 subtitle = "Posts carrying these tags are hidden by the index.",
             ) {
                 Column(
-                    modifier = Modifier.animateContentSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (blockedTags.isEmpty()) {
@@ -157,23 +167,69 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            blockedTags.forEach { tag ->
-                                InputChip(
-                                    selected = true,
-                                    onClick = { onRemoveBlockedTag(tag) },
-                                    label = { Text(tag) },
-                                    trailingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = "Remove $tag",
-                                            modifier = Modifier.size(16.dp),
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateContentSize(
+                                        animationSpec = spring(
+                                            dampingRatio = 0.6f,
+                                            stiffness = 800f,
+                                        ),
+                                    ),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                maxLines = if (blockedTagsExpanded) Int.MAX_VALUE else 4,
+                                overflow = FlowRowOverflow.expandOrCollapseIndicator(
+                                    minRowsToShowCollapse = 4,
+                                    expandIndicator = {
+                                        AssistChip(
+                                            onClick = { blockedTagsExpanded = true },
+                                            label = { Text("Show more") },
+                                            trailingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.ExpandMore,
+                                                    contentDescription = "Show more blocked tags",
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .testTag("blocked_tags_expand"),
                                         )
                                     },
-                                )
+                                    collapseIndicator = {
+                                        AssistChip(
+                                            onClick = { blockedTagsExpanded = false },
+                                            label = { Text("Show less") },
+                                            trailingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.ExpandLess,
+                                                    contentDescription = "Show fewer blocked tags",
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .padding(end = 8.dp)
+                                                .testTag("blocked_tags_collapse"),
+                                        )
+                                    },
+                                ),
+                            ) {
+                                blockedTags.forEach { tag ->
+                                    InputChip(
+                                        selected = true,
+                                        onClick = { onRemoveBlockedTag(tag) },
+                                        label = { Text(tag) },
+                                        trailingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Close,
+                                                contentDescription = "Remove $tag",
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -215,8 +271,8 @@ fun SettingsScreen(
 
                     AnimatedVisibility(
                         visible = tagSuggestions.isNotEmpty(),
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -439,9 +495,7 @@ private fun SectionCard(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
