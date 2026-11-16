@@ -32,5 +32,8 @@ compose.desktop {
             description = "Dawngasm desktop"
             vendor = "Dawngasm"
         }
+
+        // macOS reads the app-menu name from this property, not the window title.
+        jvmArgs("-Dapple.awt.application.name=Dawngasm")
     }
 }

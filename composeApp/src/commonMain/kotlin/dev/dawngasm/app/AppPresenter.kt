@@ -478,7 +478,9 @@ class AppPresenter(
                         input = if (track.author.isNotBlank()) "${track.title} - ${track.author}" else track.title,
                         fallback = track.id,
                     )
-                    val fileName = "$base.${audio.extension}"
+                    val fileName = "$base.${
+                        audio.extension.lowercase().filter { it.isLetterOrDigit() }.ifBlank { "m4a" }
+                    }"
                     val bytes: ByteArray = if (
                         track.host == AudioHost.HOTAUDIO ||
                         audio.url.startsWith("${HotaudioStreamer.SCHEME}:")

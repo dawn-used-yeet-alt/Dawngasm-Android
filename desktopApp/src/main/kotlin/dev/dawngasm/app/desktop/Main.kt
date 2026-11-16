@@ -14,9 +14,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.KeyShortcut
 import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -93,7 +93,7 @@ private fun rememberDesktopWindowState(prefs: AppPreferences): WindowState {
 
 /** Persists the normal (non-maximized) bounds so unmaximizing later restores them. */
 private fun persistWindowState(prefs: AppPreferences, windowState: WindowState) {
-    val maximized = windowState.isMaximized
+    val maximized = windowState.placement == WindowPlacement.Maximized
     val width = if (maximized) {
         prefs.windowWidth() ?: DEFAULT_WINDOW_WIDTH
     } else {
