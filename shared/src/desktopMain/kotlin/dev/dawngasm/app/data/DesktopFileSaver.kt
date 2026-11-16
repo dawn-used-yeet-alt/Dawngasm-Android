@@ -6,13 +6,10 @@ import java.nio.file.Path
 
 /**
  * Saves downloaded audio to `Music/Dawngasm` or a user-selected directory.
- * Phase 6 adds streaming downloads; Phase 12 hardens cross-OS file names.
+ * Phase 12 hardens cross-OS file names further.
  */
 class DesktopFileSaver : FileSaver {
-    override fun folderLabel(treeUri: String?): String {
-        val dir = resolveDirectory(treeUri)
-        return dir.toString()
-    }
+    override fun folderLabel(treeUri: String?): String = resolveDirectory(treeUri).toString()
 
     override fun exists(localUri: String?): Boolean {
         if (localUri.isNullOrBlank()) return false
@@ -27,16 +24,17 @@ class DesktopFileSaver : FileSaver {
         return target.toUri().toString()
     }
 
-    private fun resolveDirectory(treeUri: String?): Path {
-        if (treeUri.isNullOrBlank()) return DesktopPlatform.downloadDir
-        return runCatching { toPath(treeUri) }
-            .getOrElse { DesktopPlatform.downloadDir }
-    }
-
-    private fun toPath(value: String): Path =
-        if (value.startsWith("file:", ignoreCase = true)) {
-            Path.of(URI(value))
-        } else {
-            Path.of(value)
+    companion object {
+        fun resolveDirectory(treeUri: String?): Path {
+            if (treeUri.isNullOrBlank()) return DesktopPlatform.downloadDir
+            return runCatching { toPath(treeUri) }.getOrElse { DesktopPlatform.downloadDir }
         }
+
+        fun toPath(value: String): Path =
+            if (value.startsWith("file:", ignoreCase = true)) {
+                Path.of(URI(value))
+            } else {
+                Path.of(value)
+            }
+    }
 }

@@ -89,4 +89,22 @@ object DesktopPlatform {
                 runCatching { java.nio.file.Files.createDirectories(dir) }
             }
     }
+
+    /** Reveals [directory] in the platform file manager. Returns false if no opener worked. */
+    fun openDirectory(directory: Path): Boolean {
+        runCatching { java.nio.file.Files.createDirectories(directory) }
+        if (java.awt.Desktop.isDesktopSupported()) {
+            val desktop = java.awt.Desktop.getDesktop()
+            if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+                val opened = runCatching { desktop.open(directory.toFile()) }.isSuccess
+                if (opened) return true
+            }
+        }
+        val command = when (os) {
+            Os.LINUX -> listOf("xdg-open", directory.toString())
+            Os.WINDOWS -> listOf("explorer.exe", directory.toString())
+            Os.MACOS -> listOf("open", directory.toString())
+        }
+        return runCatching { ProcessBuilder(command).start(); true }.getOrDefault(false)
+    }
 }

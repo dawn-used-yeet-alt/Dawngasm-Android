@@ -16,6 +16,31 @@ internal object DesktopFs {
         writeAtomic(path, bytes)
     }
 
+    /** Moves a fully written temp file into place with the same fallback. */
+    fun moveAtomic(source: Path, target: Path) {
+        val parent = target.toAbsolutePath().parent ?: Path.of(".")
+        Files.createDirectories(parent)
+        try {
+            moveIntoPlace(source, target)
+        } catch (error: Throwable) {
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+            Files.deleteIfExists(source)
+        }
+    }
+
+    /** Copies a completed file into place without loading it into memory. */
+    fun copyAtomic(source: Path, target: Path) {
+        val parent = target.toAbsolutePath().parent ?: Path.of(".")
+        Files.createDirectories(parent)
+        val temp = Files.createTempFile(parent, "dawngasm-", ".part")
+        try {
+            Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING)
+            moveIntoPlace(temp, target)
+        } finally {
+            runCatching { Files.deleteIfExists(temp) }
+        }
+    }
+
     private fun writeAtomic(path: Path, bytes: ByteArray) {
         val parent = path.toAbsolutePath().parent ?: Path.of(".")
         Files.createDirectories(parent)

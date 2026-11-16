@@ -50,4 +50,9 @@ interface SettingsPlatformActions {
 
     /** Extra hotaudio clearance detail, e.g. `IPv4: 203.0.113.4`. */
     fun hotaudioClearanceDetail(): String?
+
+    /** Whether this shell can reveal the download folder in the file manager. */
+    fun canOpenDownloadFolder(): Boolean = false
+
+    fun openDownloadFolder() = Unit
 }

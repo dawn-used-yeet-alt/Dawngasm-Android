@@ -41,6 +41,7 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.ktor.client.core)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)

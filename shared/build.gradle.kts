@@ -44,6 +44,7 @@ kotlin {
                 implementation(libs.ktor.client.okhttp)
                 implementation(libs.okhttp)
                 implementation(libs.kotlinx.coroutines.swing)
+                implementation(libs.vlcj)
             }
         }
         commonTest.dependencies {

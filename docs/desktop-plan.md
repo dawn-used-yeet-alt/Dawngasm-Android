@@ -17,8 +17,10 @@ Ordering principle:
   final release.
 
 Every phase ends with the CI matrix green on `ubuntu-latest`,
-`windows-latest`, `macos-14` (arm64), and `macos-13` (x64) unless the phase is
-explicitly per-OS packaging.
+`windows-latest`, `macos-latest` (arm64), and `macos-15-intel` (x64) unless the
+phase is explicitly per-OS packaging. GitHub retired the old `macos-14` and
+`macos-13` labels in November 2026, so the plan uses the current arm64/x64 pair
+with the same intent.
 
 | Phase | Focus | Output | Status |
 |---|---|---|---|
@@ -260,7 +262,7 @@ network.
 
 ### Phase 15 — macOS packaging
 
-- Two builds: `macos-14` (arm64) and `macos-13` (x64); DMG each.
+- Two builds: `macos-latest` (arm64) and `macos-15-intel` (x64); DMG each.
 - `.icns`, bundle ID, dock name, app menu name.
 - Bundle dylibs and helper.
 - **Exit:** app launches on clean Apple Silicon and Intel macOS.

@@ -10,6 +10,7 @@ import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlatformFileOps
+import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
@@ -71,6 +72,7 @@ class AppPresenter(
     private val api: DawngasmApi = DawngasmApi(),
     private val resolver: AudioUrlResolver,
     private val fileSaver: FileSaver,
+    private val downloader: TrackDownloader? = null,
     val player: AudioPlayer,
 ) : DawngasmActions {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -143,7 +145,7 @@ class AppPresenter(
             window = prefs.window(),
             blockedTags = prefs.blockedTags(),
             downloadTreeUri = tree,
-            downloadFolderLabel = fileSaver.folderLabel(tree),
+            downloadFolderLabel = downloader?.folderLabel(tree) ?: fileSaver.folderLabel(tree),
             hotaudioConnected = hasHotaudioClearance,
             audiochanConnected = hasAudiochanClearance,
             mediaSessionServiceEnabled = prefs.mediaSessionServiceEnabled(),
@@ -457,7 +459,10 @@ class AppPresenter(
         val state = _uiState.value
         if (track.id in state.downloadingIds) return
         val existing = state.downloads.firstOrNull { it.id == track.id }
-        if (existing != null && fileSaver.exists(existing.localUri)) {
+        val alreadyExists = existing?.localUri?.let { uri ->
+            downloader?.exists(uri) ?: fileSaver.exists(uri)
+        } == true
+        if (alreadyExists) {
             emitMessage("Already downloaded")
             return
         }
@@ -466,34 +471,37 @@ class AppPresenter(
         scope.launch {
             try {
                 val audio = resolver.resolve(track)
-                val base = safeFileName(
-                    input = if (track.author.isNotBlank()) "${track.title} - ${track.author}" else track.title,
-                    fallback = track.id,
-                )
-                val fileName = "$base.${audio.extension}"
-                val bytes: ByteArray = if (
-                    track.host == AudioHost.HOTAUDIO ||
-                    audio.url.startsWith("${HotaudioStreamer.SCHEME}:")
-                ) {
-                    val spec = HotaudioStreamer.spec(track.id, track.pageUrl)
-                    if (HotaudioStreamer.stateFor(track.id) == null) {
-                        HotaudioStreamer.ensureStarted(spec, prefs)
-                    }
-                    val path = HotaudioStreamer.awaitComplete(spec)
-                    PlatformFileOps.readBytes(path)
-                        ?: throw IllegalStateException("Could not read downloaded hotaudio stream")
+                val savedUri = if (downloader != null) {
+                    downloader.download(track, audio, prefs.downloadTreeUri())
                 } else {
-                    val response = Network.httpClient.get(audio.url) {
-                        audio.headers.forEach { (name, value) -> header(name, value) }
-                        header("User-Agent", Network.BROWSER_USER_AGENT)
+                    val base = safeFileName(
+                        input = if (track.author.isNotBlank()) "${track.title} - ${track.author}" else track.title,
+                        fallback = track.id,
+                    )
+                    val fileName = "$base.${audio.extension}"
+                    val bytes: ByteArray = if (
+                        track.host == AudioHost.HOTAUDIO ||
+                        audio.url.startsWith("${HotaudioStreamer.SCHEME}:")
+                    ) {
+                        val spec = HotaudioStreamer.spec(track.id, track.pageUrl)
+                        if (HotaudioStreamer.stateFor(track.id) == null) {
+                            HotaudioStreamer.ensureStarted(spec, prefs)
+                        }
+                        val path = HotaudioStreamer.awaitComplete(spec)
+                        PlatformFileOps.readBytes(path)
+                            ?: throw IllegalStateException("Could not read downloaded hotaudio stream")
+                    } else {
+                        val response = Network.httpClient.get(audio.url) {
+                            audio.headers.forEach { (name, value) -> header(name, value) }
+                            header("User-Agent", Network.BROWSER_USER_AGENT)
+                        }
+                        if (!response.status.isSuccess()) {
+                            throw IllegalStateException("Server returned HTTP ${response.status.value}")
+                        }
+                        response.body<ByteArray>()
                     }
-                    if (!response.status.isSuccess()) {
-                        throw IllegalStateException("Server returned HTTP ${response.status.value}")
-                    }
-                    response.body<ByteArray>()
+                    fileSaver.save(fileName, bytes, prefs.downloadTreeUri())
                 }
-
-                val savedUri = fileSaver.save(fileName, bytes, prefs.downloadTreeUri())
                 val local = track.copy(localUri = savedUri)
                 val next = listOf(local) + _uiState.value.downloads.filterNot { it.id == track.id }
                 prefs.saveDownloads(next)
@@ -515,7 +523,7 @@ class AppPresenter(
         _uiState.update {
             it.copy(
                 downloadTreeUri = uri,
-                downloadFolderLabel = fileSaver.folderLabel(uri),
+                downloadFolderLabel = downloader?.folderLabel(uri) ?: fileSaver.folderLabel(uri),
             )
         }
     }
