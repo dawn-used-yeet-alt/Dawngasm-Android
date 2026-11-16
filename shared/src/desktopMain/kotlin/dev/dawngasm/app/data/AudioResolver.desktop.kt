@@ -32,7 +32,7 @@ class AudioResolver(
             extension = "m4a",
         )
     },
-) : AudioUrlResolver {
+), AudioUrlResolver {
     init {
         HotaudioDesktopIntegration.install()
     }
