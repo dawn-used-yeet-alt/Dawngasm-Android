@@ -16,4 +16,4 @@ class AudioResolver(
             extension = "m4a",
         )
     },
-)
+), AudioUrlResolver

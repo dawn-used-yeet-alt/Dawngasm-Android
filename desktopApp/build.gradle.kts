@@ -17,6 +17,7 @@ kotlin {
 dependencies {
     implementation(project(":composeApp"))
     implementation(compose.desktop.currentOs)
+    implementation(libs.compose.material3)
     implementation(libs.kotlinx.coroutines.swing)
 }
 

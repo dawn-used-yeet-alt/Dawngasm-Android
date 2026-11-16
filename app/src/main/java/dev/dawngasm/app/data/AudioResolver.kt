@@ -28,7 +28,7 @@ class AudioResolver(
             extension = "m4a",
         )
     },
-) {
+), AudioUrlResolver {
     companion object {
         const val audiochanVerificationMessage = CommonAudioResolver.audiochanVerificationMessage
 

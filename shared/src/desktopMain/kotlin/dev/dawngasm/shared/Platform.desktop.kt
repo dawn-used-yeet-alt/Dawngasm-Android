@@ -1,15 +1,11 @@
 package dev.dawngasm.shared
 
+import dev.dawngasm.app.data.DesktopPlatform
+import dev.dawngasm.app.util.PlatformLog
+
 actual val platformName: String
-    get() = buildString {
-        append(System.getProperty("os.name").orEmpty().ifBlank { "Desktop" })
-        val version = System.getProperty("os.version").orEmpty()
-        if (version.isNotBlank()) append(" $version")
-        append(" (")
-        append(System.getProperty("os.arch").orEmpty().ifBlank { "unknown" })
-        append(")")
-    }
+    get() = DesktopPlatform.displayName
 
 actual fun logInfo(message: String) {
-    println("[Dawngasm] $message")
+    PlatformLog.i("Dawngasm", message)
 }
