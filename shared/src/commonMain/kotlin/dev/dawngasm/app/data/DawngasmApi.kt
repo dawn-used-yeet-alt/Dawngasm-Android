@@ -159,6 +159,15 @@ class DawngasmApi(
 
         val tags = parseTags(get(url))
         tagCacheMutex.withLock {
+            if (tagCache.size >= 100) {
+                val expiredKeys = tagCache.filter { now - it.value.first >= TAG_CACHE_TTL_MS }.keys.toList()
+                if (expiredKeys.isNotEmpty()) {
+                    expiredKeys.forEach { tagCache.remove(it) }
+                } else {
+                    val oldest = tagCache.entries.sortedBy { it.value.first }.take(25).map { it.key }
+                    oldest.forEach { tagCache.remove(it) }
+                }
+            }
             tagCache[key] = now to tags
         }
         return tags
@@ -187,6 +196,15 @@ class DawngasmApi(
 
         val authors = parseAuthors(get(url))
         authorCacheMutex.withLock {
+            if (authorCache.size >= 100) {
+                val expiredKeys = authorCache.filter { now - it.value.first >= TAG_CACHE_TTL_MS }.keys.toList()
+                if (expiredKeys.isNotEmpty()) {
+                    expiredKeys.forEach { authorCache.remove(it) }
+                } else {
+                    val oldest = authorCache.entries.sortedBy { it.value.first }.take(25).map { it.key }
+                    oldest.forEach { authorCache.remove(it) }
+                }
+            }
             authorCache[key] = now to authors
         }
         return authors

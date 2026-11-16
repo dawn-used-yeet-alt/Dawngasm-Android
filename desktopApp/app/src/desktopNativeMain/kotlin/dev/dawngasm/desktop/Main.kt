@@ -29,10 +29,20 @@ import dev.dawngasm.app.platform.NativeSettingsPlatformActions
 import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import kotlin.native.runtime.GC
+import kotlin.native.runtime.NativeRuntimeApi
 import kotlin.system.exitProcess
 
+@OptIn(NativeRuntimeApi::class)
+private fun configureNativeRuntime() {
+    GC.autotune = true
+    GC.heapTriggerCoefficient = 0.75
+}
+
 fun main(args: Array<String>) {
+    configureNativeRuntime()
     if (args.any { it == "--self-test" || it == "--version" }) {
         val skipAudio = args.contains("--skip-audio-probe")
         runSelfTest(skipAudio = skipAudio)
@@ -92,8 +102,15 @@ fun main(args: Array<String>) {
             state = windowState,
             title = "Dawngasm",
         ) {
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay(60_000)
+                    GC.schedule()
+                }
+            }
             LaunchedEffect(windowState.size, windowState.placement) {
                 persistWindowState()
+                GC.schedule()
             }
             val uiState by presenter.uiState.collectAsState()
             val progress by presenter.progress.collectAsState()
@@ -122,7 +139,10 @@ fun main(args: Array<String>) {
                     DesktopClearanceFlow(
                         target = target,
                         presenter = presenter,
-                        onDismiss = { clearanceTarget = null },
+                        onDismiss = {
+                            clearanceTarget = null
+                            GC.schedule()
+                        },
                     )
                 }
             }

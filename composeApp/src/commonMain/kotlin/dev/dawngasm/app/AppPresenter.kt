@@ -226,6 +226,9 @@ class AppPresenter(
 
     override fun showSimilar(track: Track, scrollIndex: Int, scrollOffset: Int) {
         val state = _uiState.value
+        if (feedStack.size >= 8) {
+            feedStack.removeFirst()
+        }
         feedStack.addLast(
             FeedSnapshot(
                 tracks = state.tracks,

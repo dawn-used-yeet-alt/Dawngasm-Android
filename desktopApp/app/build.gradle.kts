@@ -20,7 +20,10 @@ kotlin {
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         binaries.configureEach {
-            freeCompilerArgs += "-Xoverride-konan-properties=cacheableTargets="
+            freeCompilerArgs += listOf(
+                "-Xoverride-konan-properties=cacheableTargets=",
+                "-Xbinary=gc=cms",
+            )
         }
         val engineDep = when (name) {
             "linuxX64" -> "io.ktor:ktor-client-curl:$ktorVersion"
