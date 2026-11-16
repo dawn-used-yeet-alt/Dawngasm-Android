@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":composeApp"))
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.swing)
 }
 
@@ -36,6 +37,10 @@ compose.desktop {
             vendor = "Dawngasm"
             copyright = "© 2026 Dawngasm contributors"
             licenseFile.set(rootProject.file("LICENSE"))
+
+            // The native clearance helper is staged here and shipped inside
+            // every package's resources directory.
+            appResourcesRootDir.set(layout.buildDirectory.dir("native-resources"))
 
             // VLCJ/JNA and Compose load a broad set of JDK classes at runtime.
             includeAllModules = true
@@ -68,4 +73,46 @@ compose.desktop {
             }
         }
     }
+}
+
+val clearanceHelperDir = layout.projectDirectory.dir("native/clearance-helper")
+val clearanceHelperBinary = if (System.getProperty("os.name").contains("win", ignoreCase = true)) {
+    "dawngasm-clearance-helper.exe"
+} else {
+    "dawngasm-clearance-helper"
+}
+
+val buildClearanceHelper by tasks.registering(Exec::class) {
+    group = "desktop"
+    description = "Builds the native clearance helper with Cargo."
+    workingDir(clearanceHelperDir)
+    commandLine("cargo", "build", "--release", "--locked")
+    inputs.files(
+        clearanceHelperDir.file("Cargo.toml"),
+        clearanceHelperDir.file("Cargo.lock"),
+    )
+    inputs.dir(clearanceHelperDir.dir("src"))
+    outputs.file(clearanceHelperDir.file("target/release/$clearanceHelperBinary"))
+}
+
+val stageClearanceHelper by tasks.registering(Copy::class) {
+    group = "desktop"
+    description = "Stages the native clearance helper for desktop packaging."
+    dependsOn(buildClearanceHelper)
+    from(clearanceHelperDir.file("target/release/$clearanceHelperBinary"))
+    into(layout.buildDirectory.dir("native-resources/clearance-helper"))
+    filePermissions {
+        unix("rwxr-xr-x")
+    }
+}
+
+tasks.matching {
+    it.name == "createDistributable" ||
+        it.name == "packageDeb" ||
+        it.name == "packageRpm" ||
+        it.name == "packageAppImage" ||
+        it.name == "packageMsi" ||
+        it.name == "packageDmg"
+}.configureEach {
+    dependsOn(stageClearanceHelper)
 }

@@ -1,0 +1,23 @@
+[package]
+name = "dawngasm-clearance-helper"
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.89"
+license = "GPL-3.0-or-later"
+publish = false
+description = "Native webview helper that captures Cloudflare clearance cookies for Dawngasm desktop."
+
+[[bin]]
+name = "dawngasm-clearance-helper"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+wry = "0.57"
+tao = { version = "0.37", default-features = false, features = ["rwh_06"] }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1

@@ -1,8 +1,8 @@
 # Dawngasm desktop
 
 The desktop shell targets Linux, Windows, and macOS from the same Kotlin
-codebase. Installers bundle a Java runtime; the only host dependency is VLC for
-audio playback.
+codebase. Installers bundle a Java runtime; the host needs VLC for audio and a
+system webview for Cloudflare clearance.
 
 ## Runtime requirements
 
@@ -15,10 +15,22 @@ it, install VLC for the matching architecture:
 - **macOS:** install VLC into `/Applications` (VLCJ looks for
   `/Applications/VLC.app`).
 
-Audiochan and hotaudio.net playback need clearance cookies. Desktop currently
-uses the in-app paste-cookie dialog in Settings. The native WebView helper is
-Phase 10 and will add WebKitGTK (Linux) and WebView2 (Windows) as runtime
-dependencies; the current packages do not require either.
+Audiochan and hotaudio.net playback need clearance cookies. Settings opens a
+native clearance window provided by the bundled `dawngasm-clearance-helper`;
+the clipboard paste dialog remains available as a fallback. The helper uses the
+system webview:
+
+- **Linux:** `libwebkit2gtk-4.1-0`. The `.deb`/`.rpm` packages do not declare
+  this dependency yet — install `libwebkit2gtk-4.1-0` if the clearance window
+  does not open.
+- **Windows:** WebView2 Runtime, which ships with Windows 11 and current
+  Windows 10 installs. The MSI does not bundle it.
+- **macOS:** WKWebView, included with the system.
+
+The helper lives in `desktopApp/native/clearance-helper` and is built with Cargo
+(Rust 1.89+). Packaging tasks build and stage it automatically, so Rust is
+required to produce installers. `:desktopApp:run` looks for a locally built
+helper under `desktopApp/native/clearance-helper/target/release/`.
 
 ## Build and package
 
@@ -45,7 +57,7 @@ The packaging workflow (`.github/workflows/desktop-package.yml`) builds all
 four variants and uploads `.deb`, `.rpm`, `.AppImage`, `.msi`, and `.dmg`
 artifacts. Linux packaging installs `rpm` in CI, then wraps the jpackage app
 image with `appimagetool` and adds AppStream metadata from
-`desktopApp/icons/dawngasm.appdata.xml`.
+`desktopApp/icons/dev.dawngasm.app.appdata.xml`.
 
 Packages are currently unsigned. macOS Gatekeeper and Windows SmartScreen will
 warn on first launch until the signing and notarization work in Phase 16 is

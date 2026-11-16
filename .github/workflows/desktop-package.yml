@@ -30,6 +30,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Install Linux webview build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+          libjavascriptcoregtk-4.1-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktopApp/native/clearance-helper -> target
+
       - name: Install RPM tooling
         run: sudo apt-get update && sudo apt-get install -y rpm
 
@@ -47,8 +62,8 @@ jobs:
           cp desktopApp/icons/dawngasm.png "$APP_DIR/dawngasm.png"
           ln -sf dawngasm.png "$APP_DIR/.DirIcon"
           mkdir -p "$APP_DIR/usr/share/metainfo"
-          cp desktopApp/icons/dawngasm.appdata.xml \
-            "$APP_DIR/usr/share/metainfo/dawngasm.appdata.xml"
+          cp desktopApp/icons/dev.dawngasm.app.appdata.xml \
+            "$APP_DIR/usr/share/metainfo/dev.dawngasm.app.appdata.xml"
           cat > "$APP_DIR/dawngasm.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
@@ -59,6 +74,8 @@ jobs:
           Categories=AudioVideo;Audio;
           Terminal=false
           EOF
+          mkdir -p "$APP_DIR/usr/share/applications"
+          cp "$APP_DIR/dawngasm.desktop" "$APP_DIR/usr/share/applications/dawngasm.desktop"
           cat > "$APP_DIR/AppRun" <<'EOF'
           #!/bin/sh
           exec "$APPDIR/bin/Dawngasm" "$@"
@@ -98,6 +115,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Install Linux webview build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+          libjavascriptcoregtk-4.1-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktopApp/native/clearance-helper -> target
+
       - name: Build MSI
         run: ./gradlew --no-daemon --stacktrace :desktopApp:packageMsi
 
@@ -126,6 +158,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      - name: Install Linux webview build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+          libjavascriptcoregtk-4.1-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktopApp/native/clearance-helper -> target
+
       - name: Build DMG
         run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg
 
@@ -153,6 +200,21 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
+
+      - name: Install Linux webview build dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
+          libjavascriptcoregtk-4.1-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktopApp/native/clearance-helper -> target
 
       - name: Build DMG
         run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg

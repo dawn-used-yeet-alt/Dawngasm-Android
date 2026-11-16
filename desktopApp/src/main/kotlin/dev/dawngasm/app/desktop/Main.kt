@@ -32,7 +32,6 @@ import dev.dawngasm.app.data.DesktopFileSaver
 import dev.dawngasm.app.data.DesktopPlatform
 import dev.dawngasm.app.data.DesktopTrackDownloader
 import dev.dawngasm.app.data.DawngasmApi
-import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.player.DesktopAudioPlayer
 import dev.dawngasm.app.state.AppCommand
 import dev.dawngasm.app.ui.theme.DawngasmTheme
@@ -49,11 +48,6 @@ private const val DEFAULT_WINDOW_HEIGHT = 860
 private const val MIN_WINDOW_WIDTH = 420
 private const val MIN_WINDOW_HEIGHT = 640
 private const val MAX_WINDOW_DIMENSION = 10_000
-
-private enum class ClearanceTarget {
-    HOTAUDIO,
-    AUDIOCHAN,
-}
 
 private fun appShortcut(key: Key): KeyShortcut =
     if (DesktopPlatform.os == DesktopPlatform.Os.MACOS) {
@@ -268,46 +262,12 @@ fun main() {
                     )
                 }
 
-                when (clearanceTarget) {
-                    ClearanceTarget.HOTAUDIO -> {
-                        val saved = presenter.prefs.hotaudioClearance()
-                        DesktopClearanceDialog(
-                            title = "hotaudio clearance",
-                            cookieLabel = "Cookie header (cf_clearance)",
-                            initialCookie = saved?.first.orEmpty(),
-                            initialUserAgent = saved?.second?.ifBlank { Network.BROWSER_USER_AGENT }
-                                ?: Network.BROWSER_USER_AGENT,
-                            showIpFamily = true,
-                            initialIp = presenter.prefs.hotaudioClientIp().orEmpty(),
-                            initialFamily = presenter.prefs.hotaudioIpFamily().orEmpty(),
-                            onDismiss = { clearanceTarget = null },
-                            onSave = { cookie, userAgent, ip, family ->
-                                presenter.saveHotaudioClearance(cookie, userAgent, ip, family)
-                                clearanceTarget = null
-                            },
-                        )
-                    }
-
-                    ClearanceTarget.AUDIOCHAN -> {
-                        val saved = presenter.prefs.audiochanClearance()
-                        DesktopClearanceDialog(
-                            title = "audiochan clearance",
-                            cookieLabel = "Cookie header (__Secure-audiochan_playback)",
-                            initialCookie = saved?.first.orEmpty(),
-                            initialUserAgent = saved?.second?.ifBlank { Network.BROWSER_USER_AGENT }
-                                ?: Network.BROWSER_USER_AGENT,
-                            showIpFamily = false,
-                            initialIp = "",
-                            initialFamily = "",
-                            onDismiss = { clearanceTarget = null },
-                            onSave = { cookie, userAgent, _, _ ->
-                                presenter.saveAudiochanClearance(cookie, userAgent)
-                                clearanceTarget = null
-                            },
-                        )
-                    }
-
-                    null -> Unit
+                clearanceTarget?.let { target ->
+                    DesktopClearanceFlow(
+                        target = target,
+                        presenter = presenter,
+                        onDismiss = { clearanceTarget = null },
+                    )
                 }
             }
         }
