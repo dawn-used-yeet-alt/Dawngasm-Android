@@ -78,6 +78,18 @@ private fun runSelfTest(skipAudio: Boolean = false) {
     val prefs = AppPreferences(settings)
     println("native storage: initialized (${DesktopPlatform.configDir})")
 
+    val resolver = AudioResolver(prefs)
+    val fileSaver = NativeFileSaver()
+    val player = NativeAudioPlayer(resolver)
+    val presenter = AppPresenter(
+        prefs = prefs,
+        resolver = resolver,
+        fileSaver = fileSaver,
+        player = player,
+    )
+    val settingsActions = NativeSettingsPlatformActions(prefs)
+    println("presenter & audio player: initialized")
+
     val playerReady = if (skipAudio) {
         println("kmplayer: audio probe skipped (--skip-audio-probe)")
         true
@@ -85,6 +97,8 @@ private fun runSelfTest(skipAudio: Boolean = false) {
         probePlayer()
     }
     probeNotifications()
+
+    player.release()
 
     if (!playerReady) {
         println("self-test: failed")

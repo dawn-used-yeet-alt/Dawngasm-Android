@@ -75,7 +75,13 @@ class AppPresenter(
     private val downloader: TrackDownloader? = null,
     val player: AudioPlayer,
 ) : DawngasmActions {
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(
+        (try {
+            Dispatchers.Main
+        } catch (_: Throwable) {
+            Dispatchers.Default
+        }) + SupervisorJob()
+    )
 
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()

@@ -21,6 +21,10 @@ captures/
 # Rust / native clearance helper build output
 desktopApp/native/clearance-helper/target/
 
+# Local distribution artifacts
+*.AppImage
+*.dmg
+
 # Generated hotaudio artifacts (built by the Gradle tasks / CI cache)
 app/src/main/java/net/hotaudio/extractor/hotaudio_ffi.kt
 app/src/main/java/net/hotaudio/extractor/.hotaudio-bindings-ref

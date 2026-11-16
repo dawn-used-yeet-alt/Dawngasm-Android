@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 class NativeAudioPlayer(
     private val resolver: AudioUrlResolver,
 ) : AudioPlayer {
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val queue = PlaybackQueue()
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
