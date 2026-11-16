@@ -30,10 +30,14 @@ internal fun probeNotifications() {
             displayName = "Dawngasm Native Spike",
         )
         println("kmedianotification: session created status=${session.status.value}")
-        session.close()
+        if (SpikeInfo.osName != "windows") {
+            session.close()
+        }
     } catch (error: Throwable) {
         println("kmedianotification: not exercised (${error.message})")
     } finally {
-        scope.cancel()
+        if (SpikeInfo.osName != "windows") {
+            scope.cancel()
+        }
     }
 }
