@@ -221,6 +221,9 @@ jobs:
           fi
           echo "running $binary --self-test $extra_flags"
           "$binary" --self-test $extra_flags
+          ls -lh "$binary"
+          size="$(stat -c%s "$binary" 2>/dev/null || stat -f%z "$binary" 2>/dev/null || wc -c < "$binary")"
+          echo "native binary size: $size bytes"
 
       - name: Upload native spike on failure
         if: failure()

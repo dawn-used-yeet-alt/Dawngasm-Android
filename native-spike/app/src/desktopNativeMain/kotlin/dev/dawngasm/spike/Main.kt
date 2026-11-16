@@ -1,24 +1,23 @@
 package dev.dawngasm.spike
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import dev.dawngasm.app.AppPresenter
+import dev.dawngasm.app.DawngasmApp
+import dev.dawngasm.app.data.AppPreferences
+import dev.dawngasm.app.data.AudioResolver
+import dev.dawngasm.app.data.DesktopPlatform
+import dev.dawngasm.app.data.NativeFileSaver
+import dev.dawngasm.app.data.NativeSettings
+import dev.dawngasm.app.platform.NativeSettingsPlatformActions
+import dev.dawngasm.app.player.NativeAudioPlayer
+import dev.dawngasm.app.ui.theme.DawngasmTheme
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -28,15 +27,42 @@ fun main(args: Array<String>) {
         return
     }
 
+    DesktopPlatform.ensureDirectories()
+    val settings = NativeSettings()
+    val prefs = AppPreferences(settings)
+    val resolver = AudioResolver(prefs)
+    val fileSaver = NativeFileSaver()
+    val player = NativeAudioPlayer(resolver)
+    val presenter = AppPresenter(
+        prefs = prefs,
+        resolver = resolver,
+        fileSaver = fileSaver,
+        player = player,
+    )
+    val settingsActions = NativeSettingsPlatformActions(prefs)
+
     application {
         Window(
-            onCloseRequest = { exitApplication() },
+            onCloseRequest = {
+                player.release()
+                exitApplication()
+            },
             state = rememberWindowState(),
-            title = "Dawngasm Native Spike",
+            title = "Dawngasm",
         ) {
-            MaterialTheme {
+            val uiState by presenter.uiState.collectAsState()
+            val progress by presenter.progress.collectAsState()
+
+            DawngasmTheme(darkTheme = true) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    SpikeScreen()
+                    DawngasmApp(
+                        state = uiState,
+                        progress = progress,
+                        messages = presenter.messages,
+                        actions = presenter,
+                        settingsPlatform = settingsActions,
+                        appVersion = SpikeInfo.VERSION,
+                    )
                 }
             }
         }
@@ -46,6 +72,11 @@ fun main(args: Array<String>) {
 private fun runSelfTest(skipAudio: Boolean = false) {
     println("dawngasm native spike ${SpikeInfo.VERSION}")
     println("os=${SpikeInfo.osName} arch=${SpikeInfo.archName}")
+
+    DesktopPlatform.ensureDirectories()
+    val settings = NativeSettings()
+    val prefs = AppPreferences(settings)
+    println("native storage: initialized (${DesktopPlatform.configDir})")
 
     val playerReady = if (skipAudio) {
         println("kmplayer: audio probe skipped (--skip-audio-probe)")
@@ -60,24 +91,4 @@ private fun runSelfTest(skipAudio: Boolean = false) {
         exitProcess(1)
     }
     println("self-test: ok")
-}
-
-@Composable
-private fun SpikeScreen() {
-    var clicks by remember { mutableIntStateOf(0) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "Dawngasm Native Spike",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(text = "Compose Native window, no JVM required.")
-        Button(onClick = { clicks++ }) {
-            Text(if (clicks == 0) "Click me" else "Clicked $clicks times")
-        }
-    }
 }

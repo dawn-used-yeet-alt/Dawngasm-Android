@@ -51,7 +51,7 @@ with the same intent.
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
 | 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | ✅ Complete |
 | 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | ✅ Complete |
-| 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ⬜ Planned |
+| 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | 🟡 In progress |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
@@ -200,6 +200,21 @@ phase still needs live host access and clean-install verification.
   headless CI where no virtual audio device exists). macOS Arm64 klib caching was
   resolved by provisioning the native toolchain and stripping `macos_arm64` from
   `cacheableTargets` in `konan.properties`.
+
+- **Phase 22 — in progress (2026-11-16).** Wire full UI and domain into the
+  native shell (`native-spike/app`). Linked `shared/src/commonMain/kotlin`,
+  `composeApp/src/commonMain/kotlin`, and `composeApp/src/desktopMain/kotlin`
+  directly into the native build targets. Created native actuals for `Network`
+  (pure-Kotlin Ktor CIO engine with cookie storage), `PlatformFileOps`
+  (`okio.FileSystem.SYSTEM`), `Clock` (`getTimeMillis()`), `PlatformLog`, and
+  `DesktopPlatform` (runtime `Platform.osFamily` and environment paths). Implemented
+  `NativeSettings` (JSON file-backed `com.russhwolf.settings.Settings`),
+  `NativeFileSaver` (`FileSaver`), `AudioResolver` (`CommonAudioResolver` +
+  hotaudio stream handler), `NativeSettingsPlatformActions`, and `NativeAudioPlayer`
+  wrapping `KMPlayer` reactive state flow and `KMediaNotification` session
+  publishing. Connected `Main.kt` to launch `DawngasmApp` with `AppPresenter` and
+  `DawngasmTheme` while retaining `--self-test` early exit for headless CI. Added
+  binary size measurement to CI.
 
 ---
 
