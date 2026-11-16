@@ -41,7 +41,7 @@ with the same intent.
 | 14 | Windows packaging | MSI | ✅ Complete |
 | 15 | macOS packaging | Two DMGs (arm64 + x64) | ✅ Complete |
 | 16 | Signing / notarization | Clean installs everywhere | 🟡 Scaffolded |
-| 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ⬜ Pending |
+| 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ✅ Complete |
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ⬜ Pending |
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | ⬜ Pending |
 
@@ -115,6 +115,17 @@ with the same intent.
   is present. All steps are conditional, so unsigned packaging still works.
   Required secrets are documented in `docs/desktop.md`. Completion still needs
   real certificates plus a Gatekeeper/SmartScreen clean-install check.
+
+- **Phase 17 — complete (2026-11-16).** Added the `BuildDesktopHotaudioTask` in
+  `desktopApp/build.gradle.kts`. It clones `hotaudio-extractor` at `v2.3.0`,
+  builds `hotaudio-ffi`, generates the Kotlin UniFFI bindings, and stages
+  `libhotaudio_ffi` under `native/<os>-<arch>/` for packaging. `main()` points
+  JNA at the bundled directory and installs `DesktopHotaudioBridge` into
+  `HotaudioBridgeProvider`. A desktop test loads the library and calls the
+  generated `version()`, so CI verifies the native hand-off on every runner.
+  Desktop CI `43815938855` passed on Ubuntu, Windows, and macOS arm64; the
+  macOS x64 runner also compiled the bindings in the preceding run `43814970473`.
+  Streaming, downloads, and clearance use are Phase 18/19.
 
 ---
 

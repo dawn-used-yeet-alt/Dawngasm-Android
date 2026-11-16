@@ -28,6 +28,8 @@ class HotaudioFfiTest {
 
         val version = net.hotaudio.extractor.version()
         assertFalse("hotaudio version was blank", version.isBlank())
+        net.hotaudio.extractor.setClearance("", "")
+        net.hotaudio.extractor.clearClearance()
     }
 
     private fun nativeDirectory(): File {

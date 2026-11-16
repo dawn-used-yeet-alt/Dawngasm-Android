@@ -80,6 +80,20 @@ secrets exist; otherwise it publishes unsigned packages.
   directory. Verify it is included in the developer's signing/notarization
   scope before publishing a notarized build.
 
+## Hotaudio native library
+
+hotaudio streaming uses the native extractor from `hotaudio-extractor`
+`v2.3.0`. `:desktopApp:compileKotlin` runs `BuildDesktopHotaudioTask`, which
+clones that tag, builds `hotaudio-ffi`, generates the Kotlin UniFFI bindings,
+and stages `libhotaudio_ffi` under `native/<os>-<arch>/`. The first build needs
+Rust and network access; later builds reuse the staged outputs.
+
+At startup the app points JNA at the bundled directory and installs
+`DesktopHotaudioBridge`. `DAWNGASM_HOTAUDIO_NATIVE_DIR` overrides the search
+path for a locally built library. A desktop test loads the library and calls
+`version()`/`setClearance()`/`clearClearance()` so CI catches missing or
+mismatched native payloads.
+
 ## State and logs
 
 - Linux: `$XDG_CONFIG_HOME/dawngasm` (or `~/.config/dawngasm`)
