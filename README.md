@@ -2,6 +2,9 @@
 
 An Android app to browse, download, and stream audios from r/gonewildaudio and adjacent subreddits.
 
+Desktop builds for Linux, Windows, and macOS live in `:desktopApp`; see
+[docs/desktop.md](docs/desktop.md) for runtime requirements and packaging.
+
 > [!NOTE]
 >
 > Dawngasm is intended for streaming and downloading audio that you own or have permission to access and use. Please respect the rights of content creators and applicable local laws.

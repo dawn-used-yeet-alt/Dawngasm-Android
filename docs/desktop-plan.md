@@ -37,9 +37,9 @@ with the same intent.
 | 10 | Cross-platform clearance helper | In-app challenge window | ⬜ Pending |
 | 11 | Desktop UX | Menus, shortcuts, responsive layout | ✅ Complete |
 | 12 | Download hardening | Cross-OS filenames/paths | ✅ Complete |
-| 13 | Linux packaging | `.deb`, `.rpm`, AppImage | ⬜ Pending |
-| 14 | Windows packaging | MSI | ⬜ Pending |
-| 15 | macOS packaging | Two DMGs (arm64 + x64) | ⬜ Pending |
+| 13 | Linux packaging | `.deb`, `.rpm`, AppImage | ✅ Complete |
+| 14 | Windows packaging | MSI | ✅ Complete |
+| 15 | macOS packaging | Two DMGs (arm64 + x64) | ✅ Complete |
 | 16 | Signing / notarization | Clean installs everywhere | ⬜ Pending |
 | 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ⬜ Pending |
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ⬜ Pending |
@@ -77,6 +77,18 @@ with the same intent.
   Collisions are checked case-insensitively on macOS/Windows, free space is
   checked before writing, and permission/filesystem failures surface with
   readable messages. Added sanitizer tests.
+
+- **Phases 13–15 — complete (2026-11-16).** `desktopApp/build.gradle.kts` now
+  declares deb/rpm/AppImage/MSI/DMG targets with per-OS icons, bundle ID,
+  upgrade UUID, menu groups, license, and a macOS dock/app name. Added
+  `dawngasm.png`, `dawngasm.ico`, and `dawngasm.icns` generated from the
+  Android launcher icon, plus AppStream metadata for the AppImage. The
+  `.github/workflows/desktop-package.yml` workflow builds `.deb`, `.rpm`,
+  `.AppImage`, `.msi`, and arm64/x64 `.dmg` artifacts. Packaging run
+  `43808313655` completed green on all four jobs: Linux packages, Windows MSI,
+  macOS arm64, and macOS x64. Artifacts are unsigned; Phase 16 covers
+  signing/notarization. See `docs/desktop.md` for runtime requirements,
+  package commands, and state locations.
 
 ---
 

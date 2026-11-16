@@ -46,6 +46,9 @@ jobs:
           test -d "$APP_DIR"
           cp desktopApp/icons/dawngasm.png "$APP_DIR/dawngasm.png"
           ln -sf dawngasm.png "$APP_DIR/.DirIcon"
+          mkdir -p "$APP_DIR/usr/share/metainfo"
+          cp desktopApp/icons/dawngasm.appdata.xml \
+            "$APP_DIR/usr/share/metainfo/dawngasm.appdata.xml"
           cat > "$APP_DIR/dawngasm.desktop" <<'EOF'
           [Desktop Entry]
           Type=Application
