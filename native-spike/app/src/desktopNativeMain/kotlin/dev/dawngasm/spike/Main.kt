@@ -23,7 +23,8 @@ import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
     if (args.any { it == "--self-test" || it == "--version" }) {
-        runSelfTest()
+        val skipAudio = args.contains("--skip-audio-probe")
+        runSelfTest(skipAudio = skipAudio)
         return
     }
 
@@ -42,11 +43,16 @@ fun main(args: Array<String>) {
     }
 }
 
-private fun runSelfTest() {
+private fun runSelfTest(skipAudio: Boolean = false) {
     println("dawngasm native spike ${SpikeInfo.VERSION}")
     println("os=${SpikeInfo.osName} arch=${SpikeInfo.archName}")
 
-    val playerReady = probePlayer()
+    val playerReady = if (skipAudio) {
+        println("kmplayer: audio probe skipped (--skip-audio-probe)")
+        true
+    } else {
+        probePlayer()
+    }
     probeNotifications()
 
     if (!playerReady) {

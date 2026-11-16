@@ -14,7 +14,7 @@ import dev.brahmkshatriya.kmplayer.KMResult
 internal fun probePlayer(): Boolean {
     println("kmplayer: probing player...")
     return try {
-        when (val created = KMPlayer.create(KMPlayerConfig(requireHls = false))) {
+        when (val created = KMPlayer.create(KMPlayerConfig(requireHls = false, audioOnly = true))) {
             is KMResult.Success -> {
                 val player = created.value
                 val capabilities = player.capabilities
