@@ -48,7 +48,7 @@ class FormattingTest {
         assertEquals("_CON", safeFileName("CON", "fallback"))
         assertEquals("_con", safeFileName("con", "fallback"))
         assertEquals("_COM1", safeFileName("COM1", "fallback"))
-        assertEquals("_LPT9", safeFileName("lpt9", "fallback"))
+        assertEquals("_lpt9", safeFileName("lpt9", "fallback"))
         assertEquals("_CON.txt", safeFileName("CON.txt", "fallback"))
         assertEquals("CONSOLE", safeFileName("CONSOLE", "fallback"))
         assertEquals("_NUL", safeFileName("NUL.", "fallback"))
