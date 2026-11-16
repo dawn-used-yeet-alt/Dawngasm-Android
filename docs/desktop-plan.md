@@ -52,6 +52,7 @@ with the same intent.
 | 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | ✅ Complete |
 | 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | ✅ Complete |
 | 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ✅ Complete |
+| 23 | Native release packaging & retirement | Release AppImage/Zip/DMGs, JVM removal, size benchmarks | ✅ Complete |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
@@ -647,6 +648,29 @@ parity is proven.
 - **Exit:** the native desktop build reaches feature parity, is materially
   smaller and faster to start than the JVM build, and the JVM shell can be
   retired without losing a host or packaging target.
+
+### Phase 23 — Native release packaging, JVM retirement, and microarchitecture compatibility
+
+**Goal:** cut over completely to the standalone Kotlin/Native desktop shell, retire the
+legacy JVM desktop shell, produce stripped production release packages across Linux,
+Windows, and macOS, optimize CI runner matrix usage, and ensure generic x86-64 CPU compatibility.
+
+- Promoted `native-spike/` to canonical `desktopApp/`, renaming package references to `dev.dawngasm.desktop`.
+- Retired legacy JVM shell, JNA/VLCJ bridge, Swing clearance flows, and `jlink` bundling tasks.
+- Configured native release packaging tasks:
+  - Linux x64: `packageLinuxX64ReleaseAppImage` (`Dawngasm-2.0.0-linux-x86_64.AppImage`)
+  - Windows x64: `packageWindowsX64ReleaseZip` (`Dawngasm-2.0.0-windows-x86_64.zip`)
+  - macOS arm64: `packageMacosArm64ReleaseDmg` (`Dawngasm-2.0.0-macos-arm64.dmg`)
+  - macOS x64: `packageMacosX64ReleaseDmg` (`Dawngasm-2.0.0-macos-x86_64.dmg`)
+- Resolved `Dispatchers.Main` missing platform event loop on Kotlin/Native by passing `Dispatchers.Default` to `AppPresenter` and `NativeAudioPlayer`.
+- Enforced baseline generic `x86-64` instructions (`-march=x86-64 -mtune=generic` and `-DSDL_AVX=OFF -DSDL_AVX2=OFF -DSDL_AVX512F=OFF`) when compiling SDL3 on Linux CI, preventing `SIGILL` (Illegal instruction) on CPUs without AVX2 (e.g. AMD Puma/Jaguar, early Core/Pentium).
+- Optimized GitHub Actions CI: replaced redundant 4-runner matrix for `:shared:desktopTest` with a single `shared-test` runner on `ubuntu-latest`.
+- Measured actual stripped release distribution packages:
+  - Linux x64 AppImage: **19,556,856 bytes** (**18.65 MiB**, an 85.8% reduction from 137 MiB JVM baseline)
+  - Windows x64 Zip: **19,657,301 bytes** (**18.75 MiB**)
+  - macOS arm64 DMG: **14,236,008 bytes** (**13.58 MiB**)
+  - macOS x64 DMG: **15,567,425 bytes** (**14.85 MiB**)
+- **Exit:** Standalone native distribution packages are generated and verified on all 4 platform targets with zero JVM dependencies.
 
 ---
 

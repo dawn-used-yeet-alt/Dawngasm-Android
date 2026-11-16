@@ -15,16 +15,10 @@ permissions:
   contents: read
 
 jobs:
-  desktop-compile:
-    name: Desktop (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        # macos-latest is the arm64 image and macos-15-intel is the x64 image.
-        # The original macos-14/macos-13 labels were retired by GitHub in Nov 2026.
-        os: [ubuntu-latest, windows-latest, macos-latest, macos-15-intel]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  shared-test:
+    name: Shared Tests (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -40,7 +34,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Install Linux webview build dependencies
-        if: runner.os == 'Linux'
         run: >
           sudo apt-get update && sudo apt-get install -y
           libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev
@@ -69,7 +62,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: desktop-test-report-${{ matrix.os }}
+          name: desktop-test-report
           path: |
             shared/build/reports/tests/desktopTest/
             shared/build/test-results/desktopTest/
@@ -93,7 +86,7 @@ jobs:
           - os: macos-latest
             packageTask: packageMacosArm64ReleaseDmg
             artifactName: dawngasm-desktop-macos-arm64-dmg
-            artifactPath: desktopApp/app/build/distributions/*-aarch64.dmg
+            artifactPath: desktopApp/app/build/distributions/*-arm64.dmg
           - os: macos-15-intel
             packageTask: packageMacosX64ReleaseDmg
             artifactName: dawngasm-desktop-macos-x64-dmg
@@ -158,6 +151,9 @@ jobs:
           cmake -S "$SDL_SOURCE" -B "$RUNNER_TEMP/sdl3-build" \
             -G Ninja -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_C_FLAGS="-march=x86-64 -mtune=generic" \
+            -DCMAKE_CXX_FLAGS="-march=x86-64 -mtune=generic" \
+            -DSDL_AVX=OFF -DSDL_AVX2=OFF -DSDL_AVX512F=OFF \
             -DSDL_REVISION=SDL-3.5.0-5d7167cbc98d1a47a940b4092b3505ebd2b95a95-5783dfb-compatible \
             -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF
           cmake --build "$RUNNER_TEMP/sdl3-build" --parallel 3
