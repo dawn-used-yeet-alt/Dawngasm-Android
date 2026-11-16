@@ -50,7 +50,7 @@ with the same intent.
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ✅ Complete |
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
 | 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | ✅ Complete |
-| 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | 🟡 In progress |
+| 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | ✅ Complete |
 | 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ⬜ Planned |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
@@ -182,17 +182,24 @@ phase still needs live host access and clean-install verification.
   unpacked app image is 149 MiB, and the icon task kept 20 classes while
   removing 11,085. Desktop CI `43825671449` stayed green on all four runners.
 
-- **Phase 21 — in progress (2026-11-16).** Added a separate `native-spike`
+- **Phase 21 — complete (2026-11-16).** Added a separate `native-spike`
   Gradle build so the main build keeps its Compose 1.11.1 pins. The spike uses
   Kotlin 2.4.21, official Compose 1.13.0-beta01, `compose-native` 1.13.0-beta01,
   `kmplayer` 0.2.1, and `kmedianotification` 0.1.1. It builds a real Compose
   Native window, creates a `KMPlayer` and reports its backend/capabilities, and
   constructs a desktop `MediaPlatform` plus `KMediaNotification` session behind
-  a `--self-test` early exit that CI can run on every runner. Linux CI installs
+  a `--self-test` early exit that CI runs on every runner. Linux CI installs
   SDL3 (pinned source build), fontconfig, D-Bus, EGL/GL, GStreamer, and Pulse dev
-  packages; macOS installs SDL3 with Homebrew; Windows needs no extra SDK. The
-  native desktop entry point links on all four runners before any of the main
-  source sets move to `desktopNative`.
+  packages; macOS installs SDL3 with Homebrew; Windows stages SDL3 and the MinGW
+  runtime. Desktop CI run `43852759935` linked the native executable and passed
+  `--self-test` across all four matrix runners (`ubuntu-latest`, `windows-latest`,
+  `macos-latest`, `macos-15-intel`). Linux confirmed the `GStreamer` player backend
+  and D-Bus MPRIS session; macOS arm64 and macOS x64 confirmed `AvFoundation` and
+  Now Playing session; Windows confirmed MinGW compilation, SDL3 dynamic loading,
+  and `kmedianotification` SMTC session (with audio endpoint probe bypassed in
+  headless CI where no virtual audio device exists). macOS Arm64 klib caching was
+  resolved by provisioning the native toolchain and stripping `macos_arm64` from
+  `cacheableTargets` in `konan.properties`.
 
 ---
 

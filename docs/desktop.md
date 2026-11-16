@@ -183,3 +183,58 @@ Settings are a UTF-8 JSON file written atomically. Logs live under the
 `logs/` subdirectory. Downloads go to `~/Music/Dawngasm` unless a folder is
 chosen in Settings. `DAWNGASM_CONFIG_DIR`, `DAWNGASM_CACHE_DIR`, and
 `DAWNGASM_MUSIC_DIR` override those locations for portable or test runs.
+
+## Native desktop shell (spike & Phase 21/22 migration)
+
+Phase 21 validates a Kotlin/Native desktop shell built on `compose-native`
+(`dev.brahmkshatriya.compose`), `kmplayer`, and `kmedianotification`. It eliminates
+the JVM, Java runtime, and `jlink` runtime image completely from the desktop
+distribution.
+
+### Stack and dependencies
+
+- **Compose Native** (`1.13.0-beta01`): Pure Kotlin/Native Compose UI fork using SDL3
+  for windowing and rendering.
+- **KMPlayer** (`0.2.1`): Multiplatform native audio/video playback mapping directly to
+  host platform multimedia APIs:
+  - Linux: GStreamer
+  - macOS: AVFoundation
+  - Windows: Microsoft Media Foundation
+- **KMediaNotification** (`0.1.1`): Desktop OS media control integration:
+  - Linux: D-Bus MPRIS (`org.mpris.MediaPlayer2`)
+  - Windows: System Media Transport Controls (SMTC)
+  - macOS: Now Playing info center
+- **Kotlin/Native** (`2.4.21`): Direct machine code compilation via LLVM.
+
+### Build and test targets
+
+The native spike lives in the `native-spike/` Gradle subproject:
+
+- **Linux x64**: `cd native-spike && ./gradlew :app:linkDebugExecutableLinuxX64`
+- **Windows x64**: `cd native-spike && ./gradlew :app:linkDebugExecutableMingwX64`
+- **macOS Arm64**: `cd native-spike && ./gradlew :app:linkDebugExecutableMacosArm64`
+- **macOS x64 (Intel)**: `cd native-spike && ./gradlew :app:linkDebugExecutableMacosX64`
+
+Executables are produced at `native-spike/app/build/bin/<target>/debugExecutable/app.kexe`
+(or `app.exe` on Windows).
+
+### Headless self-test
+
+The binary provides a `--self-test` early exit that executes without creating a UI
+window, verifying platform player initialization and media notification sessions:
+
+```bash
+# General self-test (Linux and macOS)
+./native-spike/app/build/bin/linuxX64/debugExecutable/app.kexe --self-test
+
+# Windows headless CI (skips WASAPI audio render endpoint check where no sound device exists)
+native-spike/app/build/bin/mingwX64/debugExecutable/app.exe --self-test --skip-audio-probe
+```
+
+### Compiler cache handling (macOS Arm64)
+
+Kotlin 2.4.21 defaults to static klib caching on Tier 1 targets like `macos_arm64`,
+which encounters IR constructor binding errors on `ui-unit-macosarm64.klib`. CI
+provisions the native distribution via `:app:compileKotlinMacosArm64` and strips
+`macos_arm64` from `cacheableTargets` in `konan.properties`, cleanly compiling
+without static klib cache conflicts (matching `macosX64` Tier 2 behavior).
