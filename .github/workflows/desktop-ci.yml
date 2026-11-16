@@ -56,7 +56,9 @@ jobs:
 
       - name: Compile desktop targets and run shared desktop tests
         shell: bash
-        run: ./gradlew --no-daemon --build-cache --stacktrace :shared:desktopTest :desktopApp:compileKotlin
+        run: >
+          ./gradlew --no-daemon --build-cache --stacktrace
+          :shared:desktopTest :desktopApp:test :desktopApp:compileKotlin
 
       - name: Check native clearance helper
         shell: bash

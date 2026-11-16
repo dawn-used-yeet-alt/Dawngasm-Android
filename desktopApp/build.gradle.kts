@@ -24,6 +24,7 @@ dependencies {
     implementation(libs.jna)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.swing)
+    testImplementation(libs.junit)
 }
 
 compose.desktop {
@@ -247,6 +248,10 @@ val buildDesktopHotaudio by tasks.registering(BuildDesktopHotaudioTask::class) {
 }
 
 tasks.matching { it.name == "compileKotlin" }.configureEach {
+    dependsOn(buildDesktopHotaudio)
+}
+
+tasks.named<Test>("test") {
     dependsOn(buildDesktopHotaudio)
 }
 
