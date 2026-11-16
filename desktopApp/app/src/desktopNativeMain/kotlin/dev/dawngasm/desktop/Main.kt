@@ -15,6 +15,7 @@ import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DesktopPlatform
 import dev.dawngasm.app.data.NativeFileSaver
 import dev.dawngasm.app.data.NativeSettings
+import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.platform.NativeSettingsPlatformActions
 import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
