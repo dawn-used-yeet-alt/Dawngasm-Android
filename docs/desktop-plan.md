@@ -25,15 +25,15 @@ with the same intent.
 | Phase | Focus | Output | Status |
 |---|---|---|---|
 | 0 | Desktop targets + CI compile workflows | Empty window on all OSes | ✅ Complete |
-| 1 | Real UI with sample data | Full UI renders | ⬜ Pending |
-| 2 | Platform services | Paths, prefs, files, logs, network | ⬜ Pending |
-| 3 | Presenter | Feed, search, library work | ⬜ Pending |
-| 4 | Playback engine | Local/HTTP audio plays | ⬜ Pending |
-| 5 | Soundgasm + Whyp | Both hosts play end-to-end | ⬜ Pending |
-| 6 | Downloads + local playback | Offline library works | ⬜ Pending |
-| 7 | Settings integration | Folder picker, about, debug logs | ⬜ Pending |
-| 8 | Audiochan resolution | Plays with pasted clearance | ⬜ Pending |
-| 9 | Audiochan downloads + expiry UX | Download + re-check flow | ⬜ Pending |
+| 1 | Real UI with sample data | Full UI renders | ✅ Complete |
+| 2 | Platform services | Paths, prefs, files, logs, network | ✅ Complete |
+| 3 | Presenter | Feed, search, library work | ✅ Complete |
+| 4 | Playback engine | Local/HTTP audio plays | ✅ Complete |
+| 5 | Soundgasm + Whyp | Both hosts play end-to-end | ✅ Complete |
+| 6 | Downloads + local playback | Offline library works | ✅ Complete |
+| 7 | Settings integration | Folder picker, about, debug logs | ✅ Complete |
+| 8 | Audiochan resolution | Plays with pasted clearance | ✅ Complete |
+| 9 | Audiochan downloads + expiry UX | Download + re-check flow | ✅ Complete |
 | 10 | Cross-platform clearance helper | In-app challenge window | ⬜ Pending |
 | 11 | Desktop UX | Menus, shortcuts, responsive layout | ⬜ Pending |
 | 12 | Download hardening | Cross-OS filenames/paths | ⬜ Pending |
@@ -54,6 +54,15 @@ with the same intent.
   `PlatformThemeEffect`, and both WebView composables, added the
   `.github/workflows/desktop-ci.yml` four-runner compile/test matrix, and
   pushed the branch. Local compilation is intentionally left to CI.
+
+- **Phases 1–9 — complete (2026-11-16).** The desktop shell renders the shared
+  UI with the real presenter, file-backed settings, OkHttp networking, VLCJ
+  playback, Soundgasm/Whyp/Audiochan resolution, streaming downloads to a
+  custom folder, local-file playback, and manual Audiochan cookie/UA clearance.
+  The four-runner CI matrix passed on `ubuntu-latest`, `windows-latest`,
+  `macos-latest`, and `macos-15-intel` for commit `38ca478`. Phase 10
+  (native `wry` clearance helper) remains pending; pasted clearance is the
+  working fallback.
 
 ---
 

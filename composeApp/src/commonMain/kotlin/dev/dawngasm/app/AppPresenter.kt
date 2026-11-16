@@ -608,4 +608,8 @@ class AppPresenter(
     override fun nextTrack() {
         player.nextTrack()
     }
+
+    override fun previousTrack() {
+        player.previousTrack()
+    }
 }

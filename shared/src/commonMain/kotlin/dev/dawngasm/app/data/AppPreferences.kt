@@ -113,6 +113,25 @@ class AppPreferences(private val settings: Settings) {
         settings.putBoolean(KEY_MEDIA_SESSION_SERVICE, enabled)
     }
 
+    /** Last desktop window position, if it was ever saved. */
+    fun windowX(): Int? = settings.getIntOrNull(KEY_WINDOW_X)
+
+    fun windowY(): Int? = settings.getIntOrNull(KEY_WINDOW_Y)
+
+    fun windowWidth(): Int? = settings.getIntOrNull(KEY_WINDOW_WIDTH)
+
+    fun windowHeight(): Int? = settings.getIntOrNull(KEY_WINDOW_HEIGHT)
+
+    fun windowMaximized(): Boolean = settings.getBoolean(KEY_WINDOW_MAXIMIZED, false)
+
+    fun saveWindowBounds(x: Int, y: Int, width: Int, height: Int, maximized: Boolean) {
+        settings.putInt(KEY_WINDOW_X, x)
+        settings.putInt(KEY_WINDOW_Y, y)
+        settings.putInt(KEY_WINDOW_WIDTH, width)
+        settings.putInt(KEY_WINDOW_HEIGHT, height)
+        settings.putBoolean(KEY_WINDOW_MAXIMIZED, maximized)
+    }
+
     private fun readTags(key: String): List<String> {
         val raw = settings.getStringOrNull(key) ?: return emptyList()
         return raw.split('\u0001').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -134,5 +153,10 @@ class AppPreferences(private val settings: Settings) {
         const val KEY_HISTORY = "history_tracks"
         const val KEY_DOWNLOADS = "downloaded_tracks"
         const val KEY_MEDIA_SESSION_SERVICE = "media_session_service"
+        const val KEY_WINDOW_X = "window_x"
+        const val KEY_WINDOW_Y = "window_y"
+        const val KEY_WINDOW_WIDTH = "window_width"
+        const val KEY_WINDOW_HEIGHT = "window_height"
+        const val KEY_WINDOW_MAXIMIZED = "window_maximized"
     }
 }

@@ -16,6 +16,7 @@ interface DawngasmActions {
     fun download(track: Track)
     fun togglePlayPause()
     fun nextTrack()
+    fun previousTrack()
     fun dismissPlayer()
     fun seekTo(positionMs: Long)
     fun clearSearch()

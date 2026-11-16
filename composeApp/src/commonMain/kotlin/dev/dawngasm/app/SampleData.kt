@@ -72,6 +72,7 @@ object NoOpDawngasmActions : DawngasmActions {
     override fun download(track: Track) = Unit
     override fun togglePlayPause() = Unit
     override fun nextTrack() = Unit
+    override fun previousTrack() = Unit
     override fun dismissPlayer() = Unit
     override fun seekTo(positionMs: Long) = Unit
     override fun clearSearch() = Unit
