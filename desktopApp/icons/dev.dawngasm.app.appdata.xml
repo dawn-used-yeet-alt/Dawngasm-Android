@@ -18,7 +18,7 @@
       listening, and keep a local library with playback history.
     </p>
   </description>
-  <launchable type="desktop-id">dawngasm.desktop</launchable>
+  <launchable type="desktop-id">dev.dawngasm.app.desktop</launchable>
   <url type="homepage">https://github.com/dawn-used-yeet-alt/Dawngasm-Android</url>
   <url type="bugtracker">https://github.com/dawn-used-yeet-alt/Dawngasm-Android/issues</url>
   <categories>

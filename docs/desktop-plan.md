@@ -34,7 +34,7 @@ with the same intent.
 | 7 | Settings integration | Folder picker, about, debug logs | ✅ Complete |
 | 8 | Audiochan resolution | Plays with pasted clearance | ✅ Complete |
 | 9 | Audiochan downloads + expiry UX | Download + re-check flow | ✅ Complete |
-| 10 | Cross-platform clearance helper | In-app challenge window | ⬜ Pending |
+| 10 | Cross-platform clearance helper | In-app challenge window | ✅ Complete |
 | 11 | Desktop UX | Menus, shortcuts, responsive layout | ✅ Complete |
 | 12 | Download hardening | Cross-OS filenames/paths | ✅ Complete |
 | 13 | Linux packaging | `.deb`, `.rpm`, AppImage | ✅ Complete |
@@ -89,6 +89,20 @@ with the same intent.
   macOS arm64, and macOS x64. Artifacts are unsigned; Phase 16 covers
   signing/notarization. See `docs/desktop.md` for runtime requirements,
   package commands, and state locations.
+
+- **Phase 10 — complete (2026-11-16).** Added the
+  `dawngasm-clearance-helper` Rust crate (`wry` 0.57 + `tao` 0.37) in
+  `desktopApp/native/clearance-helper`. It opens the system webview
+  (WebKitGTK/WebView2/WKWebView), clears stale cookies, optionally injects the
+  Audiochan Turnstile script, polls until the required cookie appears, and
+  prints merged cookies plus the real User-Agent as JSON. Desktop Settings now
+  launches it in a progress dialog, saves the captured session, and keeps the
+  paste-cookie dialog as a fallback. The helper is staged through
+  `appResourcesRootDir` into every package; Gradle packaging tasks build it
+  with Cargo, and CI compiles it on all four runners. Desktop CI
+  `43811218510` and packaging run `43811380939` are green. Hotaudio IP/family
+  detection is still supplied by the manual fallback dialog when needed. See
+  `docs/desktop.md` for the WebKitGTK/WebView2 runtime notes.
 
 ---
 
