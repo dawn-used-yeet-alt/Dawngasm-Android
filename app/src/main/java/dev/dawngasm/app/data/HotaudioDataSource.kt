@@ -8,6 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
+import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 
@@ -50,7 +51,7 @@ class HotaudioDataSource(private val context: Context) : DataSource {
 
         // A retry can truncate the file while the next attempt starts.
         var waitedMs = 0L
-        while (!stream.spec.file.exists()) {
+        while (!File(stream.filePath).exists()) {
             stream.error?.let { failure ->
                 if (position > 0L) {
                     // Part of the track already played; end it cleanly instead of
@@ -74,7 +75,7 @@ class HotaudioDataSource(private val context: Context) : DataSource {
             waitedMs += 50L
         }
 
-        file = RandomAccessFile(stream.spec.file, "r")
+        file = RandomAccessFile(File(stream.filePath), "r")
         openedGeneration = stream.generation
 
         HotaudioLog.i(
@@ -102,9 +103,9 @@ class HotaudioDataSource(private val context: Context) : DataSource {
             if (file == null || openedGeneration != stream.generation) {
                 file?.let { runCatching { it.close() } }
                 file = null
-                if (stream.spec.file.exists()) {
+                if (File(stream.filePath).exists()) {
                     try {
-                        file = RandomAccessFile(stream.spec.file, "r")
+                        file = RandomAccessFile(File(stream.filePath), "r")
                         openedGeneration = stream.generation
                         HotaudioLog.i(
                             "datasource reopened track=${stream.spec.trackId} " +

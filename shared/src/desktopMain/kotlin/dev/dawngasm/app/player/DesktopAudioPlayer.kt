@@ -1,8 +1,11 @@
 package dev.dawngasm.app.player
 
 import dev.dawngasm.app.data.AudioUrlResolver
+import dev.dawngasm.app.data.HotaudioErrors
+import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.PlaybackQueue
 import dev.dawngasm.app.data.ResolvedAudio
+import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.util.PlatformLog
 import kotlin.concurrent.Volatile
@@ -89,7 +92,13 @@ class DesktopAudioPlayer(
 
     override fun play(track: Track, queue: List<Track>?) {
         val activeQueue = queue ?: listOf(track)
+        val previous = _state.value.currentTrack
         this.queue.setQueue(activeQueue, track)
+        if (previous != null && previous.id != track.id) {
+            // Android does the same on track change: the old growing file is
+            // no longer needed and keeping it would leak cache space.
+            HotaudioStreamer.cancel(previous.id)
+        }
         playJob?.cancel()
         ignoreEnded = false
 
@@ -214,6 +223,29 @@ class DesktopAudioPlayer(
     }
 
     private fun handleTrackFinished() {
+        val current = _state.value.currentTrack
+        val stream = current
+            ?.takeIf { it.host == AudioHost.HOTAUDIO }
+            ?.let { HotaudioStreamer.stateFor(it.id) }
+        if (current != null && stream != null) {
+            val streamFailure = stream.error
+            if (streamFailure != null) {
+                // A hotaudio download that died mid-track ends like a normal
+                // EOF. Surface the reason instead of silently advancing.
+                fail(HotaudioErrors.userMessage(streamFailure))
+                return
+            }
+            if (!stream.done && stream.bytesWritten > 0L) {
+                // The downloader moved to a new attempt and closed the old
+                // response; reconnect to the live stream at the new position.
+                PlatformLog.w(
+                    "DesktopAudioPlayer",
+                    "hotaudio stream restarted track=${current.id}; reconnecting",
+                )
+                play(current, queue.tracks)
+                return
+            }
+        }
         val next = queue.moveToNext()
         if (next != null) {
             play(next, queue.tracks)

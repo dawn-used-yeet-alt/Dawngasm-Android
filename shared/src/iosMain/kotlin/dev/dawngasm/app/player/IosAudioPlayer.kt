@@ -72,7 +72,7 @@ class IosAudioPlayer(
                 val item = if (resolved.url.startsWith("hotaudio://", ignoreCase = true)) {
                     val trackId = HotaudioStreamer.trackIdFrom(resolved.url)
                     val streamState = trackId?.let { HotaudioStreamer.stateFor(it) }
-                    val path = streamState?.spec?.filePath
+                    val path = streamState?.filePath
                     if (path != null) {
                         AVPlayerItem(uRL = NSURL.fileURLWithPath(path))
                     } else {

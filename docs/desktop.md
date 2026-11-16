@@ -94,6 +94,22 @@ path for a locally built library. A desktop test loads the library and calls
 `version()`/`setClearance()`/`clearClearance()` so CI catches missing or
 mismatched native payloads.
 
+## Hotaudio streaming
+
+hotaudio writes concatenated fragmented MP4. Desktop downloads go to the cache
+directory under `hotaudio/`, and a loopback HTTP server exposes the growing file
+to VLC on `http://127.0.0.1:<port>/stream/<track-id>`. Live responses use
+chunked transfer so playback continues while the download appends; seeks inside
+the already-downloaded prefix use byte ranges. The server binds to loopback
+only and stops when the app quits.
+
+Each download attempt uses its own `<track-id>.gen<N>.m4a.part` file, because
+Windows cannot truncate or delete a file that the player still has open. The
+completed `.done` marker records the final path, and downloading copies that
+file into the library. A successful clearance capture also records the IP
+family/local address used for `hotaudio.net` so playback and the native
+extractor use the same network stack.
+
 ## State and logs
 
 - Linux: `$XDG_CONFIG_HOME/dawngasm` (or `~/.config/dawngasm`)

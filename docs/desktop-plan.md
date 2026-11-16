@@ -42,11 +42,13 @@ with the same intent.
 | 15 | macOS packaging | Two DMGs (arm64 + x64) | ✅ Complete |
 | 16 | Signing / notarization | Clean installs everywhere | 🟡 Scaffolded |
 | 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ✅ Complete |
-| 18 | Hotaudio streaming + downloads | Early playback, seeking | ⬜ Pending |
-| 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | ⬜ Pending |
+| 18 | Hotaudio streaming + downloads | Early playback, seeking | ✅ Complete |
+| 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
+`🟡 Implemented` means the code and desktop integration are in place but the
+phase still needs live host access and clean-install verification.
 
 ## Progress log
 
@@ -126,6 +128,29 @@ with the same intent.
   Desktop CI `43815938855` passed on Ubuntu, Windows, and macOS arm64; the
   macOS x64 runner also compiled the bindings in the preceding run `43814970473`.
   Streaming, downloads, and clearance use are Phase 18/19.
+
+- **Phase 18 — complete (2026-11-16).** `AudioResolver.desktop` now runs
+  `ensureStarted` → `awaitFirstBytes` → `awaitLead` for hotaudio and returns a
+  loopback URL. `HotaudioStreamServer` serves the growing cache file: live
+  responses are chunked so VLC keeps reading until the download finishes,
+  snapshots answer seeks inside the downloaded prefix with `206`/`Content-Range`,
+  and completed streams support normal byte ranges. Desktop attempts use
+  generation-specific `.part` files, and the `.done` marker records the final
+  path so completed streams restore after restart. The Android data source now
+  follows `HotaudioStreamState.filePath`, keeping the existing single-file
+  behavior there. `DesktopTrackDownloader` copies the completed stream into the
+  library, the player cancels the previous track's stream and reconnects after
+  a downloader retry, and a desktop test covers full and ranged responses.
+
+- **Phase 19 — implemented (2026-11-16), verification pending.** The Settings
+  hotaudio flow already launches the Phase 10 native helper and saves
+  `cf_clearance` plus the real User-Agent. Successful captures now also detect
+  the egress IP family and local address used for hotaudio, so the extractor is
+  pinned to the same stack as the clearance window. Expired or challenged
+  cookies surface the shared `HotaudioErrors.userMessage` with a Settings hint,
+  and the existing refresh/clear actions reset the native bridge. Final signing
+  and clean-install end-to-end verification remain with Phase 16 and need real
+  host access/credentials.
 
 ---
 

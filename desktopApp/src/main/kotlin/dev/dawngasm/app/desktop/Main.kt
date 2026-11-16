@@ -32,6 +32,8 @@ import dev.dawngasm.app.data.DesktopFileSaver
 import dev.dawngasm.app.data.DesktopPlatform
 import dev.dawngasm.app.data.DesktopTrackDownloader
 import dev.dawngasm.app.data.DawngasmApi
+import dev.dawngasm.app.data.HotaudioDesktopIntegration
+import dev.dawngasm.app.data.HotaudioStreamServer
 import dev.dawngasm.app.player.DesktopAudioPlayer
 import dev.dawngasm.app.state.AppCommand
 import dev.dawngasm.app.ui.theme.DawngasmTheme
@@ -114,6 +116,7 @@ private fun persistWindowState(prefs: AppPreferences, windowState: WindowState) 
 
 fun main() {
     DesktopPlatform.ensureDirectories()
+    HotaudioDesktopIntegration.install()
     DesktopHotaudio.install()
     application {
         val prefs = remember { AppPreferences() }
@@ -148,6 +151,7 @@ fun main() {
         val windowState = rememberDesktopWindowState(prefs)
         val quit: () -> Unit = {
             persistWindowState(prefs, windowState)
+            HotaudioStreamServer.stop()
             exitApplication()
         }
         Window(

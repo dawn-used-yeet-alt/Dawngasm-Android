@@ -486,10 +486,8 @@ class AppPresenter(
                         audio.url.startsWith("${HotaudioStreamer.SCHEME}:")
                     ) {
                         val spec = HotaudioStreamer.spec(track.id, track.pageUrl)
-                        if (HotaudioStreamer.stateFor(track.id) == null) {
-                            HotaudioStreamer.ensureStarted(spec, prefs)
-                        }
-                        val path = HotaudioStreamer.awaitComplete(spec)
+                        val stream = HotaudioStreamer.ensureStarted(spec, prefs)
+                        val path = HotaudioStreamer.awaitComplete(stream.spec)
                         PlatformFileOps.readBytes(path)
                             ?: throw IllegalStateException("Could not read downloaded hotaudio stream")
                     } else {

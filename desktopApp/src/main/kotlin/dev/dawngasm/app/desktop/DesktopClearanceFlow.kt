@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.AppPresenter
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.ui.components.ClearanceScripts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal enum class ClearanceTarget {
     HOTAUDIO,
@@ -136,12 +138,17 @@ internal fun DesktopClearanceFlow(
             is DesktopClearanceHelper.Result.Success -> {
                 val captured = result.captured
                 when (target) {
-                    ClearanceTarget.HOTAUDIO -> presenter.saveHotaudioClearance(
-                        captured.cookie,
-                        captured.userAgent,
-                        null,
-                        null,
-                    )
+                    ClearanceTarget.HOTAUDIO -> {
+                        val egress = withContext(Dispatchers.IO) {
+                            DesktopNetworkInfo.detectHotaudioEgress()
+                        }
+                        presenter.saveHotaudioClearance(
+                            captured.cookie,
+                            captured.userAgent,
+                            egress.ip,
+                            egress.family,
+                        )
+                    }
                     ClearanceTarget.AUDIOCHAN -> presenter.saveAudiochanClearance(
                         captured.cookie,
                         captured.userAgent,

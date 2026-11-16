@@ -44,10 +44,8 @@ class DesktopTrackDownloader(
                     audio.url.startsWith("${HotaudioStreamer.SCHEME}:")
                 ) {
                     val spec = HotaudioStreamer.spec(track.id, track.pageUrl)
-                    if (HotaudioStreamer.stateFor(track.id) == null) {
-                        HotaudioStreamer.ensureStarted(spec, prefs)
-                    }
-                    val completed = Path.of(HotaudioStreamer.awaitComplete(spec))
+                    val stream = HotaudioStreamer.ensureStarted(spec, prefs)
+                    val completed = Path.of(HotaudioStreamer.awaitComplete(stream.spec))
                     ensureFreeSpace(directory, Files.size(completed))
                     Files.copy(completed, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
                 } else {
