@@ -18,7 +18,7 @@ kotlin {
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         binaries.configureEach {
-            freeCompilerArgs.add("-Xoverride-konan-properties=cacheableTargets=")
+            freeCompilerArgs += "-Xoverride-konan-properties=cacheableTargets="
         }
     }
 
