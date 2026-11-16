@@ -55,10 +55,13 @@ fun main(args: Array<String>) {
     application {
         val savedWidth = prefs.windowWidth()
         val savedHeight = prefs.windowHeight()
-        val initialSize = if (savedWidth != null && savedHeight != null && savedWidth > 0 && savedHeight > 0) {
+        val isDefaultOrNull = savedWidth == null || savedHeight == null ||
+            (savedWidth == 800 && savedHeight == 600)
+        val initialSize = if (!isDefaultOrNull && savedWidth!! > 0 && savedHeight!! > 0) {
             DpSize(savedWidth.dp, savedHeight.dp)
         } else {
-            DpSize.Unspecified
+            // Default to full tile geometry so it tiles like the terminal instead of a tiny 800x600 box
+            DpSize(1354.dp, 756.dp)
         }
         val windowState = rememberWindowState(size = initialSize)
 
