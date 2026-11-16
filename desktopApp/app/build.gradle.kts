@@ -14,7 +14,7 @@ kotlin {
 
     desktopNative {
         binaries.executable {
-            entryPoint = "dev.dawngasm.spike.main"
+            entryPoint = "dev.dawngasm.desktop.main"
         }
     }
 
@@ -56,10 +56,22 @@ kotlin {
 }
 
 composeNativeApplication {
-    applicationName.set("Dawngasm Native Spike")
-    packageName.set("dev.dawngasm.spike")
-    executableName.set("dawngasm-native-spike")
-    description.set("Standalone native desktop shell for Dawngasm")
+    applicationName.set("Dawngasm")
+    packageName.set("dev.dawngasm")
+    executableName.set("Dawngasm")
+    packageVersion.set("2.0.0")
+    description.set("Audio browser and player for soundgasm, whyp, and audiochan")
+    vendor.set("Dawngasm")
     categories.set(listOf("AudioVideo", "Audio", "Player"))
     startupWmClass.set("Dawngasm")
+
+    val hostOs = System.getProperty("os.name")
+    val icon = when {
+        hostOs.startsWith("Mac", ignoreCase = true) -> file("../icons/dawngasm.icns")
+        hostOs.startsWith("Windows", ignoreCase = true) -> file("../icons/dawngasm.ico")
+        else -> file("../icons/dawngasm.png")
+    }
+    if (icon.exists()) {
+        iconFile.set(icon)
+    }
 }

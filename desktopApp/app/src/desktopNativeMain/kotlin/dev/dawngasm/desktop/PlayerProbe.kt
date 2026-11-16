@@ -1,4 +1,4 @@
-package dev.dawngasm.spike
+package dev.dawngasm.desktop
 
 import dev.brahmkshatriya.kmplayer.KMPlayer
 import dev.brahmkshatriya.kmplayer.KMPlayerConfig

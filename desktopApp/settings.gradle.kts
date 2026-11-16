@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "dawngasm-native-spike"
+rootProject.name = "dawngasm-desktop"
 
 include(":app")

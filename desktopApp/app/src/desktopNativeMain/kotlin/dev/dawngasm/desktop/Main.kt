@@ -1,4 +1,4 @@
-package dev.dawngasm.spike
+package dev.dawngasm.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -61,7 +61,7 @@ fun main(args: Array<String>) {
                         messages = presenter.messages,
                         actions = presenter,
                         settingsPlatform = settingsActions,
-                        appVersion = SpikeInfo.VERSION,
+                        appVersion = DesktopInfo.VERSION,
                     )
                 }
             }
@@ -70,8 +70,8 @@ fun main(args: Array<String>) {
 }
 
 private fun runSelfTest(skipAudio: Boolean = false) {
-    println("dawngasm native spike ${SpikeInfo.VERSION}")
-    println("os=${SpikeInfo.osName} arch=${SpikeInfo.archName}")
+    println("dawngasm desktop ${DesktopInfo.VERSION}")
+    println("os=${DesktopInfo.osName} arch=${DesktopInfo.archName}")
 
     DesktopPlatform.ensureDirectories()
     val settings = NativeSettings()

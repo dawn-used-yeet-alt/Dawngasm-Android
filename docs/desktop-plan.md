@@ -202,11 +202,11 @@ phase still needs live host access and clean-install verification.
   `cacheableTargets` in `konan.properties`.
 
 - **Phase 22 — complete (2026-11-16).** Fully wired the UI, domain, and native
-  actuals into the native desktop shell (`native-spike/app`). Linked
+  actuals into the native desktop shell. Linked
   `shared/src/commonMain/kotlin`, `composeApp/src/commonMain/kotlin`, and
   `composeApp/src/desktopMain/kotlin` directly into the native build targets.
   Embedded the 33 required vector icons and `Icons.kt` directly under
-  `native-spike/app/src/commonMain/kotlin/androidx/compose/material/icons/` with
+  `desktopApp/app/src/commonMain/kotlin/androidx/compose/material/icons/` with
   their original Android Open Source Project Apache 2.0 license headers,
   bypassing missing Maven Central native icon klibs. Implemented all 10 native
   actuals and bridges:
@@ -225,11 +225,24 @@ phase still needs live host access and clean-install verification.
   `Slider` and `ExposedDropdownMenu` cross-version compatibility between Compose
   1.11.1 and 1.13.0.
   Desktop CI run `43868685189` completed with full success across all 8 matrix jobs:
-  - `Native spike (ubuntu-latest)`: PASSED (`self-test: ok`, GStreamer backend, MPRIS session, 126 MB unstripped debug binary).
-  - `Native spike (windows-latest)`: PASSED (`self-test: ok`, MinGW x64, SDL3 DLL runtime, SMTC session, 84 MB unstripped debug binary).
-  - `Native spike (macos-latest)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 64 MB unstripped debug binary).
-  - `Native spike (macos-15-intel)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 68 MB unstripped debug binary).
+  - `Native (ubuntu-latest)`: PASSED (`self-test: ok`, GStreamer backend, MPRIS session, 126 MB unstripped debug binary).
+  - `Native (windows-latest)`: PASSED (`self-test: ok`, MinGW x64, SDL3 DLL runtime, SMTC session, 84 MB unstripped debug binary).
+  - `Native (macos-latest)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 64 MB unstripped debug binary).
+  - `Native (macos-15-intel)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 68 MB unstripped debug binary).
   - Plus all 4 standard JVM desktop test runners green.
+
+- **Phase 23 — in progress (2026-11-16).** Retired the obsolete JVM desktop shell
+  (`desktopApp` JVM module with VLCJ/AWT), dropping `include(":desktopApp")` from
+  root `settings.gradle.kts`. Promoted the standalone Kotlin/Native shell to
+  `desktopApp` with package namespace `dev.dawngasm.desktop` and application identity
+  `Dawngasm 2.0.0`. Configured production native release packaging tasks:
+  - Linux x64: `packageLinuxX64ReleaseAppImage` via `appimagetool` -> `Dawngasm-2.0.0-linux-x86_64.AppImage`.
+  - Windows x64: `packageWindowsX64ReleaseZip` -> `Dawngasm-2.0.0-windows-x86_64.zip`.
+  - macOS arm64: `packageMacosArm64ReleaseDmg` via `hdiutil` -> `Dawngasm-2.0.0-macos-aarch64.dmg`.
+  - macOS x64: `packageMacosX64ReleaseDmg` via `hdiutil` -> `Dawngasm-2.0.0-macos-x86_64.dmg`.
+  Configured CI workflow to assemble stripped release packages, execute `--self-test`,
+  record exact binary and package byte counts, and upload downloadable release
+  artifacts via `actions/upload-artifact@v7`.
 
 ---
 

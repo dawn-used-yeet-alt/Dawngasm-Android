@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: >
           ./gradlew --no-daemon --build-cache --stacktrace
-          :shared:desktopTest :desktopApp:test :desktopApp:compileKotlin
+          :shared:desktopTest
 
       - name: Check native clearance helper
         shell: bash
@@ -76,20 +76,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  native-spike:
-    name: Native spike (${{ matrix.os }})
+  desktop-native:
+    name: Desktop Native (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            task: linkDebugExecutableLinuxX64
+            packageTask: packageLinuxX64ReleaseAppImage
+            artifactName: dawngasm-desktop-linux-x64-appimage
+            artifactPath: desktopApp/app/build/distributions/*.AppImage
           - os: windows-latest
-            task: linkDebugExecutableMingwX64
+            packageTask: packageWindowsX64ReleaseZip
+            artifactName: dawngasm-desktop-windows-x64-zip
+            artifactPath: desktopApp/app/build/distributions/*.zip
           - os: macos-latest
-            task: linkDebugExecutableMacosArm64
+            packageTask: packageMacosArm64ReleaseDmg
+            artifactName: dawngasm-desktop-macos-arm64-dmg
+            artifactPath: desktopApp/app/build/distributions/*-aarch64.dmg
           - os: macos-15-intel
-            task: linkDebugExecutableMacosX64
+            packageTask: packageMacosX64ReleaseDmg
+            artifactName: dawngasm-desktop-macos-x64-dmg
+            artifactPath: desktopApp/app/build/distributions/*-x86_64.dmg
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
 
@@ -156,6 +164,23 @@ jobs:
           sudo cmake --install "$RUNNER_TEMP/sdl3-build"
           sudo ldconfig
 
+      - name: Install appimagetool (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y file desktop-file-utils libfuse2t64 2>/dev/null || sudo apt-get install -y file desktop-file-utils libfuse2 2>/dev/null || true
+          curl -fsSL https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -o /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          (cd /tmp && ./appimagetool --appimage-extract)
+          if [[ -e /tmp/squashfs-root/usr/bin/desktop-file-validate ]] && [[ ! -s /tmp/squashfs-root/usr/bin/desktop-file-validate ]]; then
+            rm -f /tmp/squashfs-root/usr/bin/desktop-file-validate
+            ln -sf /usr/bin/desktop-file-validate /tmp/squashfs-root/usr/bin/desktop-file-validate
+          fi
+          sudo mv /tmp/squashfs-root /opt/appimagetool
+          sudo ln -sf /opt/appimagetool/AppRun /usr/local/bin/appimagetool
+          echo "APPIMAGETOOL=/usr/local/bin/appimagetool" >> $GITHUB_ENV
+          /usr/local/bin/appimagetool --version
+
       - name: Install SDL3 (macOS)
         if: runner.os == 'macOS'
         run: brew list sdl3 >/dev/null 2>&1 || brew install sdl3
@@ -163,7 +188,7 @@ jobs:
       - name: Disable Kotlin/Native klib cache for macOS arm64
         if: runner.os == 'macOS' && runner.arch == 'ARM64'
         shell: bash
-        working-directory: native-spike
+        working-directory: desktopApp
         run: |
           ./gradlew --no-daemon :app:compileKotlinMacosArm64 || true
           python3 -c "
@@ -183,10 +208,10 @@ jobs:
           "
           find "$HOME/.konan" -name "konan.properties" -exec grep -H "cacheableTargets" {} +
 
-      - name: Link native spike
+      - name: Package native release
         shell: bash
-        working-directory: native-spike
-        run: ./gradlew --no-daemon --stacktrace :app:${{ matrix.task }}
+        working-directory: desktopApp
+        run: ./gradlew --no-daemon --stacktrace :app:${{ matrix.packageTask }}
 
       - name: Start Windows audio services
         if: runner.os == 'Windows'
@@ -197,26 +222,23 @@ jobs:
           Set-Service -Name "AudioSrv" -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name "AudioSrv" -ErrorAction SilentlyContinue
 
-      - name: Self-test native spike
+      - name: Self-test native binary
         shell: bash
         run: |
           set -euo pipefail
-          binary="$(find native-spike/app/build/bin -type f \
-            \( -name '*.kexe' -o -name '*.exe' \) -print -quit)"
+          binary="$(find desktopApp/app/build/distributions -type f \( -name 'Dawngasm' -o -name 'Dawngasm.exe' \) 2>/dev/null | head -1)"
           if [[ -z "$binary" ]]; then
-            echo "native spike executable not found"
-            find native-spike/app/build -maxdepth 5 -type f | head -100
+            binary="$(find desktopApp/app/build/bin -type f \( -name '*.kexe' -o -name '*.exe' \) 2>/dev/null | head -1)"
+          fi
+          if [[ -z "$binary" ]]; then
+            echo "native executable not found"
+            find desktopApp/app/build -maxdepth 5 -type f | head -100
             exit 1
           fi
-          echo "found native spike binary: $binary"
+          echo "found native binary: $binary"
           chmod +x "$binary" 2>/dev/null || true
           extra_flags=""
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            sdl_dll="$(find native-spike/app/build -type f -name 'SDL3.dll' -print -quit)"
-            if [[ -n "$sdl_dll" ]]; then
-              echo "copying $sdl_dll next to binary"
-              cp "$sdl_dll" "$(dirname "$binary")/"
-            fi
             extra_flags="--skip-audio-probe"
           fi
           echo "running $binary --self-test $extra_flags"
@@ -225,13 +247,34 @@ jobs:
           size="$(stat -c%s "$binary" 2>/dev/null || stat -f%z "$binary" 2>/dev/null || wc -c < "$binary")"
           echo "native binary size: $size bytes"
 
-      - name: Upload native spike on failure
+      - name: Inspect and log distribution packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== Distribution artifacts ==="
+          ls -lh desktopApp/app/build/distributions/ || true
+          for f in desktopApp/app/build/distributions/*.AppImage desktopApp/app/build/distributions/*.zip desktopApp/app/build/distributions/*.dmg; do
+            if [[ -f "$f" ]]; then
+              size="$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || wc -c < "$f")"
+              echo "DISTRIBUTION_PACKAGE: $(basename "$f") -> $size bytes ($(ls -lh "$f" | awk '{print $5}'))"
+            fi
+          done
+
+      - name: Upload native release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifactName }}
+          path: ${{ matrix.artifactPath }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build reports on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: native-spike-report-${{ matrix.os }}
+          name: desktop-report-${{ matrix.os }}
           path: |
-            native-spike/app/build/reports/
-            native-spike/app/build/test-results/
+            desktopApp/app/build/reports/
+            desktopApp/app/build/test-results/
           if-no-files-found: ignore
           retention-days: 7

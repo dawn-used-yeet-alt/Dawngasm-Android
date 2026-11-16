@@ -85,7 +85,7 @@ class NativeAudioPlayer(
         try {
             val platform = MediaPlatform.desktop {
                 linuxBusName = "org.mpris.MediaPlayer2.dawngasm"
-                linuxDesktopEntry = "dev.dawngasm.spike"
+                linuxDesktopEntry = "dev.dawngasm"
             }
             session = KMediaNotification.create(
                 platform = platform,

@@ -206,17 +206,16 @@ distribution.
   - macOS: Now Playing info center
 - **Kotlin/Native** (`2.4.21`): Direct machine code compilation via LLVM.
 
-### Build and test targets
+### Build and package targets
 
-The native spike lives in the `native-spike/` Gradle subproject:
+The native desktop application lives in the `desktopApp/` Gradle subproject:
 
-- **Linux x64**: `cd native-spike && ./gradlew :app:linkDebugExecutableLinuxX64`
-- **Windows x64**: `cd native-spike && ./gradlew :app:linkDebugExecutableMingwX64`
-- **macOS Arm64**: `cd native-spike && ./gradlew :app:linkDebugExecutableMacosArm64`
-- **macOS x64 (Intel)**: `cd native-spike && ./gradlew :app:linkDebugExecutableMacosX64`
+- **Linux x64**: `cd desktopApp && ./gradlew :app:packageLinuxX64ReleaseAppImage`
+- **Windows x64**: `cd desktopApp && ./gradlew :app:packageWindowsX64ReleaseZip`
+- **macOS Arm64**: `cd desktopApp && ./gradlew :app:packageMacosArm64ReleaseDmg`
+- **macOS x64 (Intel)**: `cd desktopApp && ./gradlew :app:packageMacosX64ReleaseDmg`
 
-Executables are produced at `native-spike/app/build/bin/<target>/debugExecutable/app.kexe`
-(or `app.exe` on Windows).
+Distribution packages are output to `desktopApp/app/build/distributions/`.
 
 ### Headless self-test
 
@@ -225,10 +224,10 @@ window, verifying platform player initialization and media notification sessions
 
 ```bash
 # General self-test (Linux and macOS)
-./native-spike/app/build/bin/linuxX64/debugExecutable/app.kexe --self-test
+./desktopApp/app/build/bin/linuxX64/releaseExecutable/app.kexe --self-test
 
 # Windows headless CI (skips WASAPI audio render endpoint check where no sound device exists)
-native-spike/app/build/bin/mingwX64/debugExecutable/app.exe --self-test --skip-audio-probe
+desktopApp/app/build/bin/mingwX64/releaseExecutable/app.exe --self-test --skip-audio-probe
 ```
 
 ### Compiler cache handling (macOS Arm64)

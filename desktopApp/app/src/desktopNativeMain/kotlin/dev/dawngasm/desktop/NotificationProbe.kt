@@ -1,4 +1,4 @@
-package dev.dawngasm.spike
+package dev.dawngasm.desktop
 
 import dev.brahmkshatriya.kmedianotification.KMediaNotification
 import dev.brahmkshatriya.kmedianotification.MediaPlatform
@@ -21,22 +21,22 @@ internal fun probeNotifications() {
     try {
         val platform = MediaPlatform.desktop {
             linuxBusName = "org.mpris.MediaPlayer2.dawngasm"
-            linuxDesktopEntry = "dev.dawngasm.spike"
+            linuxDesktopEntry = "dev.dawngasm"
         }
         val session = KMediaNotification.create(
             platform = platform,
             scope = scope,
-            id = "spike",
-            displayName = "Dawngasm Native Spike",
+            id = "dawngasm",
+            displayName = "Dawngasm",
         )
         println("kmedianotification: session created status=${session.status.value}")
-        if (SpikeInfo.osName != "windows") {
+        if (DesktopInfo.osName != "windows") {
             session.close()
         }
     } catch (error: Throwable) {
         println("kmedianotification: not exercised (${error.message})")
     } finally {
-        if (SpikeInfo.osName != "windows") {
+        if (DesktopInfo.osName != "windows") {
             scope.cancel()
         }
     }

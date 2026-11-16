@@ -28,4 +28,3 @@ rootProject.name = "Dawngasm"
 include(":app")
 include(":shared")
 include(":composeApp")
-include(":desktopApp")
