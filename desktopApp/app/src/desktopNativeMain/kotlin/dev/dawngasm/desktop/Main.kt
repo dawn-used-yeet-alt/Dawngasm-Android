@@ -2,13 +2,19 @@ package dev.dawngasm.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.dawngasm.app.AppPresenter
@@ -23,6 +29,7 @@ import dev.dawngasm.app.platform.NativeSettingsPlatformActions
 import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 import kotlinx.coroutines.Dispatchers
+import kotlin.math.roundToInt
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -46,14 +53,45 @@ fun main(args: Array<String>) {
         coroutineDispatcher = Dispatchers.Default,
     )
     application {
+        val savedWidth = prefs.windowWidth()
+        val savedHeight = prefs.windowHeight()
+        val initialSize = if (savedWidth != null && savedHeight != null && savedWidth > 0 && savedHeight > 0) {
+            DpSize(savedWidth.dp, savedHeight.dp)
+        } else {
+            DpSize.Unspecified
+        }
+        val windowState = rememberWindowState(size = initialSize)
+
+        fun persistWindowState() {
+            val width = windowState.size.width
+            val height = windowState.size.height
+            if (width.isSpecified && height.isSpecified && width.value > 0 && height.value > 0) {
+                val position = windowState.position
+                val x = (position as? WindowPosition.Absolute)?.x?.value?.roundToInt() ?: 0
+                val y = (position as? WindowPosition.Absolute)?.y?.value?.roundToInt() ?: 0
+                val isMaximized = windowState.placement == WindowPlacement.Maximized
+                prefs.saveWindowBounds(
+                    x = x,
+                    y = y,
+                    width = width.value.roundToInt(),
+                    height = height.value.roundToInt(),
+                    maximized = isMaximized,
+                )
+            }
+        }
+
         Window(
             onCloseRequest = {
+                persistWindowState()
                 player.release()
                 exitApplication()
             },
-            state = rememberWindowState(),
+            state = windowState,
             title = "Dawngasm",
         ) {
+            LaunchedEffect(windowState.size, windowState.placement) {
+                persistWindowState()
+            }
             val uiState by presenter.uiState.collectAsState()
             val progress by presenter.progress.collectAsState()
             var clearanceTarget by remember { mutableStateOf<ClearanceTarget?>(null) }

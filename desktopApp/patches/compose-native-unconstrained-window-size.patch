@@ -1,0 +1,136 @@
+From 9fbcc1295dbee2e92ed7145ab665ce43a2dfc995 Mon Sep 17 00:00:00 2001
+From: Dawnusedyeet <I_use@arch.btw>
+Date: Tue, 17 Nov 2026 00:14:28 +0530
+Subject: [PATCH] fix(desktop-native): support unconstrained initial window
+ size on Wayland
+
+---
+ .../compose/ui/window/Window.desktopNative.kt | 53 ++++++++++++++++---
+ 1 file changed, 45 insertions(+), 8 deletions(-)
+
+diff --git a/compose/desktop/desktop-native/src/desktopNativeMain/kotlin/androidx/compose/ui/window/Window.desktopNative.kt b/compose/desktop/desktop-native/src/desktopNativeMain/kotlin/androidx/compose/ui/window/Window.desktopNative.kt
+index 4a5f7071..f7b465c9 100644
+--- a/compose/desktop/desktop-native/src/desktopNativeMain/kotlin/androidx/compose/ui/window/Window.desktopNative.kt
++++ b/compose/desktop/desktop-native/src/desktopNativeMain/kotlin/androidx/compose/ui/window/Window.desktopNative.kt
+@@ -184,11 +184,13 @@ import sdl3.SDL_EVENT_WINDOW_SHOWN
+ import sdl3.SDL_Event
+ import sdl3.SDL_GetCurrentDisplayMode
+ import sdl3.SDL_GetDisplayForWindow
++import sdl3.SDL_GetDisplayUsableBounds
+ import sdl3.SDL_GetError
+ import sdl3.SDL_GetModState
+ import sdl3.SDL_GetMouseState
+ import sdl3.SDL_GetPerformanceCounter
+ import sdl3.SDL_GetPerformanceFrequency
++import sdl3.SDL_GetPrimaryDisplay
+ import sdl3.SDL_GetWindowDisplayScale
+ import sdl3.SDL_GetWindowFlags
+ import sdl3.SDL_GetWindowID
+@@ -450,7 +452,7 @@ fun WindowState(
+     placement: WindowPlacement = WindowPlacement.Floating,
+     isMinimized: Boolean = false,
+     position: WindowPosition = WindowPosition.PlatformDefault,
+-    size: DpSize = DpSize(800.dp, 600.dp),
++    size: DpSize = DpSize.Unspecified,
+ ): WindowState = WindowStateImpl(placement, isMinimized, position, size)
+ 
+ /**
+@@ -466,8 +468,8 @@ fun WindowState(
+     placement: WindowPlacement = WindowPlacement.Floating,
+     isMinimized: Boolean = false,
+     position: WindowPosition = WindowPosition.PlatformDefault,
+-    width: Dp,
+-    height: Dp,
++    width: Dp = Dp.Unspecified,
++    height: Dp = Dp.Unspecified,
+ ): WindowState = WindowState(placement, isMinimized, position, DpSize(width, height))
+ 
+ /**
+@@ -485,7 +487,7 @@ fun rememberWindowState(
+     placement: WindowPlacement = WindowPlacement.Floating,
+     isMinimized: Boolean = false,
+     position: WindowPosition = WindowPosition.PlatformDefault,
+-    size: DpSize = DpSize(800.dp, 600.dp),
++    size: DpSize = DpSize.Unspecified,
+ ): WindowState = remember { WindowState(placement, isMinimized, position, size) }
+ 
+ /**
+@@ -504,8 +506,8 @@ fun rememberWindowState(
+     placement: WindowPlacement = WindowPlacement.Floating,
+     isMinimized: Boolean = false,
+     position: WindowPosition = WindowPosition.PlatformDefault,
+-    width: Dp = 800.dp,
+-    height: Dp = 600.dp,
++    width: Dp = Dp.Unspecified,
++    height: Dp = Dp.Unspecified,
+ ): WindowState = remember { WindowState(placement, isMinimized, position, width, height) }
+ 
+ /** Receiver scope used by [Window] and [DialogWindow]. */
+@@ -2204,13 +2206,23 @@ internal class NativeWindowHost(
+     ) {
+         this.closeRequest = closeRequest
+         val initialSize = state.size
++        val fallbackWidth: Int
++        val fallbackHeight: Int
++        if (!initialSize.width.isSpecified || !initialSize.height.isSpecified) {
++            val defaultSize = defaultPlatformWindowSize()
++            fallbackWidth = defaultSize.first
++            fallbackHeight = defaultSize.second
++        } else {
++            fallbackWidth = 800
++            fallbackHeight = 600
++        }
+         windowWidth =
+             if (initialSize.width.isSpecified) initialSize.width.value.roundToInt().coerceAtLeast(1)
+-            else 800
++            else fallbackWidth
+         windowHeight =
+             if (initialSize.height.isSpecified)
+                 initialSize.height.value.roundToInt().coerceAtLeast(1)
+-            else 600
++            else fallbackHeight
+         val nativeLayer = SkiaLayer()
+         configureNativeGraphics(nativeLayer)
+         val needsTransparentClientFrame =
+@@ -2580,6 +2592,8 @@ internal class NativeWindowHost(
+             else windowHeight
+         if (
+             currentPlacement.persistsFloatingGeometry() &&
++                requestedSize.width.isSpecified &&
++                requestedSize.height.isSpecified &&
+                 (requestedWidth != windowWidth || requestedHeight != windowHeight)
+         ) {
+             windowWidth = requestedWidth
+@@ -2902,6 +2916,29 @@ internal class NativeWindowHost(
+         return mode.pointed.refresh_rate.takeIf { it.isFinite() && it > 0f } ?: 60f
+     }
+ 
++    private fun defaultPlatformWindowSize(): Pair<Int, Int> = memScoped {
++        val display = SDL_GetPrimaryDisplay()
++        if (display != 0u) {
++            val usableBounds = alloc<SDL_Rect>()
++            if (SDL_GetDisplayUsableBounds(display, usableBounds.ptr)) {
++                val w = usableBounds.w
++                val h = usableBounds.h
++                if (w > 0 && h > 0) {
++                    return Pair(w, h)
++                }
++            }
++            val mode = SDL_GetCurrentDisplayMode(display)
++            if (mode != null) {
++                val w = mode.pointed.w
++                val h = mode.pointed.h
++                if (w > 0 && h > 0) {
++                    return Pair(w, h)
++                }
++            }
++        }
++        Pair(800, 600)
++    }
++
+     fun updateDraggableArea(key: Any, bounds: Rect) {
+         draggableAreas[key] = bounds
+     }
+-- 
+2.56.1
+
