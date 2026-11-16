@@ -40,10 +40,13 @@ with the same intent.
 | 13 | Linux packaging | `.deb`, `.rpm`, AppImage | ✅ Complete |
 | 14 | Windows packaging | MSI | ✅ Complete |
 | 15 | macOS packaging | Two DMGs (arm64 + x64) | ✅ Complete |
-| 16 | Signing / notarization | Clean installs everywhere | ⬜ Pending |
+| 16 | Signing / notarization | Clean installs everywhere | 🟡 Scaffolded |
 | 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ⬜ Pending |
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ⬜ Pending |
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | ⬜ Pending |
+
+`🟡 Scaffolded` means the implementation is in place but external credentials
+(Apple/Windows certificates) are required before it can be marked complete.
 
 ## Progress log
 
@@ -103,6 +106,15 @@ with the same intent.
   `43811218510` and packaging run `43811380939` are green. Hotaudio IP/family
   detection is still supplied by the manual fallback dialog when needed. See
   `docs/desktop.md` for the WebKitGTK/WebView2 runtime notes.
+
+- **Phase 16 — scaffolded (2026-11-16).** The packaging workflow now imports a
+  macOS Developer ID certificate into a temporary keychain, passes
+  `compose.desktop.mac.sign` properties to `packageDmg`, submits the DMG with
+  `notarytool`, and staples it when Apple secrets are present. Windows MSIs are
+  Authenticode-signed with `signtool` and a DigiCert timestamp when a PFX secret
+  is present. All steps are conditional, so unsigned packaging still works.
+  Required secrets are documented in `docs/desktop.md`. Completion still needs
+  real certificates plus a Gatekeeper/SmartScreen clean-install check.
 
 ---
 
@@ -322,6 +334,12 @@ network.
   runtime; notarize; staple.
 - Windows: Authenticode-sign MSI/EXE with timestamp.
 - Release workflow: versioned artifacts, checksums, release notes.
+- CI secrets: `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`,
+  `MACOS_KEYCHAIN_PASSWORD`, `MACOS_SIGN_IDENTITY`, `APPLE_ID`,
+  `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`, `WINDOWS_CERTIFICATE_PFX_BASE64`, and
+  `WINDOWS_CERTIFICATE_PASSWORD`.
+- Signing/notarization steps are conditional; without secrets the workflow
+  still produces unsigned packages for testing.
 - **Exit:** Gatekeeper and SmartScreen clean-install on fresh machines.
 
 ---

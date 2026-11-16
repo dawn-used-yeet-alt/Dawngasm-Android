@@ -1,5 +1,7 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
+import java.nio.file.Files
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -12,12 +14,14 @@ kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+    sourceSets["main"].kotlin.srcDir(layout.buildDirectory.dir("hotaudio/bindings"))
 }
 
 dependencies {
     implementation(project(":composeApp"))
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.material3)
+    implementation(libs.jna)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.swing)
 }
@@ -115,4 +119,144 @@ tasks.matching {
         it.name == "packageDmg"
 }.configureEach {
     dependsOn(stageClearanceHelper)
+}
+
+// --- hotaudio FFI ---------------------------------------------------------
+
+val hotaudioExtractorRef = "v2.3.0"
+
+val hotaudioPlatformKey = when {
+    System.getProperty("os.name").contains("mac", ignoreCase = true) -> "macos"
+    System.getProperty("os.name").contains("win", ignoreCase = true) -> "windows"
+    else -> "linux"
+}
+val hotaudioArch = when (System.getProperty("os.arch").lowercase()) {
+    "amd64", "x86_64", "x64" -> "x64"
+    "aarch64", "arm64" -> "arm64"
+    else -> System.getProperty("os.arch").lowercase()
+}
+val hotaudioPlatformDir = "$hotaudioPlatformKey-$hotaudioArch"
+val hotaudioNativeLibrary = when (hotaudioPlatformKey) {
+    "macos" -> "libhotaudio_ffi.dylib"
+    "windows" -> "hotaudio_ffi.dll"
+    else -> "libhotaudio_ffi.so"
+}
+
+val hotaudioBindingsDir = layout.buildDirectory.dir("hotaudio/bindings")
+val hotaudioNativeDir = layout.buildDirectory.dir("native-resources/native/$hotaudioPlatformDir")
+
+abstract class BuildDesktopHotaudioTask : DefaultTask() {
+    @get:Input
+    abstract val extractorRef: Property<String>
+
+    @get:OutputDirectory
+    abstract val bindingsDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val nativeDir: DirectoryProperty
+
+    @get:Input
+    abstract val nativeLibraryName: Property<String>
+
+    @TaskAction
+    fun build() {
+        val ref = extractorRef.get()
+        val outBindings = bindingsDir.get().asFile
+        val outNative = nativeDir.get().asFile
+        val libraryName = nativeLibraryName.get()
+        val bindingFile = File(outBindings, "hotaudio_ffi.kt")
+        val markerFile = File(outBindings, ".hotaudio-bindings-ref")
+        if (
+            bindingFile.exists() &&
+            markerFile.exists() &&
+            markerFile.readText().trim() == ref &&
+            File(outNative, libraryName).exists()
+        ) {
+            return
+        }
+
+        val tempDir = Files.createTempDirectory("dawngasm-hotaudio").toFile()
+        try {
+            run(
+                tempDir,
+                "git", "clone", "--depth", "1", "--branch", ref,
+                "https://github.com/dawn-used-yeet-alt/hotaudio-extractor.git",
+                tempDir.absolutePath,
+            )
+            run(
+                tempDir,
+                "cargo", "build",
+                "--manifest-path", "bindings/Cargo.toml",
+                "--locked", "--release", "-p", "hotaudio-ffi",
+            )
+
+            val sourceLibrary = File(tempDir, "bindings/target/release/$libraryName")
+            if (!sourceLibrary.exists()) {
+                throw GradleException("hotaudio FFI library was not built at ${sourceLibrary.absolutePath}")
+            }
+
+            val generatedDir = File(tempDir, "bindings/out")
+            run(
+                File(tempDir, "bindings"),
+                "cargo", "run",
+                "--manifest-path", "Cargo.toml",
+                "--locked", "-p", "uniffi-bindgen", "--",
+                "generate", "-l", "kotlin",
+                "--out-dir", generatedDir.absolutePath,
+                sourceLibrary.absolutePath,
+            )
+
+            val generatedBindings = File(generatedDir, "net/hotaudio/extractor/hotaudio_ffi.kt")
+            if (!generatedBindings.exists()) {
+                throw GradleException("hotaudio Kotlin bindings were not generated")
+            }
+
+            outBindings.mkdirs()
+            generatedBindings.copyTo(bindingFile, overwrite = true)
+            markerFile.writeText(ref)
+
+            outNative.mkdirs()
+            sourceLibrary.copyTo(File(outNative, libraryName), overwrite = true)
+            println("Built hotaudio FFI for $ref into ${outNative.absolutePath}")
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    private fun run(directory: File, vararg command: String) {
+        println("Running ${command.joinToString(" ")} in ${directory.absolutePath}")
+        val process = ProcessBuilder(*command)
+            .directory(directory)
+            .redirectErrorStream(true)
+            .start()
+        process.inputStream.bufferedReader().forEachLine { println(it) }
+        val exit = process.waitFor()
+        if (exit != 0) {
+            throw GradleException("`${command.joinToString(" ")}` exited with code $exit")
+        }
+    }
+}
+
+val buildDesktopHotaudio by tasks.registering(BuildDesktopHotaudioTask::class) {
+    group = "desktop"
+    description = "Builds the hotaudio UniFFI bindings and native library for this host."
+    extractorRef.set(hotaudioExtractorRef)
+    bindingsDir.set(hotaudioBindingsDir)
+    nativeDir.set(hotaudioNativeDir)
+    nativeLibraryName.set(hotaudioNativeLibrary)
+}
+
+tasks.matching { it.name == "compileKotlin" }.configureEach {
+    dependsOn(buildDesktopHotaudio)
+}
+
+tasks.matching {
+    it.name == "createDistributable" ||
+        it.name == "packageDeb" ||
+        it.name == "packageRpm" ||
+        it.name == "packageAppImage" ||
+        it.name == "packageMsi" ||
+        it.name == "packageDmg"
+}.configureEach {
+    dependsOn(buildDesktopHotaudio)
 }

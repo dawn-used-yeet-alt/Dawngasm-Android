@@ -114,6 +114,7 @@ private fun persistWindowState(prefs: AppPreferences, windowState: WindowState) 
 
 fun main() {
     DesktopPlatform.ensureDirectories()
+    DesktopHotaudio.install()
     application {
         val prefs = remember { AppPreferences() }
         val presenter = remember {

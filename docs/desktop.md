@@ -63,6 +63,23 @@ Packages are currently unsigned. macOS Gatekeeper and Windows SmartScreen will
 warn on first launch until the signing and notarization work in Phase 16 is
 configured with per-OS certificates.
 
+## Signing
+
+The packaging workflow signs artifacts only when the matching repository
+secrets exist; otherwise it publishes unsigned packages.
+
+- **Windows:** `WINDOWS_CERTIFICATE_PFX_BASE64` and
+  `WINDOWS_CERTIFICATE_PASSWORD`. The MSI is signed with `signtool` and a
+  DigiCert timestamp.
+- **macOS:** `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`,
+  `MACOS_KEYCHAIN_PASSWORD`, `MACOS_SIGN_IDENTITY`, `APPLE_ID`,
+  `APPLE_TEAM_ID`, and `APPLE_APP_PASSWORD`. The DMG is signed through
+  Compose's `compose.desktop.mac.sign` properties, submitted with
+  `notarytool`, and stapled.
+- The bundled clearance helper is an executable inside the app resources
+  directory. Verify it is included in the developer's signing/notarization
+  scope before publishing a notarized build.
+
 ## State and logs
 
 - Linux: `$XDG_CONFIG_HOME/dawngasm` (or `~/.config/dawngasm`)

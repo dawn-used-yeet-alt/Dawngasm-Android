@@ -103,6 +103,9 @@ jobs:
     name: Windows MSI
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -134,6 +137,27 @@ jobs:
       - name: Build MSI
         run: ./gradlew --no-daemon --stacktrace :desktopApp:packageMsi
 
+      - name: Sign MSI
+        if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "dawngasm-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $certPath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64)
+          )
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+            -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe was not found" }
+          $msi = Get-ChildItem desktopApp/build/compose/binaries/main/msi/*.msi |
+            Select-Object -First 1
+          if (-not $msi) { throw "No MSI was produced" }
+          & $signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            /f $certPath /p $env:WINDOWS_CERTIFICATE_PASSWORD $msi.FullName
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed with $LASTEXITCODE" }
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -145,6 +169,12 @@ jobs:
     name: macOS DMG (arm64)
     runs-on: macos-latest
     timeout-minutes: 60
+    env:
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -174,8 +204,53 @@ jobs:
         with:
           workspaces: desktopApp/native/clearance-helper -> target
 
+      - name: Import Apple signing certificate
+        if: env.MACOS_CERTIFICATE_P12_BASE64 != ''
+        env:
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/dawngasm-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/dawngasm-signing.keychain-db"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 -D > "$CERT_PATH"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | tr -d '"')
+          echo "MACOS_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
       - name: Build DMG
-        run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg
+        shell: bash
+        run: |
+          args=()
+          if [ -n "$MACOS_CERTIFICATE_P12_BASE64" ]; then
+            args+=("-Pcompose.desktop.mac.sign=true")
+            if [ -n "$MACOS_SIGN_IDENTITY" ]; then
+              args+=("-Pcompose.desktop.mac.signing.identity=$MACOS_SIGN_IDENTITY")
+            fi
+            if [ -n "$MACOS_SIGNING_KEYCHAIN" ]; then
+              args+=("-Pcompose.desktop.mac.signing.keychain=$MACOS_SIGNING_KEYCHAIN")
+            fi
+          fi
+          ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg "${args[@]}"
+
+      - name: Notarize DMG
+        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' && env.MACOS_CERTIFICATE_P12_BASE64 != ''
+        shell: bash
+        run: |
+          DMG=$(find desktopApp/build/compose/binaries/main/dmg -name '*.dmg' | head -1)
+          test -n "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
 
       - name: Upload macOS arm64 artifact
         uses: actions/upload-artifact@v7
@@ -188,6 +263,12 @@ jobs:
     name: macOS DMG (x64)
     runs-on: macos-15-intel
     timeout-minutes: 60
+    env:
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -217,8 +298,53 @@ jobs:
         with:
           workspaces: desktopApp/native/clearance-helper -> target
 
+      - name: Import Apple signing certificate
+        if: env.MACOS_CERTIFICATE_P12_BASE64 != ''
+        env:
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/dawngasm-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/dawngasm-signing.keychain-db"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 -D > "$CERT_PATH"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | tr -d '"')
+          echo "MACOS_SIGNING_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
       - name: Build DMG
-        run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg
+        shell: bash
+        run: |
+          args=()
+          if [ -n "$MACOS_CERTIFICATE_P12_BASE64" ]; then
+            args+=("-Pcompose.desktop.mac.sign=true")
+            if [ -n "$MACOS_SIGN_IDENTITY" ]; then
+              args+=("-Pcompose.desktop.mac.signing.identity=$MACOS_SIGN_IDENTITY")
+            fi
+            if [ -n "$MACOS_SIGNING_KEYCHAIN" ]; then
+              args+=("-Pcompose.desktop.mac.signing.keychain=$MACOS_SIGNING_KEYCHAIN")
+            fi
+          fi
+          ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg "${args[@]}"
+
+      - name: Notarize DMG
+        if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' && env.MACOS_CERTIFICATE_P12_BASE64 != ''
+        shell: bash
+        run: |
+          DMG=$(find desktopApp/build/compose/binaries/main/dmg -name '*.dmg' | head -1)
+          test -n "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
 
       - name: Upload macOS x64 artifact
         uses: actions/upload-artifact@v7
