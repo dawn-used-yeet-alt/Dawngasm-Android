@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package dev.dawngasm.app.util
 
 import kotlin.time.TimeSource
@@ -8,5 +10,6 @@ private val startMark = TimeSource.Monotonic.markNow()
 
 actual fun currentTimeMillis(): Long =
     startEpochMs + startMark.elapsedNow().inWholeMilliseconds
+
 
 
