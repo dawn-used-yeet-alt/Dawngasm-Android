@@ -1,0 +1,162 @@
+name: Desktop packaging
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: desktop-package-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Install RPM tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Build deb, rpm and app image
+        run: >
+          ./gradlew --no-daemon --stacktrace
+          :desktopApp:packageDeb
+          :desktopApp:packageRpm
+          :desktopApp:createDistributable
+
+      - name: Convert the app image to an AppImage file
+        run: |
+          APP_DIR="$PWD/desktopApp/build/compose/binaries/main/app/Dawngasm"
+          test -d "$APP_DIR"
+          cp desktopApp/icons/dawngasm.png "$APP_DIR/dawngasm.png"
+          ln -sf dawngasm.png "$APP_DIR/.DirIcon"
+          cat > "$APP_DIR/dawngasm.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Dawngasm
+          Comment=Audio browser and player
+          Exec=Dawngasm
+          Icon=dawngasm
+          Categories=AudioVideo;Audio;
+          Terminal=false
+          EOF
+          cat > "$APP_DIR/AppRun" <<'EOF'
+          #!/bin/sh
+          exec "$APPDIR/bin/Dawngasm" "$@"
+          EOF
+          chmod +x "$APP_DIR/AppRun"
+          curl -L --fail -o /tmp/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /tmp/appimagetool
+          ARCH=x86_64 /tmp/appimagetool --appimage-extract-and-run \
+            "$APP_DIR" \
+            desktopApp/build/compose/binaries/main/Dawngasm-2.0.0-x86_64.AppImage
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dawngasm-linux
+          if-no-files-found: error
+          path: |
+            desktopApp/build/compose/binaries/main/deb/*.deb
+            desktopApp/build/compose/binaries/main/rpm/*.rpm
+            desktopApp/build/compose/binaries/main/Dawngasm-*.AppImage
+
+  windows:
+    name: Windows MSI
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build MSI
+        run: ./gradlew --no-daemon --stacktrace :desktopApp:packageMsi
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dawngasm-windows
+          if-no-files-found: error
+          path: desktopApp/build/compose/binaries/main/msi/*.msi
+
+  macos-arm64:
+    name: macOS DMG (arm64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          architecture: aarch64
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build DMG
+        run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg
+
+      - name: Upload macOS arm64 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dawngasm-macos-arm64
+          if-no-files-found: error
+          path: desktopApp/build/compose/binaries/main/dmg/*.dmg
+
+  macos-x64:
+    name: macOS DMG (x64)
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          architecture: x64
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build DMG
+        run: ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg
+
+      - name: Upload macOS x64 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dawngasm-macos-x64
+          if-no-files-found: error
+          path: desktopApp/build/compose/binaries/main/dmg/*.dmg

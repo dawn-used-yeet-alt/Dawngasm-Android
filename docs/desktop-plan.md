@@ -35,8 +35,8 @@ with the same intent.
 | 8 | Audiochan resolution | Plays with pasted clearance | ✅ Complete |
 | 9 | Audiochan downloads + expiry UX | Download + re-check flow | ✅ Complete |
 | 10 | Cross-platform clearance helper | In-app challenge window | ⬜ Pending |
-| 11 | Desktop UX | Menus, shortcuts, responsive layout | ⬜ Pending |
-| 12 | Download hardening | Cross-OS filenames/paths | ⬜ Pending |
+| 11 | Desktop UX | Menus, shortcuts, responsive layout | ✅ Complete |
+| 12 | Download hardening | Cross-OS filenames/paths | ✅ Complete |
 | 13 | Linux packaging | `.deb`, `.rpm`, AppImage | ⬜ Pending |
 | 14 | Windows packaging | MSI | ⬜ Pending |
 | 15 | macOS packaging | Two DMGs (arm64 + x64) | ⬜ Pending |
@@ -63,6 +63,20 @@ with the same intent.
   `macos-latest`, and `macos-15-intel` for commit `38ca478`. Phase 10
   (native `wry` clearance helper) remains pending; pasted clearance is the
   working fallback.
+
+- **Phase 11 — complete (2026-11-16).** Added a `NavigationRail` layout at
+  720 dp and wider (bottom bar below that), file-backed window position/size/
+  maximized restore with a 420×640 minimum, File/Edit/View/Help menus with a
+  macOS app menu and app-name JVM property, and Space/arrow playback,
+  Cmd/Ctrl+F search, and Escape shortcuts. Material components provide hover
+  and pressed states on desktop.
+
+- **Phase 12 — complete (2026-11-16).** File names now escape Windows reserved
+  device names, strip trailing dots/spaces after truncation, sanitize the audio
+  extension, and keep Windows paths under the classic 260-character limit.
+  Collisions are checked case-insensitively on macOS/Windows, free space is
+  checked before writing, and permission/filesystem failures surface with
+  readable messages. Added sanitizer tests.
 
 ---
 
