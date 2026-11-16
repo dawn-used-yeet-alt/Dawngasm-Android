@@ -160,6 +160,29 @@ jobs:
         if: runner.os == 'macOS'
         run: brew list sdl3 >/dev/null 2>&1 || brew install sdl3
 
+      - name: Disable Kotlin/Native klib cache for macOS arm64
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+        shell: bash
+        working-directory: native-spike
+        run: |
+          ./gradlew --no-daemon :app:compileKotlinMacosArm64 || true
+          python3 -c "
+          import os, glob
+          found = glob.glob(os.path.expanduser('~/.konan/**/konan.properties'), recursive=True)
+          print(f'Found konan properties: {found}')
+          for path in found:
+              with open(path, 'r') as f:
+                  content = f.read()
+              new_lines = [
+                  line.replace('macos_arm64', '') if 'cacheableTargets' in line else line
+                  for line in content.splitlines()
+              ]
+              with open(path, 'w') as f:
+                  f.write('\n'.join(new_lines) + '\n')
+              print(f'Successfully patched {path}')
+          "
+          find "$HOME/.konan" -name "konan.properties" -exec grep -H "cacheableTargets" {} +
+
       - name: Link native spike
         shell: bash
         working-directory: native-spike

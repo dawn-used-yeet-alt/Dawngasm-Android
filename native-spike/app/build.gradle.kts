@@ -1,7 +1,3 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.DisableCacheInKotlinVersion
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeCacheApi
-import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBinary
-
 plugins {
     kotlin("multiplatform") version "2.4.21"
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
@@ -21,12 +17,7 @@ kotlin {
     }
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
-        binaries.withType<NativeBinary>().configureEach {
-            @OptIn(KotlinNativeCacheApi::class)
-            disableNativeCache(
-                version = DisableCacheInKotlinVersion.`2_4_20`,
-                reason = "Workaround for ui-unit klib caching issue on macOS arm64",
-            )
+        binaries.configureEach {
             freeCompilerArgs += "-Xoverride-konan-properties=cacheableTargets="
         }
     }
