@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.native.runtime.NativeRuntimeApi::class)
+
 package dev.dawngasm.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,7 +37,6 @@ import kotlin.native.runtime.GC
 import kotlin.native.runtime.NativeRuntimeApi
 import kotlin.system.exitProcess
 
-@OptIn(NativeRuntimeApi::class)
 private fun configureNativeRuntime() {
     GC.autotune = true
     GC.heapTriggerCoefficient = 0.75
