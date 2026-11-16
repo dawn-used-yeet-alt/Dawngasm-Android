@@ -141,6 +141,7 @@ phase still needs live host access and clean-install verification.
   behavior there. `DesktopTrackDownloader` copies the completed stream into the
   library, the player cancels the previous track's stream and reconnects after
   a downloader retry, and a desktop test covers full and ranged responses.
+  Desktop CI `43819429402` passed on all four runners.
 
 - **Phase 19 — implemented (2026-11-16), verification pending.** The Settings
   hotaudio flow already launches the Phase 10 native helper and saves
