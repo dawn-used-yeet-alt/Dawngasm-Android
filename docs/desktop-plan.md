@@ -149,9 +149,11 @@ phase still needs live host access and clean-install verification.
   the egress IP family and local address used for hotaudio, so the extractor is
   pinned to the same stack as the clearance window. Expired or challenged
   cookies surface the shared `HotaudioErrors.userMessage` with a Settings hint,
-  and the existing refresh/clear actions reset the native bridge. Final signing
-  and clean-install end-to-end verification remain with Phase 16 and need real
-  host access/credentials.
+  and the existing refresh/clear actions reset the native bridge. Packaging run
+  `43820637788` rebuilt the deb/rpm/AppImage, MSI, and both DMGs green with the
+  clearance helper and hotaudio FFI payloads. Final signing and clean-install
+  end-to-end verification remain with Phase 16 and need real host
+  access/credentials.
 
 ---
 
