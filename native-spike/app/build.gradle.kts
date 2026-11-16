@@ -37,8 +37,6 @@ kotlin {
                 implementation("com.russhwolf:multiplatform-settings:1.3.0")
                 implementation("com.russhwolf:multiplatform-settings-no-arg:1.3.0")
                 implementation("com.squareup.okio:okio:3.10.2")
-                implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
-                implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
                 implementation("dev.brahmkshatriya.compose.material3:material3:$composeNativeVersion")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
             }
