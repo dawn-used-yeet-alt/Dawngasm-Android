@@ -93,11 +93,38 @@ native payloads. The Linux job also strips the bundled native libraries before
 `appimagetool` compresses the image. Use `:desktopApp:suggestModules` only as a
 hint when adding dependencies; its output can be incomplete or overly broad.
 
-Phase 20 records the size baseline. The Phase 19 AppImage was 137,595,384 bytes
-with the full JDK module image and the complete 37 MB icon jar. The ProGuard
-`packageRelease*` tasks are documented as a later option: they can shrink all
-jars, but need a validated keep-rule set for JNA, VLCJ, Ktor/OkHttp,
+The Phase 19 AppImage was 137,595,384 bytes with the full JDK module image and
+the complete 37 MB icon jar. The Phase 20 build is **74,234,942 bytes
+(72 MiB)**, a 46% reduction, with a 149 MiB unpacked app image. The ProGuard
+`packageRelease*` tasks remain a later option: they can shrink all jars, but
+need a validated keep-rule set for JNA, VLCJ, Ktor/OkHttp,
 kotlinx.serialization, coroutines, and Compose reflection.
+
+## Native desktop migration
+
+The shipping desktop shell is still the JVM build above. Phase 21 adds a
+separate `native-spike` Gradle build that links a Kotlin/Native executable with
+no JVM, using Compose Native plus the `kmplayer` and `kmedianotification`
+libraries. It is intentionally a second build: the root project stays on
+Compose 1.11.1 while the spike uses Compose 1.13.0-beta01 and `compose-native`
+1.13.0-beta01.
+
+The spike builds a Compose Native window and supports `--self-test`, which
+prints the OS, the `kmplayer` backend/capabilities, and the media-notification
+status before exiting without a window. Desktop CI runs that self-test on every
+runner so missing native dependencies fail the build.
+
+Linux needs SDL3, Fontconfig, D-Bus, EGL/GL, GStreamer, and Pulse development
+packages; CI builds SDL3 from a pinned commit because older Ubuntu images do not
+ship `libsdl3-dev`. macOS uses `brew install sdl3`. Windows needs no extra SDK
+because the Compose Native plugin stages SDL3 and the MinGW runtime.
+
+`kmplayer` uses GStreamer on Linux, Media Foundation on Windows, and
+AVFoundation on macOS, so it can replace VLCJ without asking users to install
+VLC. `kmedianotification` provides MPRIS on Linux and SMTC on Windows.
+Phase 22 covers porting `:shared` and `:composeApp` to the native target and
+cutting over once playback, hotaudio streaming, downloads, clearance, and
+settings reach parity.
 
 ## Signing
 

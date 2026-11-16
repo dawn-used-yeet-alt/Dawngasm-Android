@@ -1,4 +1,4 @@
-# Dawngasm desktop: 21-phase plan (0–20)
+# Dawngasm desktop: 23-phase plan (0–22)
 
 Target platforms: **Linux, Windows, and macOS**. The Android and iOS targets stay
 as they are; desktop is a third shell over the existing KMP/CMP code.
@@ -17,6 +17,9 @@ Ordering principle:
   final release.
 - **Phase 20:** shrink the shipped Linux AppImage and measure startup after the
   feature work is complete.
+- **Phases 21–22:** replace the JVM desktop shell with a Kotlin/Native shell
+  built on `compose-native`, `kmplayer`, and `kmedianotification`, keeping the
+  JVM build as the fallback until native parity is proven.
 
 Every phase ends with the CI matrix green on `ubuntu-latest`,
 `windows-latest`, `macos-latest` (arm64), and `macos-15-intel` (x64) unless the
@@ -46,12 +49,15 @@ with the same intent.
 | 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ✅ Complete |
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ✅ Complete |
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
-| 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | 🟡 Implemented |
+| 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | ✅ Complete |
+| 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | 🟡 In progress |
+| 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ⬜ Planned |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
 `🟡 Implemented` means the code and desktop integration are in place but the
 phase still needs live host access and clean-install verification.
+`🟡 In progress` means work is on the branch and CI is validating it.
 
 ## Progress log
 
@@ -158,7 +164,7 @@ phase still needs live host access and clean-install verification.
   end-to-end verification remain with Phase 16 and need real host
   access/credentials.
 
-- **Phase 20 — implemented (2026-11-16), validation pending.** Replaced
+- **Phase 20 — complete (2026-11-16).** Replaced
   `includeAllModules = true` with the Compose defaults plus `jdk.charsets`,
   `jdk.httpserver`, `jdk.unsupported`, and `jdk.zipfs`, removing the compiler,
   `ct.sym`, and unused JDK modules. Added `PruneMaterialIconsTask`, which scans
@@ -170,10 +176,23 @@ phase still needs live host access and clean-install verification.
   report, and uploads a single `dawngasm-linux-appimage` artifact. All packaging
   jobs now run `Dawngasm --version` against the packaged launcher; the desktop
   entry point initializes paths, JNA, and the hotaudio native library before
-  printing, so the smoke test also catches missing native payloads. The
-  previous Linux artifact measured 137,595,384 bytes for the AppImage alone
-  (358 MiB when deb/rpm were included). The post-change size is recorded below
-  after the packaging run.
+  printing, so the smoke test also catches missing native payloads. Packaging
+  run `43825683822` passed all four jobs and produced a 74,234,942-byte
+  (72 MiB) AppImage, down from the 137,595,384-byte Phase 19 baseline. The
+  unpacked app image is 149 MiB, and the icon task kept 20 classes while
+  removing 11,085. Desktop CI `43825671449` stayed green on all four runners.
+
+- **Phase 21 — in progress (2026-11-16).** Added a separate `native-spike`
+  Gradle build so the main build keeps its Compose 1.11.1 pins. The spike uses
+  Kotlin 2.4.21, official Compose 1.13.0-beta01, `compose-native` 1.13.0-beta01,
+  `kmplayer` 0.2.1, and `kmedianotification` 0.1.1. It builds a real Compose
+  Native window, creates a `KMPlayer` and reports its backend/capabilities, and
+  constructs a desktop `MediaPlatform` plus `KMediaNotification` session behind
+  a `--self-test` early exit that CI can run on every runner. Linux CI installs
+  SDL3 (pinned source build), fontconfig, D-Bus, EGL/GL, GStreamer, and Pulse dev
+  packages; macOS installs SDL3 with Homebrew; Windows needs no extra SDK. The
+  native desktop entry point links on all four runners before any of the main
+  source sets move to `desktopNative`.
 
 ---
 
@@ -502,7 +521,82 @@ build without reducing runtime coverage, and make packaged startup a CI signal.
 | Build | AppImage | Notes |
 |---|---:|---|
 | Phase 19 baseline | 137,595,384 B | `includeAllModules`, full icon jar |
-| Phase 20 | pending CI | explicit modules + icon pruning + native strip |
+| Phase 20 | 74,234,942 B (72 MiB) | explicit modules + icon pruning + native strip; unpacked app image 149 MiB |
+| Phase 20 delta | −63,360,442 B (−46%) | icon jar 37 MB → ~80 KB; 20 icons kept, 11,085 removed |
+
+---
+
+## Milestone G — Native desktop shell
+
+### Phase 21 — Native desktop spike
+
+**Goal:** prove the no-JVM desktop stack builds and starts on Linux, Windows,
+and macOS before porting application code.
+
+- Keep the main build on Compose 1.11.1. Add a separate `native-spike` Gradle
+  build with its own `settings.gradle.kts`, pinned to Kotlin 2.4.21, official
+  Compose 1.13.0-beta01, and `compose-native` 1.13.0-beta01. A second build
+  avoids the plugin version conflict that adding `desktopNative` to the root
+  build would create.
+- Use official Compose artifacts for the shared API surface and the
+  `dev.brahmkshatriya.compose.*` fork artifacts in `desktopNativeMain`:
+  - `dev.brahmkshatriya.compose.desktop:desktop-native`
+  - `dev.brahmkshatriya.compose.material3:material3`
+- Build a real Compose Native window with
+  `application { Window(state = rememberWindowState()) { ... } }` and a small
+  Material 3 screen so the fork's window, input, and Material code all link.
+- Add `kmplayer` 0.2.1:
+  - `KMPlayer.create(KMPlayerConfig(requireHls = false))`
+  - report `capabilities.backend`, `hls`, and `seeking`
+  - close the player before exit
+  - Linux links against GStreamer; Windows uses Media Foundation; macOS uses
+    AVFoundation.
+- Add `kmedianotification` 0.1.1:
+  - `MediaPlatform.desktop { linuxBusName = "org.mpris.MediaPlayer2.dawngasm" }`
+  - `KMediaNotification.create(...)` with no-op command handlers
+  - close the session before exit
+- Add `--self-test` (and treat `--version` the same way) that prints the OS,
+  player backend, and notification status, then exits without creating a window.
+  CI runs this against the linked executable, so a missing native dependency
+  fails the job instead of showing up on a desktop.
+- CI job in `desktop-ci.yml` on `ubuntu-latest`, `windows-latest`,
+  `macos-latest`, and `macos-15-intel`:
+  - Linux: `libsdl3-dev` may be missing on older images, so build SDL3 from a
+    pinned commit; install Fontconfig, D-Bus, EGL/GL, GStreamer, and Pulse dev
+    packages.
+  - macOS: `brew install sdl3`.
+  - Windows: no extra SDK; the plugin stages SDL3 and the MinGW runtime.
+  - Cache `~/.konan` so the Kotlin/Native toolchain downloads once per
+    OS/architecture.
+- **Exit:** all four runners link the native executable and `--self-test`
+  reports a working player backend; no JVM is started.
+
+### Phase 22 — Native desktop parity and cutover
+
+**Goal:** ship the native shell for desktop while keeping the JVM shell until
+parity is proven.
+
+- Move `:shared` to a `desktopNative` target alongside the current
+  `jvm("desktop")` target; keep Android/iOS untouched.
+- Replace JVM-only actuals:
+  - Network: Ktor Curl (Linux), WinHttp (Windows), Darwin (macOS).
+  - File IO and downloads: native file APIs instead of `java.nio`.
+  - Settings: keep the same file-backed JSON format.
+  - Logs and clock: native implementations.
+- Replace VLCJ with `kmplayer` behind the existing `AudioPlayer` interface.
+  Keep the loopback hotaudio stream server (Ktor server CIO publishes native
+  targets) so hotaudio still streams before downloads finish.
+- Add `kmedianotification` MPRIS/SMTC/Now Playing publishing to the player
+  state and command handlers.
+- Decide the native story for the two WebView composables. The clearance helper
+  is already an external process, so native desktop can keep the paste/helper
+  flow and show a native placeholder where an in-app webview is unavailable.
+- Keep the JVM packaging workflow working; add native AppImage/MSI/DMG builds
+  and compare size/startup. Cut over only after playback, seeking, downloads,
+  hotaudio streaming, clearance, and settings pass on all four runners.
+- **Exit:** the native desktop build reaches feature parity, is materially
+  smaller and faster to start than the JVM build, and the JVM shell can be
+  retired without losing a host or packaging target.
 
 ---
 
@@ -512,8 +606,10 @@ build without reducing runtime coverage, and make packaged startup a CI signal.
   behavior.
 - `:shared:desktopTest` runs the existing common tests on every OS — the
   cheapest regression signal.
-- Never add `windowsMain`/`macosMain` source sets; use `DesktopPlatform` runtime
-  detection.
+- In the JVM shell, never add `windowsMain`/`macosMain` source sets; use
+  `DesktopPlatform` runtime detection. The native spike only uses the
+  `desktopNativeMain` source set; the `linuxMain`/`macosMain` hierarchy that
+  `compose-native` creates is a later, deliberate choice.
 - The Kotlin hotaudio binding is shared across OSes; only native libraries
   differ. `HotaudioTls.kt` and `initAndroidTls` are Android-only.
 - `jpackage` cannot cross-build; packaging phases run on their matching runners.
