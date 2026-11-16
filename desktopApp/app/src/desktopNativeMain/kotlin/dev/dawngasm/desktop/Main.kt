@@ -18,6 +18,7 @@ import dev.dawngasm.app.data.NativeSettings
 import dev.dawngasm.app.platform.NativeSettingsPlatformActions
 import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
+import kotlinx.coroutines.Dispatchers
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -38,6 +39,7 @@ fun main(args: Array<String>) {
         resolver = resolver,
         fileSaver = fileSaver,
         player = player,
+        coroutineDispatcher = Dispatchers.Default,
     )
     val settingsActions = NativeSettingsPlatformActions(prefs)
 
@@ -86,6 +88,7 @@ private fun runSelfTest(skipAudio: Boolean = false) {
         resolver = resolver,
         fileSaver = fileSaver,
         player = player,
+        coroutineDispatcher = Dispatchers.Default,
     )
     val settingsActions = NativeSettingsPlatformActions(prefs)
     println("presenter & audio player: initialized")

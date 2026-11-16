@@ -30,6 +30,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,14 +75,9 @@ class AppPresenter(
     private val fileSaver: FileSaver,
     private val downloader: TrackDownloader? = null,
     val player: AudioPlayer,
+    coroutineDispatcher: CoroutineDispatcher = defaultPresenterDispatcher(),
 ) : DawngasmActions {
-    private val scope = CoroutineScope(
-        (try {
-            Dispatchers.Main
-        } catch (_: Throwable) {
-            Dispatchers.Default
-        }) + SupervisorJob()
-    )
+    private val scope = CoroutineScope(coroutineDispatcher + SupervisorJob())
 
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -618,4 +614,12 @@ class AppPresenter(
     override fun previousTrack() {
         player.previousTrack()
     }
+}
+
+private fun defaultPresenterDispatcher(): CoroutineDispatcher = try {
+    val main = Dispatchers.Main
+    main.immediate
+    main
+} catch (_: Throwable) {
+    Dispatchers.Default
 }
