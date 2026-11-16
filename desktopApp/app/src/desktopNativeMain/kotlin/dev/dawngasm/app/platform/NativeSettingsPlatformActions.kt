@@ -5,18 +5,16 @@ import dev.dawngasm.app.data.DesktopPlatform
 
 class NativeSettingsPlatformActions(
     private val prefs: AppPreferences,
+    private val onOpenHotaudio: () -> Unit = {},
+    private val onOpenAudiochan: () -> Unit = {},
 ) : SettingsPlatformActions {
     override fun chooseDownloadFolder() {
         // Desktop uses DAWNGASM_MUSIC_DIR or defaults to ~/Music/Dawngasm
     }
 
-    override fun openHotaudioClearance() {
-        // Clearance window integration in future phase
-    }
+    override fun openHotaudioClearance() = onOpenHotaudio()
 
-    override fun openAudiochanClearance() {
-        // Clearance window integration in future phase
-    }
+    override fun openAudiochanClearance() = onOpenAudiochan()
 
     override fun hotaudioClearanceDetail(): String? =
         prefs.hotaudioIpFamily()?.let { "Family: $it" }

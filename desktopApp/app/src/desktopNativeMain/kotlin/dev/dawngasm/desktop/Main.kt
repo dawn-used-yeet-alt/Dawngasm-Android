@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -42,8 +45,6 @@ fun main(args: Array<String>) {
         player = player,
         coroutineDispatcher = Dispatchers.Default,
     )
-    val settingsActions = NativeSettingsPlatformActions(prefs)
-
     application {
         Window(
             onCloseRequest = {
@@ -55,6 +56,14 @@ fun main(args: Array<String>) {
         ) {
             val uiState by presenter.uiState.collectAsState()
             val progress by presenter.progress.collectAsState()
+            var clearanceTarget by remember { mutableStateOf<ClearanceTarget?>(null) }
+            val settingsActions = remember(presenter) {
+                NativeSettingsPlatformActions(
+                    prefs = prefs,
+                    onOpenHotaudio = { clearanceTarget = ClearanceTarget.HOTAUDIO },
+                    onOpenAudiochan = { clearanceTarget = ClearanceTarget.AUDIOCHAN },
+                )
+            }
 
             DawngasmTheme(darkTheme = true) {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -65,6 +74,14 @@ fun main(args: Array<String>) {
                         actions = presenter,
                         settingsPlatform = settingsActions,
                         appVersion = DesktopInfo.VERSION,
+                    )
+                }
+
+                clearanceTarget?.let { target ->
+                    DesktopClearanceFlow(
+                        target = target,
+                        presenter = presenter,
+                        onDismiss = { clearanceTarget = null },
                     )
                 }
             }

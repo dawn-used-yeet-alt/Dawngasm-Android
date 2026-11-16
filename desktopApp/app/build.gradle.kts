@@ -83,3 +83,26 @@ composeNativeApplication {
         iconFile.set(icon)
     }
 }
+
+val clearanceHelperBinary = if (System.getProperty("os.name").contains("win", ignoreCase = true)) {
+    "dawngasm-clearance-helper.exe"
+} else {
+    "dawngasm-clearance-helper"
+}
+
+tasks.matching { it.name.startsWith("package") }.configureEach {
+    doFirst {
+        val helper = file("../native/clearance-helper/target/release/$clearanceHelperBinary")
+        if (helper.exists()) {
+            fileTree(layout.buildDirectory) {
+                include("**/usr/bin")
+                include("**/bin")
+                include("**/MacOS")
+            }.files.filter { it.isDirectory }.forEach { dir ->
+                val dest = dir.resolve(clearanceHelperBinary)
+                helper.copyTo(dest, overwrite = true)
+                dest.setExecutable(true, false)
+            }
+        }
+    }
+}
