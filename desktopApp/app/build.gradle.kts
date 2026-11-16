@@ -90,19 +90,36 @@ val clearanceHelperBinary = if (System.getProperty("os.name").contains("win", ig
     "dawngasm-clearance-helper"
 }
 
-tasks.matching { it.name.startsWith("package") }.configureEach {
-    doFirst {
-        val helper = file("../native/clearance-helper/target/release/$clearanceHelperBinary")
-        if (helper.exists()) {
-            fileTree(layout.buildDirectory) {
-                include("**/usr/bin")
-                include("**/bin")
-                include("**/MacOS")
-            }.files.filter { it.isDirectory }.forEach { dir ->
-                val dest = dir.resolve(clearanceHelperBinary)
-                helper.copyTo(dest, overwrite = true)
-                dest.setExecutable(true, false)
-            }
+fun stageClearanceHelper() {
+    val helper = file("../native/clearance-helper/target/release/$clearanceHelperBinary")
+    if (!helper.exists()) return
+    val buildDir = layout.buildDirectory.get().asFile
+    if (!buildDir.exists()) return
+
+    buildDir.walkTopDown().filter { it.isDirectory }.forEach { dir ->
+        if (dir.name.endsWith(".AppDir")) {
+            val usrBin = dir.resolve("usr/bin").apply { mkdirs() }
+            val dest = usrBin.resolve(clearanceHelperBinary)
+            helper.copyTo(dest, overwrite = true)
+            dest.setExecutable(true, false)
+            println("Staged clearance helper to $dest")
+        } else if (dir.name == "MacOS" && dir.parentFile?.name == "Contents") {
+            val dest = dir.resolve(clearanceHelperBinary)
+            helper.copyTo(dest, overwrite = true)
+            dest.setExecutable(true, false)
+            println("Staged clearance helper to $dest")
+        } else if (dir.name == "bin" && (dir.parentFile?.name?.contains("main") == true || dir.parentFile?.name?.contains("release") == true)) {
+            val dest = dir.resolve(clearanceHelperBinary)
+            helper.copyTo(dest, overwrite = true)
+            dest.setExecutable(true, false)
+            println("Staged clearance helper to $dest")
         }
     }
+}
+
+tasks.matching { it.name.startsWith("prepare") }.configureEach {
+    doLast { stageClearanceHelper() }
+}
+tasks.matching { it.name.startsWith("package") }.configureEach {
+    doFirst { stageClearanceHelper() }
 }

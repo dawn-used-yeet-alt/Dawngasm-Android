@@ -42,7 +42,7 @@ object DesktopPlatform {
         Os.MACOS -> "macOS ($arch)"
     }
 
-    private fun env(name: String): String? =
+    fun env(name: String): String? =
         platform.posix.getenv(name)?.toKString()?.takeIf { it.isNotBlank() }
 
     private val home: String =
