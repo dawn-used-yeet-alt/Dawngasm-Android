@@ -212,7 +212,7 @@ fn capture(request: &Request) -> Result<(String, String), (String, String)> {
         })?;
 
         use wry::WebViewExtUnix as _;
-        use webkit2gtk::traits::{CookieManagerExt as _, SettingsExt as _, WebViewExt as _};
+        use webkit2gtk::prelude::*;
         let gtk_wv = wv.webview();
         if let Some(settings) = gtk_wv.settings() {
             settings.set_enable_javascript(true);
