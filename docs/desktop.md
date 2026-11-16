@@ -238,3 +238,19 @@ which encounters IR constructor binding errors on `ui-unit-macosarm64.klib`. CI
 provisions the native distribution via `:app:compileKotlinMacosArm64` and strips
 `macos_arm64` from `cacheableTargets` in `konan.properties`, cleanly compiling
 without static klib cache conflicts (matching `macosX64` Tier 2 behavior).
+
+### Native Binary Sizes (Phase 22 Baseline)
+
+The native shell links the full Compose Multiplatform UI (`DawngasmApp`), presenters,
+models, settings, and player backends into standalone binaries without any JVM
+dependency:
+
+| Platform | Binary | Unstripped Debug Executable Size |
+| :--- | :--- | :--- |
+| **Linux (x64)** | `app.kexe` | 126,031,912 bytes (~120 MiB) |
+| **Windows (x64)** | `app.exe` | 84,052,992 bytes (~80 MiB) |
+| **macOS (arm64)** | `app.kexe` | 64,344,440 bytes (~61 MiB) |
+| **macOS (x64)** | `app.kexe` | 68,953,912 bytes (~66 MiB) |
+
+*Note: Debug executables contain full unstripped DWARF debug symbols and non-optimized Konan runtime metadata. Stripped release builds typically reduce standalone binary size by 60–70%, projecting ~35–45 MiB uncompressed and ~25–35 MiB when packaged in a compressed AppImage (compared to the 72 MiB JVM AppImage).*
+

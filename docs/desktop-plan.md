@@ -51,7 +51,7 @@ with the same intent.
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
 | 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | ✅ Complete |
 | 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | ✅ Complete |
-| 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | 🟡 In progress |
+| 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ✅ Complete |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
@@ -201,20 +201,35 @@ phase still needs live host access and clean-install verification.
   resolved by provisioning the native toolchain and stripping `macos_arm64` from
   `cacheableTargets` in `konan.properties`.
 
-- **Phase 22 — in progress (2026-11-16).** Wire full UI and domain into the
-  native shell (`native-spike/app`). Linked `shared/src/commonMain/kotlin`,
-  `composeApp/src/commonMain/kotlin`, and `composeApp/src/desktopMain/kotlin`
-  directly into the native build targets. Created native actuals for `Network`
-  (pure-Kotlin Ktor CIO engine with cookie storage), `PlatformFileOps`
-  (`okio.FileSystem.SYSTEM`), `Clock` (`getTimeMillis()`), `PlatformLog`, and
-  `DesktopPlatform` (runtime `Platform.osFamily` and environment paths). Implemented
-  `NativeSettings` (JSON file-backed `com.russhwolf.settings.Settings`),
-  `NativeFileSaver` (`FileSaver`), `AudioResolver` (`CommonAudioResolver` +
-  hotaudio stream handler), `NativeSettingsPlatformActions`, and `NativeAudioPlayer`
-  wrapping `KMPlayer` reactive state flow and `KMediaNotification` session
-  publishing. Connected `Main.kt` to launch `DawngasmApp` with `AppPresenter` and
-  `DawngasmTheme` while retaining `--self-test` early exit for headless CI. Added
-  binary size measurement to CI.
+- **Phase 22 — complete (2026-11-16).** Fully wired the UI, domain, and native
+  actuals into the native desktop shell (`native-spike/app`). Linked
+  `shared/src/commonMain/kotlin`, `composeApp/src/commonMain/kotlin`, and
+  `composeApp/src/desktopMain/kotlin` directly into the native build targets.
+  Embedded the 33 required vector icons and `Icons.kt` directly under
+  `native-spike/app/src/commonMain/kotlin/androidx/compose/material/icons/` with
+  their original Android Open Source Project Apache 2.0 license headers,
+  bypassing missing Maven Central native icon klibs. Implemented all 10 native
+  actuals and bridges:
+  - `Network.native.kt`: asynchronous Ktor 3.1.3 `CIO` engine with `AcceptAllCookiesStorage`.
+  - `PlatformFileOps.native.kt`: multiplatform file operations via `okio.FileSystem.SYSTEM`.
+  - `Clock.native.kt`: monotonic, non-deprecated POSIX `time(null)` + `TimeSource.Monotonic.markNow()` epoch clock.
+  - `PlatformLog.native.kt`: stdout/stderr platform logging.
+  - `DesktopPlatform.native.kt`: runtime `KonanPlatform.osFamily` and environment directory detection.
+  - `NativeSettings.kt`: atomic JSON file-backed `com.russhwolf.settings.Settings`.
+  - `NativeFileSaver.kt`: native `FileSaver` implementation.
+  - `AudioResolver.native.kt`: `CommonAudioResolver` with hotaudio stream handling.
+  - `NativeSettingsPlatformActions.kt`: platform settings actions and folder opening.
+  - `NativeAudioPlayer.kt`: `AudioPlayer` wrapping `KMPlayer` reactive state flow and `KMediaNotification` (`MediaSession`) controls.
+  Connected `Main.kt` to launch `DawngasmApp` with `AppPresenter` and `DawngasmTheme`
+  while retaining `--self-test` early exit for headless CI. Resolved Material 3
+  `Slider` and `ExposedDropdownMenu` cross-version compatibility between Compose
+  1.11.1 and 1.13.0.
+  Desktop CI run `43868685189` completed with full success across all 8 matrix jobs:
+  - `Native spike (ubuntu-latest)`: PASSED (`self-test: ok`, GStreamer backend, MPRIS session, 126 MB unstripped debug binary).
+  - `Native spike (windows-latest)`: PASSED (`self-test: ok`, MinGW x64, SDL3 DLL runtime, SMTC session, 84 MB unstripped debug binary).
+  - `Native spike (macos-latest)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 64 MB unstripped debug binary).
+  - `Native spike (macos-15-intel)`: PASSED (`self-test: ok`, AVFoundation backend, NowPlaying session, 68 MB unstripped debug binary).
+  - Plus all 4 standard JVM desktop test runners green.
 
 ---
 
