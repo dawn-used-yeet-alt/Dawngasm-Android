@@ -24,13 +24,14 @@ cd native-spike
 ./gradlew :app:linkDebugExecutableMacosX64    # Intel macOS
 ```
 
-The executable lands under `app/build/bin/<target>/debugExecutable/`. Running it
-without arguments opens a small Compose Native window.
+The executable lands under `app/build/bin/<target>/debugExecutable/` and is
+named after the Gradle project (`app.kexe` on Linux/macOS, `app.exe` on
+Windows). Running it without arguments opens a small Compose Native window.
 
 ## Self-test
 
 ```sh
-./app/build/bin/linuxX64/debugExecutable/dawngasm-native-spike.kexe --self-test
+./app/build/bin/linuxX64/debugExecutable/app.kexe --self-test
 ```
 
 `--self-test` and `--version` both print the OS/architecture, create a real

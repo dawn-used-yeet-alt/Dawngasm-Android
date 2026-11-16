@@ -170,12 +170,20 @@ jobs:
         run: |
           set -euo pipefail
           binary="$(find native-spike/app/build/bin -type f \
-            \( -name 'dawngasm-native-spike.kexe' -o -name 'dawngasm-native-spike.exe' \) \
-            -print -quit)"
+            \( -name '*.kexe' -o -name '*.exe' \) -print -quit)"
           if [[ -z "$binary" ]]; then
             echo "native spike executable not found"
             find native-spike/app/build -maxdepth 5 -type f | head -100
             exit 1
+          fi
+          echo "found native spike binary: $binary"
+          chmod +x "$binary" 2>/dev/null || true
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            sdl_dll="$(find native-spike/app/build -type f -name 'SDL3.dll' -print -quit)"
+            if [[ -n "$sdl_dll" ]]; then
+              echo "copying $sdl_dll next to binary"
+              cp "$sdl_dll" "$(dirname "$binary")/"
+            fi
           fi
           echo "running $binary --self-test"
           "$binary" --self-test
