@@ -20,9 +20,9 @@ native clearance window provided by the bundled `dawngasm-clearance-helper`;
 the clipboard paste dialog remains available as a fallback. The helper uses the
 system webview:
 
-- **Linux:** `libwebkit2gtk-4.1-0`. The `.deb`/`.rpm` packages do not declare
-  this dependency yet — install `libwebkit2gtk-4.1-0` if the clearance window
-  does not open.
+- **Linux:** `libwebkit2gtk-4.1-0`. The AppImage does not declare this
+  dependency yet — install `libwebkit2gtk-4.1-0` if the clearance window does
+  not open.
 - **Windows:** WebView2 Runtime, which ships with Windows 11 and current
   Windows 10 installs. The MSI does not bundle it.
 - **macOS:** WKWebView, included with the system.
@@ -43,8 +43,11 @@ Local development:
 Packages must be built on their target OS (`jpackage` does not cross-build):
 
 ```sh
-# Linux: deb, rpm, and a jpackage app image
-./gradlew :desktopApp:packageDeb :desktopApp:packageRpm :desktopApp:createDistributable
+# Linux: jpackage app image (the AppImage is assembled from this)
+./gradlew :desktopApp:createDistributable
+
+# Linux installers are still available locally
+./gradlew :desktopApp:packageDeb :desktopApp:packageRpm
 
 # Windows
 ./gradlew :desktopApp:packageMsi
@@ -53,15 +56,48 @@ Packages must be built on their target OS (`jpackage` does not cross-build):
 ./gradlew :desktopApp:packageDmg
 ```
 
-The packaging workflow (`.github/workflows/desktop-package.yml`) builds all
-four variants and uploads `.deb`, `.rpm`, `.AppImage`, `.msi`, and `.dmg`
-artifacts. Linux packaging installs `rpm` in CI, then wraps the jpackage app
-image with `appimagetool` and adds AppStream metadata from
-`desktopApp/icons/dev.dawngasm.app.appdata.xml`.
+The packaging workflow (`.github/workflows/desktop-package.yml`) currently
+ships only the Linux AppImage plus the Windows MSI and macOS DMGs. The Linux
+job builds `createDistributable`, smoke-tests the packaged launcher, strips the
+bundled native libraries, wraps the app image with `appimagetool`, and adds
+AppStream metadata from `desktopApp/icons/dev.dawngasm.app.appdata.xml`.
+`.deb`/`.rpm` remain local Gradle targets until distro packaging is revisited.
 
 Packages are currently unsigned. macOS Gatekeeper and Windows SmartScreen will
 warn on first launch until the signing and notarization work in Phase 16 is
 configured with per-OS certificates.
+
+## Size and startup
+
+The desktop runtime uses an explicit jlink module list instead of
+`includeAllModules`: the Compose defaults (`java.base`, `java.desktop`,
+`java.logging`, `jdk.crypto.ec`) plus `jdk.unsupported` for JNA, `jdk.httpserver`
+for the hotaudio loopback server, `jdk.zipfs`, and `jdk.charsets`. Adding a new
+library that needs another JDK module shows up as a `ClassNotFoundException` in
+a packaged run; add the module to `nativeDistributions.modules(...)` rather than
+going back to `includeAllModules`.
+
+`material-icons-extended` is pruned after `createDistributable` and before any
+installer is built. `PruneMaterialIconsTask` scans `composeApp/src`,
+`shared/src`, and `desktopApp/src` for `androidx.compose.material.icons.*`
+imports, keeps the matching generated icon classes, and removes the rest from
+the packaged jar. It writes a report to
+`desktopApp/build/reports/material-icons-prune.txt`. Creating a new icon
+reference needs no extra step; the task reruns with the app image. If the
+dependency is ever removed, the task becomes a no-op.
+
+Packaging jobs run `Dawngasm --version` against the packaged launcher. The
+desktop entry point initializes platform directories, JNA, and the hotaudio
+native library before printing, so the smoke test catches missing runtime and
+native payloads. The Linux job also strips the bundled native libraries before
+`appimagetool` compresses the image. Use `:desktopApp:suggestModules` only as a
+hint when adding dependencies; its output can be incomplete or overly broad.
+
+Phase 20 records the size baseline. The Phase 19 AppImage was 137,595,384 bytes
+with the full JDK module image and the complete 37 MB icon jar. The ProGuard
+`packageRelease*` tasks are documented as a later option: they can shrink all
+jars, but need a validated keep-rule set for JNA, VLCJ, Ktor/OkHttp,
+kotlinx.serialization, coroutines, and Compose reflection.
 
 ## Signing
 

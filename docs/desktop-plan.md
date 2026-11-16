@@ -1,4 +1,4 @@
-# Dawngasm desktop: 20-phase plan (0–19)
+# Dawngasm desktop: 21-phase plan (0–20)
 
 Target platforms: **Linux, Windows, and macOS**. The Android and iOS targets stay
 as they are; desktop is a third shell over the existing KMP/CMP code.
@@ -15,6 +15,8 @@ Ordering principle:
   Linux/Windows/macOS.
 - **Phases 17–19:** **Hotaudio** — native FFI, streaming playback, clearance and
   final release.
+- **Phase 20:** shrink the shipped Linux AppImage and measure startup after the
+  feature work is complete.
 
 Every phase ends with the CI matrix green on `ubuntu-latest`,
 `windows-latest`, `macos-latest` (arm64), and `macos-15-intel` (x64) unless the
@@ -44,6 +46,7 @@ with the same intent.
 | 17 | Hotaudio FFI foundation | Native lib loads on all OSes | ✅ Complete |
 | 18 | Hotaudio streaming + downloads | Early playback, seeking | ✅ Complete |
 | 19 | Hotaudio clearance + release | Full hotaudio flow, final artifacts | 🟡 Implemented |
+| 20 | Size + startup optimization | Smaller AppImage, packaged smoke tests | 🟡 Implemented |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
@@ -154,6 +157,23 @@ phase still needs live host access and clean-install verification.
   clearance helper and hotaudio FFI payloads. Final signing and clean-install
   end-to-end verification remain with Phase 16 and need real host
   access/credentials.
+
+- **Phase 20 — implemented (2026-11-16), validation pending.** Replaced
+  `includeAllModules = true` with the Compose defaults plus `jdk.charsets`,
+  `jdk.httpserver`, `jdk.unsupported`, and `jdk.zipfs`, removing the compiler,
+  `ct.sym`, and unused JDK modules. Added `PruneMaterialIconsTask`, which scans
+  the desktop source sets for `androidx.compose.material.icons.*` imports and
+  rewrites the packaged `material-icons-extended` jar to keep only referenced
+  icon classes; the rest of the jar (metadata and non-icon entries) is
+  preserved. Linux CI now builds only the AppImage, strips the bundled native
+  payloads before `appimagetool`, prints the app/directory sizes and the prune
+  report, and uploads a single `dawngasm-linux-appimage` artifact. All packaging
+  jobs now run `Dawngasm --version` against the packaged launcher; the desktop
+  entry point initializes paths, JNA, and the hotaudio native library before
+  printing, so the smoke test also catches missing native payloads. The
+  previous Linux artifact measured 137,595,384 bytes for the AppImage alone
+  (358 MiB when deb/rpm were included). The post-change size is recorded below
+  after the packaging run.
 
 ---
 
@@ -433,6 +453,56 @@ network.
 - Rebuild and re-sign all installers with the hotaudio native payloads.
 - **Exit:** hotaudio works on clean Linux, Windows, and macOS installs; release
   artifacts signed and documented.
+
+---
+
+## Milestone F — Size and startup
+
+### Phase 20 — Desktop size and startup optimization
+
+**Goal:** ship a Linux AppImage that is materially smaller than the Phase 19
+build without reducing runtime coverage, and make packaged startup a CI signal.
+
+- **Runtime image:** the Compose plugin already links `java.base`,
+  `java.desktop`, `java.logging`, and `jdk.crypto.ec`. Add only the modules the
+  app actually reaches: `jdk.unsupported` (JNA/VLCJ/hotaudio), `jdk.httpserver`
+  (loopback hotaudio server), `jdk.zipfs` (jar filesystem access), and
+  `jdk.charsets` (non-UTF-8 HTML and file names). Do not use
+  `includeAllModules`; it bundles `jdk.compiler`, `ct.sym`, and other tooling.
+  Leave out `jdk.localedata` while the UI and log timestamps are English/ISO.
+- **Icon tree-shaking:** `material-icons-extended` is a ~37 MB jar of generated
+  icon classes, and the app references only ~30. `PruneMaterialIconsTask` reads
+  the desktop source sets, builds the set of referenced
+  `variant/IconName` pairs, and rewrites the packaged jar to keep only those
+  icon classes. This is deterministic tree-shaking for that dependency and does
+  not require manually replacing icons or changing shared source.
+- **Native payload stripping:** strip the Skiko/libjvm/Rust `.so` files and the
+  clearance helper before `appimagetool` compresses the image.
+- **Distribution:** ship only the Linux AppImage for now. The `deb`/`rpm`
+  Gradle targets remain available locally, but CI builds and uploads only the
+  AppImage.
+- **Packaged smoke tests:** every packaging job runs `Dawngasm --version` from
+  the packaged app image. The entry point installs paths and native probes
+  first, so a missing hotaudio FFI/JNA payload fails the job instead of only
+  showing up at first playback.
+- **Measurement:** record the AppImage size and installed app-image size in CI;
+  compare startup with `time`/hyperfine and memory with `jcmd` on a Linux
+  desktop. Keep optimization changes behind measurements.
+- **Optional ProGuard:** the Compose plugin's `packageRelease*` tasks can shrink
+  all jars further. Defer enabling them until JNA, VLCJ, Ktor/OkHttp,
+  kotlinx.serialization, coroutines, and Compose reflection keep rules are
+  validated on all four runners. Icon jar pruning gives most of the safe win
+  without that risk.
+- **Exit:** the AppImage is under 100 MB (baseline 137.6 MB), `--version`
+  smoke tests pass on all packaging runners, and the four-runner desktop CI
+  stays green.
+
+#### Size results
+
+| Build | AppImage | Notes |
+|---|---:|---|
+| Phase 19 baseline | 137,595,384 B | `includeAllModules`, full icon jar |
+| Phase 20 | pending CI | explicit modules + icon pruning + native strip |
 
 ---
 

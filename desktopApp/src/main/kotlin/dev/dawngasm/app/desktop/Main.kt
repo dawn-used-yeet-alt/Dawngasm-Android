@@ -114,10 +114,17 @@ private fun persistWindowState(prefs: AppPreferences, windowState: WindowState) 
     prefs.saveWindowBounds(x, y, width, height, maximized)
 }
 
-fun main() {
+fun main(args: Array<String>) {
+    val versionOnly = args.contains("--version")
     DesktopPlatform.ensureDirectories()
     HotaudioDesktopIntegration.install()
+    // Run the packaged native probes even for --version so CI's smoke test
+    // catches missing JNA/native payloads in the app image.
     DesktopHotaudio.install()
+    if (versionOnly) {
+        println("$APP_NAME $APP_VERSION")
+        return
+    }
     application {
         val prefs = remember { AppPreferences() }
         val presenter = remember {

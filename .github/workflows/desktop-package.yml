@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   linux:
-    name: Linux packages
+    name: Linux AppImage
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -45,20 +45,29 @@ jobs:
         with:
           workspaces: desktopApp/native/clearance-helper -> target
 
-      - name: Install RPM tooling
-        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Build the app image
+        run: ./gradlew --no-daemon --stacktrace :desktopApp:createDistributable
 
-      - name: Build deb, rpm and app image
-        run: >
-          ./gradlew --no-daemon --stacktrace
-          :desktopApp:packageDeb
-          :desktopApp:packageRpm
-          :desktopApp:createDistributable
+      - name: Smoke-test the packaged app
+        run: |
+          APP_DIR="$PWD/desktopApp/build/compose/binaries/main/app/Dawngasm"
+          test -d "$APP_DIR"
+          "$APP_DIR/bin/Dawngasm" --version | tee /tmp/dawngasm-version.txt
+          grep -q '^Dawngasm 2\.0\.0$' /tmp/dawngasm-version.txt
 
       - name: Convert the app image to an AppImage file
         run: |
           APP_DIR="$PWD/desktopApp/build/compose/binaries/main/app/Dawngasm"
           test -d "$APP_DIR"
+
+          # jlink already strips debug information; strip the remaining native
+          # payload (Skiko, libjvm, the Rust helpers) before compressing.
+          if command -v strip >/dev/null 2>&1; then
+            find "$APP_DIR" -type f \
+              \( -name '*.so' -o -name '*.so.*' -o -name 'dawngasm-clearance-helper' \) \
+              -exec strip --strip-unneeded {} + 2>/dev/null || true
+          fi
+
           cp desktopApp/icons/dawngasm.png "$APP_DIR/dawngasm.png"
           ln -sf dawngasm.png "$APP_DIR/.DirIcon"
           mkdir -p "$APP_DIR/usr/share/metainfo"
@@ -89,15 +98,18 @@ jobs:
             "$APP_DIR" \
             desktopApp/build/compose/binaries/main/Dawngasm-2.0.0-x86_64.AppImage
 
-      - name: Upload Linux artifacts
+      - name: Report AppImage size
+        run: |
+          ls -lh desktopApp/build/compose/binaries/main/Dawngasm-*.AppImage
+          du -sh "$PWD/desktopApp/build/compose/binaries/main/app/Dawngasm"
+          cat desktopApp/build/reports/material-icons-prune.txt
+
+      - name: Upload Linux AppImage
         uses: actions/upload-artifact@v7
         with:
-          name: dawngasm-linux
+          name: dawngasm-linux-appimage
           if-no-files-found: error
-          path: |
-            desktopApp/build/compose/binaries/main/deb/*.deb
-            desktopApp/build/compose/binaries/main/rpm/*.rpm
-            desktopApp/build/compose/binaries/main/Dawngasm-*.AppImage
+          path: desktopApp/build/compose/binaries/main/Dawngasm-*.AppImage
 
   windows:
     name: Windows MSI
@@ -136,6 +148,18 @@ jobs:
 
       - name: Build MSI
         run: ./gradlew --no-daemon --stacktrace :desktopApp:packageMsi
+
+      - name: Smoke-test the packaged app
+        shell: pwsh
+        run: |
+          $launcher = Get-ChildItem desktopApp/build/compose/binaries/main/app `
+            -Recurse -Filter Dawngasm.exe | Select-Object -First 1
+          if (-not $launcher) { throw "Packaged launcher was not found" }
+          $process = Start-Process -FilePath $launcher.FullName `
+            -ArgumentList '--version' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged app exited with $($process.ExitCode)"
+          }
 
       - name: Sign MSI
         if: env.WINDOWS_CERTIFICATE_PFX_BASE64 != ''
@@ -239,6 +263,14 @@ jobs:
           fi
           ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg "${args[@]}"
 
+      - name: Smoke-test the packaged app
+        shell: bash
+        run: |
+          LAUNCHER=$(find desktopApp/build/compose/binaries/main/app \
+            -path '*/Dawngasm.app/Contents/MacOS/Dawngasm' | head -1)
+          test -n "$LAUNCHER"
+          "$LAUNCHER" --version
+
       - name: Notarize DMG
         if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' && env.MACOS_CERTIFICATE_P12_BASE64 != ''
         shell: bash
@@ -332,6 +364,14 @@ jobs:
             fi
           fi
           ./gradlew --no-daemon --stacktrace :desktopApp:packageDmg "${args[@]}"
+
+      - name: Smoke-test the packaged app
+        shell: bash
+        run: |
+          LAUNCHER=$(find desktopApp/build/compose/binaries/main/app \
+            -path '*/Dawngasm.app/Contents/MacOS/Dawngasm' | head -1)
+          test -n "$LAUNCHER"
+          "$LAUNCHER" --version
 
       - name: Notarize DMG
         if: env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' && env.MACOS_CERTIFICATE_P12_BASE64 != ''

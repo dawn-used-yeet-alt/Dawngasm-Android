@@ -1,7 +1,12 @@
+import org.gradle.api.file.ConfigurableFileCollection
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -47,8 +52,19 @@ compose.desktop {
             // every package's resources directory.
             appResourcesRootDir.set(layout.buildDirectory.dir("native-resources"))
 
-            // VLCJ/JNA and Compose load a broad set of JDK classes at runtime.
-            includeAllModules = true
+            // Keep the bundled runtime small. The Compose plugin already adds
+            // java.base, java.desktop, java.logging, and jdk.crypto.ec.
+            // jdk.unsupported is required by JNA (and therefore VLCJ and the
+            // hotaudio bindings), jdk.httpserver backs the loopback stream
+            // server, and zipfs/charsets keep resource loading and non-UTF-8
+            // HTML/file names working. jdk.localedata is intentionally left
+            // out: the UI is English and only ISO date formatters are used.
+            modules(
+                "jdk.charsets",
+                "jdk.httpserver",
+                "jdk.unsupported",
+                "jdk.zipfs",
+            )
 
             linux {
                 packageName = "dawngasm"
@@ -120,6 +136,153 @@ tasks.matching {
         it.name == "packageDmg"
 }.configureEach {
     dependsOn(stageClearanceHelper)
+}
+
+// --- material icon tree-shaking ------------------------------------------
+//
+// material-icons-extended is ~37 MB of generated classes, but the app uses
+// only a few dozen icons. R8/ProGuard can shrink the whole desktop image, but
+// it needs a broad keep-rule set and changes every packaged jar. Pruning the
+// icon jar in the app image is deterministic, keeps the rest of the runtime
+// untouched, and gives the same disk-size win for this dependency.
+
+abstract class PruneMaterialIconsTask : DefaultTask() {
+    @get:Internal
+    abstract val appImageRoot: DirectoryProperty
+
+    @get:InputFiles
+    abstract val sources: ConfigurableFileCollection
+
+    @get:OutputFile
+    abstract val reportFile: RegularFileProperty
+
+    private val sourceIconPattern = Regex(
+        """androidx\.compose\.material\.icons\.((?:automirrored\.)?(?:filled|outlined|rounded|twotone|sharp))\.([A-Za-z0-9_]+)"""
+    )
+    private val iconEntryPattern = Regex(
+        """^androidx/compose/material/icons/((?:automirrored/)?(?:filled|outlined|rounded|twotone|sharp))/([^/]+)\.class$"""
+    )
+
+    @TaskAction
+    fun prune() {
+        val keep = mutableSetOf<String>()
+        sources.files.asSequence()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { source ->
+                sourceIconPattern.findAll(source.readText()).forEach { match ->
+                    val variant = match.groupValues[1].replace('.', '/')
+                    keep.add("$variant/${match.groupValues[2]}")
+                }
+            }
+        if (keep.isEmpty()) {
+            logger.warn("No material icon references found; leaving the icon jar unchanged.")
+            return
+        }
+
+        val root = appImageRoot.get().asFile
+        val jars = root.walkTopDown()
+            .filter {
+                it.isFile &&
+                    it.extension == "jar" &&
+                    it.name.startsWith("material-icons-extended")
+            }
+            .toList()
+        if (jars.isEmpty()) {
+            throw GradleException(
+                "No material-icons-extended jar found under ${root.absolutePath}; " +
+                    "run createDistributable first."
+            )
+        }
+
+        val report = StringBuilder()
+        jars.forEach { jar ->
+            val found = mutableSetOf<String>()
+            var kept = 0
+            var removed = 0
+            var copied = 0
+            val temporary = File(jar.parentFile, "${jar.name}.pruned")
+
+            ZipFile(jar).use { zip ->
+                ZipOutputStream(temporary.outputStream().buffered()).use { output ->
+                    val entries = zip.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        val icon = iconKey(entry.name)
+                        if (icon != null) {
+                            found.add(icon)
+                            if (icon !in keep) {
+                                removed++
+                                continue
+                            }
+                            kept++
+                        }
+                        val copy = ZipEntry(entry.name)
+                        if (entry.time >= 0) copy.time = entry.time
+                        output.putNextEntry(copy)
+                        if (!entry.isDirectory) {
+                            zip.getInputStream(entry).use { it.copyTo(output) }
+                        }
+                        output.closeEntry()
+                        copied++
+                    }
+                }
+            }
+            Files.move(temporary.toPath(), jar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+
+            val missing = keep - found
+            report.appendLine(
+                "${jar.absolutePath}: kept $kept icon classes, removed $removed, copied $copied entries"
+            )
+            if (missing.isNotEmpty()) {
+                report.appendLine(
+                    "  not in this jar (defined by material-icons-core): ${missing.sorted().joinToString()}"
+                )
+            }
+        }
+
+        val output = reportFile.get().asFile
+        output.parentFile.mkdirs()
+        output.writeText(report.toString())
+        logger.lifecycle(report.toString().trim())
+    }
+
+    private fun iconKey(entryName: String): String? {
+        val match = iconEntryPattern.matchEntire(entryName) ?: return null
+        val className = match.groupValues[2].substringBefore('$')
+        val icon = className.removeSuffix("Kt")
+        return "${match.groupValues[1]}/$icon"
+    }
+}
+
+val pruneMaterialIcons by tasks.registering(PruneMaterialIconsTask::class) {
+    group = "desktop"
+    description = "Removes unused material-icons-extended classes from the app image."
+    dependsOn("createDistributable")
+    // The task rewrites a file inside another task's output directory, so it
+    // must rerun whenever createDistributable runs, even if sources are
+    // unchanged.
+    outputs.upToDateWhen { false }
+    appImageRoot.set(layout.buildDirectory.dir("compose/binaries/main/app"))
+    sources.from(
+        rootProject.fileTree("composeApp/src") { include("**/*.kt") },
+        rootProject.fileTree("shared/src") { include("**/*.kt") },
+        rootProject.fileTree("desktopApp/src") { include("**/*.kt") },
+    )
+    reportFile.set(layout.buildDirectory.file("reports/material-icons-prune.txt"))
+}
+
+tasks.matching { it.name == "createDistributable" }.configureEach {
+    finalizedBy(pruneMaterialIcons)
+}
+
+tasks.matching {
+    it.name == "packageDeb" ||
+        it.name == "packageRpm" ||
+        it.name == "packageAppImage" ||
+        it.name == "packageMsi" ||
+        it.name == "packageDmg"
+}.configureEach {
+    dependsOn(pruneMaterialIcons)
 }
 
 // --- hotaudio FFI ---------------------------------------------------------
