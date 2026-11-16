@@ -160,12 +160,24 @@ jobs:
         if: runner.os == 'macOS'
         run: brew list sdl3 >/dev/null 2>&1 || brew install sdl3
 
+      - name: Disable Kotlin/Native klib cache for macOS arm64
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+        shell: bash
+        working-directory: native-spike
+        run: |
+          ./gradlew --no-daemon :app:dependencies || true
+          if [[ -d "$HOME/.konan" ]]; then
+            echo "Patching konan.properties to disable klib caching on macos_arm64"
+            find "$HOME/.konan" -name "konan.properties" -exec sed -i.bak -e 's/cacheableTargets.macos_arm64=.*/cacheableTargets.macos_arm64=/g' -e 's/macos_arm64//g' {} +
+            find "$HOME/.konan" -name "konan.properties" -exec grep -H "cacheableTargets" {} +
+          fi
+
       - name: Link native spike
         shell: bash
         working-directory: native-spike
         run: ./gradlew --no-daemon --stacktrace :app:${{ matrix.task }}
 
-      - name: Start Windows audio services
+      - name: Setup Windows audio device
         if: runner.os == 'Windows'
         shell: powershell
         run: |
@@ -173,6 +185,16 @@ jobs:
           Start-Service -Name "AudioEndpointBuilder" -ErrorAction SilentlyContinue
           Set-Service -Name "AudioSrv" -StartupType Automatic -ErrorAction SilentlyContinue
           Start-Service -Name "AudioSrv" -ErrorAction SilentlyContinue
+          try {
+            Write-Host "Installing Scream virtual audio driver for Media Foundation..."
+            Invoke-WebRequest -Uri https://github.com/duncanthrax/scream/releases/download/3.8/Scream3.8.zip -OutFile Scream.zip
+            Expand-Archive -Path Scream.zip -DestinationPath Scream -Force
+            Import-Certificate -FilePath Scream\Install\driver\x64\Scream.cat -CertStoreLocation Cert:\LocalMachine\TrustedPublisher
+            & Scream\Install\helpers\devcon-x64.exe install Scream\Install\driver\x64\Scream.inf *Scream
+            Get-CimInstance Win32_SoundDevice | Format-List *
+          } catch {
+            Write-Host "Scream driver warning: $_"
+          }
 
       - name: Self-test native spike
         shell: bash
