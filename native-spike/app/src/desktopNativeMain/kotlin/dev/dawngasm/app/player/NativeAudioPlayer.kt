@@ -5,6 +5,7 @@ import dev.brahmkshatriya.kmplayer.KMPlayerConfig
 import dev.brahmkshatriya.kmplayer.KMResult
 import dev.brahmkshatriya.kmedianotification.KMediaNotification
 import dev.brahmkshatriya.kmedianotification.MediaPlatform
+import dev.brahmkshatriya.kmedianotification.MediaSession
 import dev.brahmkshatriya.kmedianotification.MediaSessionState
 import dev.brahmkshatriya.kmedianotification.NowPlayingItem
 import dev.brahmkshatriya.kmedianotification.PlaybackState as NotificationPlaybackState
@@ -35,7 +36,7 @@ class NativeAudioPlayer(
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private var player: KMPlayer? = null
-    private var session: KMediaNotification? = null
+    private var session: MediaSession? = null
     private var playJob: Job? = null
 
     init {
@@ -91,7 +92,15 @@ class NativeAudioPlayer(
                 scope = scope,
                 id = "dawngasm",
                 displayName = "Dawngasm",
-            )
+            ) {
+                onPlay { resume() }
+                onPause { pause() }
+                onTogglePlayPause { togglePlayPause() }
+                onNext { nextTrack() }
+                onPrevious { previousTrack() }
+                onSeekTo { req -> seekTo(req.position.inWholeMilliseconds) }
+                onStop { stop() }
+            }
         } catch (e: Throwable) {
             PlatformLog.w("NativeAudioPlayer", "KMediaNotification init exception: ${e.message}")
         }
@@ -103,7 +112,8 @@ class NativeAudioPlayer(
         val pos = _state.value.positionMs.milliseconds
         val dur = _state.value.durationMs.milliseconds
 
-        runCatching {
+        try {
+            session?.activate()
             session?.publish(
                 MediaSessionState(
                     item = NowPlayingItem(
@@ -119,6 +129,8 @@ class NativeAudioPlayer(
                     },
                 )
             )
+        } catch (e: Throwable) {
+            PlatformLog.w("NativeAudioPlayer", "updateNotification exception: ${e.message}")
         }
     }
 

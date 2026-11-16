@@ -59,6 +59,18 @@ because the Compose Native plugin stages SDL3 and the MinGW runtime.
   `KMediaNotification.create`.
 - `SpikeInfo.kt` — OS/architecture identity.
 
+## Licensing and third-party code
+
+- `app/src/commonMain/kotlin/androidx/compose/material/icons/` embeds the
+  exact 33 vector icons and `Icons.kt` used by Dawngasm, extracted directly
+  from the Android Open Source Project / JetBrains Compose Multiplatform
+  sources (`androidx.compose.material:material-icons-*-sources.jar`).
+  These files are licensed under the **Apache License, Version 2.0** and retain
+  their original copyright headers. Apache 2.0 is compatible with Dawngasm's GPL-3.0.
+- `kmplayer` and `kmedianotification` are authored by brahmkshatriya and licensed
+  under **GPL-3.0**.
+- `compose-native` is authored by brahmkshatriya and licensed under **Apache-2.0**.
+
 ## Next step
 
 Phase 22 of `docs/desktop-plan.md` moves `:shared` and `:composeApp` to a
