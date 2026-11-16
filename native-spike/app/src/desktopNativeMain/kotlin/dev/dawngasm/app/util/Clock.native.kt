@@ -1,7 +1,12 @@
 package dev.dawngasm.app.util
 
-import kotlin.system.getTimeMillis
+import kotlin.time.TimeSource
+import platform.posix.time
 
-@Suppress("DEPRECATION")
-actual fun currentTimeMillis(): Long = getTimeMillis()
+private val startEpochMs: Long = time(null) * 1000L
+private val startMark = TimeSource.Monotonic.markNow()
+
+actual fun currentTimeMillis(): Long =
+    startEpochMs + startMark.elapsedNow().inWholeMilliseconds
+
 

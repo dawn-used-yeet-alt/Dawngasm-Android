@@ -433,16 +433,6 @@ private fun MiniPlayerBody(
                             inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant,
                         ),
                         interactionSource = sliderInteractionSource,
-                        thumb = {
-                            SliderDefaults.Thumb(
-                                interactionSource = sliderInteractionSource,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                ),
-                                enabled = progress.durationMs > 0,
-                                thumbSize = DpSize(width = 4.dp, height = 22.dp),
-                            )
-                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("mini_player_seek_slider"),
