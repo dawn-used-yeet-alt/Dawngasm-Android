@@ -663,6 +663,7 @@ Windows, and macOS, optimize CI runner matrix usage, and ensure generic x86-64 C
   - macOS arm64: `packageMacosArm64ReleaseDmg` (`Dawngasm-2.0.0-macos-arm64.dmg`)
   - macOS x64: `packageMacosX64ReleaseDmg` (`Dawngasm-2.0.0-macos-x86_64.dmg`)
 - Resolved `Dispatchers.Main` missing platform event loop on Kotlin/Native by passing `Dispatchers.Default` to `AppPresenter` and `NativeAudioPlayer`.
+- Replaced `io.ktor:ktor-client-cio` with platform-native TLS engines (`ktor-client-curl` on Linux, `ktor-client-winhttp` on Windows, and `ktor-client-darwin` on macOS), resolving the Kotlin/Native `TLS sessions are not supported on Native platform` runtime exception on HTTPS feed loading.
 - Enforced baseline generic `x86-64` instructions (`-march=x86-64 -mtune=generic` and `-DSDL_AVX=OFF -DSDL_AVX2=OFF -DSDL_AVX512F=OFF`) when compiling SDL3 on Linux CI, preventing `SIGILL` (Illegal instruction) on CPUs without AVX2 (e.g. AMD Puma/Jaguar, early Core/Pentium).
 - Optimized GitHub Actions CI: replaced redundant 4-runner matrix for `:shared:desktopTest` with a single `shared-test` runner on `ubuntu-latest`.
 - Measured actual stripped release distribution packages:

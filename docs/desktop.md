@@ -259,4 +259,5 @@ To ensure compatibility across all x86-64 microarchitectures (including older AM
 - SDL3 on Linux x86_64 is compiled in CI with explicit generic flags: `-DCMAKE_C_FLAGS="-march=x86-64 -mtune=generic" -DCMAKE_CXX_FLAGS="-march=x86-64 -mtune=generic" -DSDL_AVX=OFF -DSDL_AVX2=OFF -DSDL_AVX512F=OFF`.
 - This prevents the compiler from emitting AVX/AVX2 vector instructions (such as `vinserti128`), ensuring the binary executes cleanly without `SIGILL` (Illegal instruction) on baseline x86-64 hardware.
 - Coroutine dispatching on native desktop relies on `Dispatchers.Default` for `AppPresenter` and audio event processing to avoid the unimplemented platform main dispatcher error on native targets.
+- Networking uses target-native HTTP engines instead of pure Kotlin CIO (`io.ktor:ktor-client-curl` on Linux via system `libcurl.so.4`, `io.ktor:ktor-client-winhttp` on Windows via `winhttp.dll`, and `io.ktor:ktor-client-darwin` on macOS via `NSURLSession`). This enables full native TLS sessions and avoids the `TLS sessions are not supported on Native platform` limitation of Ktor CIO on non-JVM platforms.
 

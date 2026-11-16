@@ -2,7 +2,6 @@ package dev.dawngasm.app.data
 
 import dev.dawngasm.app.model.TrackJson
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.cookies.AcceptAllCookiesStorage
@@ -33,7 +32,7 @@ actual object Network {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     actual val httpClient: HttpClient by lazy {
-        HttpClient(CIO) {
+        HttpClient {
             install(HttpCookies) {
                 this.storage = cookieStorage
             }

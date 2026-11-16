@@ -22,6 +22,15 @@ kotlin {
         binaries.configureEach {
             freeCompilerArgs += "-Xoverride-konan-properties=cacheableTargets="
         }
+        val engineDep = when (name) {
+            "linuxX64" -> "io.ktor:ktor-client-curl:$ktorVersion"
+            "mingwX64" -> "io.ktor:ktor-client-winhttp:$ktorVersion"
+            "macosX64", "macosArm64" -> "io.ktor:ktor-client-darwin:$ktorVersion"
+            else -> "io.ktor:ktor-client-curl:$ktorVersion"
+        }
+        compilations.getByName("main").defaultSourceSet.dependencies {
+            implementation(engineDep)
+        }
     }
 
     sourceSets {
@@ -49,7 +58,6 @@ kotlin {
                 implementation("dev.brahmkshatriya.compose.desktop:desktop-native:$composeNativeVersion")
                 implementation("dev.brahmkshatriya.kmplayer:kmplayer:0.2.1")
                 implementation("dev.brahmkshatriya.kmedianotification:lib:0.1.1")
-                implementation("io.ktor:ktor-client-cio:$ktorVersion")
             }
         }
     }

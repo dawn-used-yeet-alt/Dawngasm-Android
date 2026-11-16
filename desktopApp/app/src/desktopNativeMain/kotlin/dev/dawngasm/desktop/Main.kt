@@ -91,7 +91,9 @@ private fun runSelfTest(skipAudio: Boolean = false) {
         coroutineDispatcher = Dispatchers.Default,
     )
     val settingsActions = NativeSettingsPlatformActions(prefs)
+    val client = Network.httpClient
     println("presenter & audio player: initialized")
+    println("network: ok engine=${client.engine::class.simpleName}")
 
     val playerReady = if (skipAudio) {
         println("kmplayer: audio probe skipped (--skip-audio-probe)")
