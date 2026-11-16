@@ -16,6 +16,12 @@ kotlin {
         }
     }
 
+    targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
+        binaries.configureEach {
+            freeCompilerArgs.add("-Xoverride-konan-properties=cacheableTargets=")
+        }
+    }
+
     sourceSets {
         desktopNativeMain.dependencies {
             implementation("dev.brahmkshatriya.compose.desktop:desktop-native:$composeNativeVersion")

@@ -165,6 +165,15 @@ jobs:
         working-directory: native-spike
         run: ./gradlew --no-daemon --stacktrace :app:${{ matrix.task }}
 
+      - name: Start Windows audio services
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Service -Name "AudioEndpointBuilder" -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service -Name "AudioEndpointBuilder" -ErrorAction SilentlyContinue
+          Set-Service -Name "AudioSrv" -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service -Name "AudioSrv" -ErrorAction SilentlyContinue
+
       - name: Self-test native spike
         shell: bash
         run: |

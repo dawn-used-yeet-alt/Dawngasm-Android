@@ -12,22 +12,28 @@ import dev.brahmkshatriya.kmplayer.KMResult
  * runtime dependency, which is exactly what the CI self-test should catch.
  */
 internal fun probePlayer(): Boolean {
-    return when (val created = KMPlayer.create(KMPlayerConfig(requireHls = false))) {
-        is KMResult.Success -> {
-            val player = created.value
-            val capabilities = player.capabilities
-            println(
-                "kmplayer: ok backend=${capabilities.backend} audio=${capabilities.audio} " +
-                    "video=${capabilities.video} hls=${capabilities.hls} " +
-                    "seeking=${capabilities.seeking}",
-            )
-            player.close()
-            true
-        }
+    println("kmplayer: probing player...")
+    return try {
+        when (val created = KMPlayer.create(KMPlayerConfig(requireHls = false))) {
+            is KMResult.Success -> {
+                val player = created.value
+                val capabilities = player.capabilities
+                println(
+                    "kmplayer: ok backend=${capabilities.backend} audio=${capabilities.audio} " +
+                        "video=${capabilities.video} hls=${capabilities.hls} " +
+                        "seeking=${capabilities.seeking}",
+                )
+                player.close()
+                true
+            }
 
-        is KMResult.Failure -> {
-            println("kmplayer: FAILED code=${created.error.code} message=${created.error.message}")
-            false
+            is KMResult.Failure -> {
+                println("kmplayer: FAILED code=${created.error.code} message=${created.error.message}")
+                false
+            }
         }
+    } catch (e: Throwable) {
+        println("kmplayer: exception (${e.message})")
+        false
     }
 }

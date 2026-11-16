@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancel
  * session proves the MPRIS/SMTC API and native library link correctly.
  */
 internal fun probeNotifications() {
+    println("kmedianotification: probing notifications...")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     try {
         val platform = MediaPlatform.desktop {
