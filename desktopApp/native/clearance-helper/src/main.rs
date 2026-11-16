@@ -44,7 +44,6 @@ const DEFAULT_TIMEOUT_SECONDS: u64 = 300;
 const MAX_TIMEOUT_SECONDS: u64 = 600;
 const POLL_INTERVAL: Duration = Duration::from_millis(400);
 const DEFAULT_WINDOW_TITLE: &str = "Dawngasm — clearance";
-const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -179,10 +178,10 @@ fn capture(request: &Request) -> Result<(String, String), (String, String)> {
             )
         })?;
 
-    let user_agent = request.user_agent.as_deref().unwrap_or(DEFAULT_USER_AGENT);
-    let mut builder = WebViewBuilder::new()
-        .with_user_agent(user_agent)
-        .with_devtools(true);
+    let mut builder = WebViewBuilder::new().with_devtools(false);
+    if let Some(user_agent) = &request.user_agent {
+        builder = builder.with_user_agent(user_agent);
+    }
     if let Some(script) = &request.init_script {
         builder = builder.with_initialization_script(script);
     }
@@ -205,15 +204,34 @@ fn capture(request: &Request) -> Result<(String, String), (String, String)> {
                 "the clearance window has no GTK container".to_string(),
             )
         })?;
-        builder.build_gtk(vbox).map_err(|error| {
+        let wv = builder.build_gtk(vbox).map_err(|error| {
             (
                 "webview".to_string(),
                 format!("could not create the clearance webview: {error}"),
             )
-        })?
+        })?;
+
+        use wry::WebViewExtUnix as _;
+        use webkit2gtk::traits::{CookieManagerExt as _, SettingsExt as _, WebViewExt as _};
+        let gtk_wv = wv.webview();
+        if let Some(settings) = gtk_wv.settings() {
+            settings.set_enable_javascript(true);
+            settings.set_enable_html5_local_storage(true);
+            settings.set_enable_html5_database(true);
+            settings.set_enable_webgl(true);
+            settings.set_enable_site_specific_quirks(true);
+            settings.set_enable_developer_extras(false);
+            settings.set_hardware_acceleration_policy(webkit2gtk::HardwareAccelerationPolicy::Always);
+        }
+        if let Some(ctx) = webkit2gtk::WebContext::default() {
+            if let Some(cm) = ctx.cookie_manager() {
+                cm.set_accept_policy(webkit2gtk::CookieAcceptPolicy::Always);
+            }
+        }
+        wv
     };
 
-    clear_stale_cookies(&webview, &request.cookie_urls());
+    clear_stale_cookies(&webview, &request.cookie_urls(), &request.required_cookie);
     let actual_user_agent = Arc::new(Mutex::new(None));
     capture_user_agent(&webview, Arc::clone(&actual_user_agent));
     webview.load_url(&request.url).map_err(|error| {
@@ -266,7 +284,8 @@ fn capture(request: &Request) -> Result<(String, String), (String, String)> {
         .lock()
         .ok()
         .and_then(|slot| slot.clone())
-        .unwrap_or_else(|| user_agent.to_string());
+        .or_else(|| request.user_agent.clone())
+        .unwrap_or_default();
     Ok((cookie, user_agent))
 }
 
@@ -302,7 +321,7 @@ fn cookie_belongs_to(domain: Option<&str>, hosts: &[String]) -> bool {
     }
 }
 
-fn clear_stale_cookies(webview: &WebView, cookie_urls: &[String]) {
+fn clear_stale_cookies(webview: &WebView, cookie_urls: &[String], required_cookie: &str) {
     let hosts: Vec<String> = cookie_urls
         .iter()
         .filter_map(|url| host_of(url))
@@ -312,7 +331,7 @@ fn clear_stale_cookies(webview: &WebView, cookie_urls: &[String]) {
             continue;
         };
         for cookie in &cookies {
-            if cookie_belongs_to(cookie.domain(), &hosts) {
+            if cookie_belongs_to(cookie.domain(), &hosts) && cookie.name() == required_cookie {
                 let _ = webview.delete_cookie(cookie);
             }
         }

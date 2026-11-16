@@ -17,6 +17,9 @@ serde_json = "1"
 wry = "0.57"
 tao = { version = "0.37", default-features = false, features = ["rwh_06"] }
 
+[target.'cfg(not(any(target_os = "windows", target_os = "macos")))'.dependencies]
+webkit2gtk = { version = "2.0.2", default-features = false }
+
 [profile.release]
 lto = true
 strip = true

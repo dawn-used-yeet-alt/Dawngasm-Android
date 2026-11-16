@@ -90,8 +90,17 @@ fun DesktopClearanceDialog(
         confirmButton = {
             TextButton(
                 onClick = {
+                    val trimmed = cookie.trim()
+                    val normalizedCookie = if (title.contains("audiochan", ignoreCase = true) &&
+                        trimmed.isNotEmpty() &&
+                        !trimmed.contains("=")
+                    ) {
+                        "__Secure-audiochan_playback=$trimmed"
+                    } else {
+                        trimmed
+                    }
                     onSave(
-                        cookie.trim(),
+                        normalizedCookie,
                         userAgent.trim(),
                         ip.trim().ifBlank { null },
                         family.trim().ifBlank { null },
