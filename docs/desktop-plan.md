@@ -1,4 +1,4 @@
-# Dawngasm desktop: 23-phase plan (0–22)
+# Dawngasm desktop: 25-phase plan (0–24)
 
 Target platforms: **Linux, Windows, and macOS**. The Android and iOS targets stay
 as they are; desktop is a third shell over the existing KMP/CMP code.
@@ -53,6 +53,7 @@ with the same intent.
 | 21 | Native desktop spike | Compose Native window + `kmplayer` + `kmedianotification` self-test | ✅ Complete |
 | 22 | Native desktop parity and cutover | Native shell replaces the JVM shell | ✅ Complete |
 | 23 | Native release packaging & retirement | Release AppImage/Zip/DMGs, JVM removal, size benchmarks | ✅ Complete |
+| 24 | Resource & performance optimization | Memory footprint reduction, Skia cache tuning, GC scheduling | 🟡 In Progress |
 
 `🟡 Scaffolded` means the implementation is in place but external credentials
 (Apple/Windows certificates) are required before it can be marked complete.
@@ -672,6 +673,22 @@ Windows, and macOS, optimize CI runner matrix usage, and ensure generic x86-64 C
   - macOS arm64 DMG: **14,236,008 bytes** (**13.58 MiB**)
   - macOS x64 DMG: **15,567,425 bytes** (**14.85 MiB**)
 - **Exit:** Standalone native distribution packages are generated and verified on all 4 platform targets with zero JVM dependencies.
+
+### Phase 24 — Desktop performance, native memory profiling, and runtime resource optimization
+
+**Goal:** Profile live native process memory footprint, tune Kotlin/Native concurrent garbage collection, configure Skia Ganesh resource cache limits, reduce dirty heap memory from the ~160 MB RSS baseline, and eliminate idle resource consumption.
+
+- Profile live native process (`smaps_rollup`, `pmap`, and per-thread sampling):
+  - Baseline Total RSS: ~159 MiB (PSS ~144 MiB).
+  - Private Dirty: ~62.8 MiB (Kotlin/Native heap, Skia raster caches, GStreamer audio ringbuffer).
+  - Private Clean: ~77.1 MiB (mmap'd executable and bundled shared libraries).
+  - Shared Clean: ~19.3 MiB (Mesa radeonsi driver, Skia, SDL3, Wayland libraries).
+- Optimization targets:
+  - **Window Geometry & Tiling Layout:** Persist live window tile dimensions (`prefs.saveWindowBounds`) and default unconfigured launch geometry to full column tile size (`1354.dp x 756.dp`), eliminating 800x600 tile gaps under tiling Wayland compositors (Niri).
+  - **Skia GPU Cache Tuning:** Constrain Skia Ganesh font atlas and raster cache limits to prevent unbounded texture accumulation during long scrolling sessions.
+  - **Kotlin/Native Concurrent GC Scheduling:** Tune GC page thresholds and trigger background heap trimming on window minimization/idle.
+  - **Network Buffer Lifecycle:** Ensure Ktor curl engine connection pools and Okio byte buffers release memory after feed parsing and track resolving completes.
+- **Exit:** App launches tiled to display column geometry, memory usage is measurably reduced, and memory remains stable during extended playback sessions.
 
 ---
 
