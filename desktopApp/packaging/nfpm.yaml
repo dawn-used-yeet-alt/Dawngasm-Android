@@ -1,0 +1,71 @@
+name: "dawngasm"
+arch: "amd64"
+platform: "linux"
+version: "${VERSION}"
+section: "sound"
+priority: "optional"
+maintainer: "Dawn <I_use@arch.btw>"
+description: "Audio browser and player for soundgasm, whyp, and audiochan"
+vendor: "Dawngasm"
+homepage: "https://github.com/dawn-used-yeet-alt/Dawngasm-Android"
+license: "GPL-3.0"
+
+contents:
+  - src: desktopApp/packaging/Dawngasm.sh
+    dst: /usr/bin/Dawngasm
+    file_info:
+      mode: 0755
+  - src: desktopApp/app/build/bin/linuxX64/releaseExecutable/app.kexe
+    dst: /usr/lib/dawngasm/Dawngasm
+    file_info:
+      mode: 0755
+  - src: desktopApp/native/clearance-helper/target/release/dawngasm-clearance-helper
+    dst: /usr/lib/dawngasm/dawngasm-clearance-helper
+    file_info:
+      mode: 0755
+  - src: desktopApp/packaging/bundle/libSDL3.so.0
+    dst: /usr/lib/dawngasm/libSDL3.so.0
+    file_info:
+      mode: 0755
+  - src: desktopApp/icons/dev.dawngasm.app.desktop
+    dst: /usr/share/applications/dev.dawngasm.app.desktop
+    file_info:
+      mode: 0644
+  - src: desktopApp/icons/dawngasm.png
+    dst: /usr/share/icons/hicolor/512x512/apps/dev.dawngasm.app.png
+    file_info:
+      mode: 0644
+  - src: desktopApp/icons/dawngasm.png
+    dst: /usr/share/pixmaps/dev.dawngasm.app.png
+    file_info:
+      mode: 0644
+  - src: desktopApp/icons/dev.dawngasm.app.appdata.xml
+    dst: /usr/share/metainfo/dev.dawngasm.app.appdata.xml
+    file_info:
+      mode: 0644
+
+overrides:
+  deb:
+    depends:
+      - libgtk-3-0
+      - libwebkit2gtk-4.1-0 | libwebkit2gtk-4.0-37
+      - libgstreamer1.0-0
+      - libgstreamer-plugins-base1.0-0
+    recommends:
+      - gstreamer1.0-plugins-good
+      - gstreamer1.0-plugins-bad
+  rpm:
+    depends:
+      - gtk3
+      - webkit2gtk4.1
+      - gstreamer1
+      - gstreamer1-plugins-base
+  archlinux:
+    depends:
+      - gtk3
+      - webkit2gtk-4.1
+      - gstreamer
+      - gst-plugins-base
+    optdepends:
+      - "gst-plugins-good: playback support for extra codecs"
+      - "gst-plugins-bad: playback support for extra codecs"

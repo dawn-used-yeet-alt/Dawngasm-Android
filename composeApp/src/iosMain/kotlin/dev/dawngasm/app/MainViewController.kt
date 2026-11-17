@@ -76,7 +76,7 @@ fun MainViewController(): UIViewController = ComposeUIViewController(
                     messages = presenter.messages,
                     actions = presenter,
                     settingsPlatform = settingsPlatform,
-                    appVersion = "2.0.0",
+                    appVersion = "2.1.0",
                 )
             }
         }

@@ -77,8 +77,12 @@ jobs:
         include:
           - os: ubuntu-latest
             packageTask: packageLinuxX64ReleaseAppImage
-            artifactName: dawngasm-desktop-linux-x64-appimage
-            artifactPath: desktopApp/app/build/distributions/*.AppImage
+            artifactName: dawngasm-desktop-linux-x64
+            artifactPath: |
+              desktopApp/app/build/distributions/*.AppImage
+              desktopApp/app/build/distributions/*.deb
+              desktopApp/app/build/distributions/*.rpm
+              desktopApp/app/build/distributions/*.pkg.tar.zst
           - os: windows-latest
             packageTask: packageWindowsX64ReleaseZip
             artifactName: dawngasm-desktop-windows-x64-zip
@@ -273,13 +277,41 @@ jobs:
           size="$(stat -c%s "$binary" 2>/dev/null || stat -f%z "$binary" 2>/dev/null || wc -c < "$binary")"
           echo "native binary size: $size bytes"
 
+      - name: Build Linux system packages (deb, rpm, arch)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Installing nfpm..."
+          curl -fsSL https://github.com/goreleaser/nfpm/releases/download/v2.49.0/nfpm_2.49.0_Linux_x86_64.tar.gz | sudo tar -xz -C /usr/local/bin nfpm
+
+          mkdir -p desktopApp/packaging/bundle
+          sdl_lib="$(find /usr -name "libSDL3.so.0" 2>/dev/null | head -1)"
+          if [[ -n "$sdl_lib" ]]; then
+            cp "$sdl_lib" desktopApp/packaging/bundle/libSDL3.so.0
+          fi
+
+          VERSION="2.1.0"
+          cp desktopApp/packaging/nfpm.yaml /tmp/nfpm.yaml
+          sed -i "s/\${VERSION}/$VERSION/g" /tmp/nfpm.yaml
+
+          mkdir -p desktopApp/app/build/distributions
+          echo "Packaging deb..."
+          nfpm package -f /tmp/nfpm.yaml --packager deb --target desktopApp/app/build/distributions/Dawngasm-${VERSION}-linux-x86_64.deb
+
+          echo "Packaging rpm..."
+          nfpm package -f /tmp/nfpm.yaml --packager rpm --target desktopApp/app/build/distributions/Dawngasm-${VERSION}-linux-x86_64.rpm
+
+          echo "Packaging archlinux..."
+          nfpm package -f /tmp/nfpm.yaml --packager archlinux --target desktopApp/app/build/distributions/Dawngasm-${VERSION}-linux-x86_64.pkg.tar.zst
+
       - name: Inspect and log distribution packages
         shell: bash
         run: |
           set -euo pipefail
           echo "=== Distribution artifacts ==="
           ls -lh desktopApp/app/build/distributions/ || true
-          for f in desktopApp/app/build/distributions/*.AppImage desktopApp/app/build/distributions/*.zip desktopApp/app/build/distributions/*.dmg; do
+          for f in desktopApp/app/build/distributions/*.AppImage desktopApp/app/build/distributions/*.deb desktopApp/app/build/distributions/*.rpm desktopApp/app/build/distributions/*.pkg.tar.zst desktopApp/app/build/distributions/*.zip desktopApp/app/build/distributions/*.dmg; do
             if [[ -f "$f" ]]; then
               size="$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || wc -c < "$f")"
               echo "DISTRIBUTION_PACKAGE: $(basename "$f") -> $size bytes ($(ls -lh "$f" | awk '{print $5}'))"
