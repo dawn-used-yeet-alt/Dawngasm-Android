@@ -112,7 +112,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-2.4.21

@@ -140,7 +140,7 @@ jobs:
           echo "KOTLIN_VERSION=$KOTLIN_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Cache Kotlin/Native toolchain and platform libs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.konan/kotlin-native-prebuilt-*
@@ -150,7 +150,7 @@ jobs:
             konan-${{ runner.os }}-
 
       - name: Cache Xcode DerivedData
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/Library/Developer/Xcode/DerivedData
@@ -170,7 +170,7 @@ jobs:
 
       - name: Cache Hotaudio XCFramework and Swift bindings
         id: cache-hotaudio
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             iosApp/Frameworks/HotaudioFFI.xcframework
@@ -241,7 +241,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-2.4.21
@@ -395,7 +395,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-2.4.21
@@ -459,7 +459,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Cache Kotlin/Native toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ runner.arch }}-2.4.21

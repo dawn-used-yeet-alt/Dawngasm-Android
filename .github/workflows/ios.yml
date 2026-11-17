@@ -136,7 +136,7 @@ jobs:
 
       - name: Cache Hotaudio XCFramework and Swift bindings
         id: cache-hotaudio
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             iosApp/Frameworks/HotaudioFFI.xcframework
