@@ -38,7 +38,7 @@ import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlaybackQueue
-import dev.dawngasm.app.data.TrackDownloader
+import dev.dawngasm.app.data.AndroidTrackDownloader
 import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
@@ -88,7 +88,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     private val prefs = AppPreferences(application)
     private val api = DawngasmApi()
     private val resolver = AudioResolver(application)
-    private val downloader = TrackDownloader(application)
+    private val downloader = AndroidTrackDownloader(application)
 
     private val controllerListener = object : MediaController.Listener {
         override fun onCustomCommand(

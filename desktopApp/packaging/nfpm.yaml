@@ -66,6 +66,6 @@ overrides:
       - webkit2gtk-4.1
       - gstreamer
       - gst-plugins-base
-    optdepends:
-      - "gst-plugins-good: playback support for extra codecs"
-      - "gst-plugins-bad: playback support for extra codecs"
+    recommends:
+      - gst-plugins-good
+      - gst-plugins-bad

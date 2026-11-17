@@ -345,7 +345,7 @@ jobs:
           mkdir -p desktopApp/packaging/bundle
           sdl_lib="$(find /usr -name "libSDL3.so.0" 2>/dev/null | head -1)"
           if [[ -n "$sdl_lib" ]]; then
-            cp "$sdl_lib" desktopApp/packaging/bundle/libSDL3.so.0
+            cp -L "$sdl_lib" desktopApp/packaging/bundle/libSDL3.so.0
           fi
 
           VERSION="2.1.0"

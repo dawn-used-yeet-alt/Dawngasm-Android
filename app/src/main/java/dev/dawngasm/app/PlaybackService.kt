@@ -34,7 +34,7 @@ import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlaybackQueue
-import dev.dawngasm.app.data.TrackDownloader
+import dev.dawngasm.app.data.AndroidTrackDownloader
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.model.TrackJson
 import java.util.concurrent.atomic.AtomicLong
@@ -64,7 +64,7 @@ class PlaybackService : MediaSessionService() {
 
     private val headerFactory by lazy { HeaderDataSourceFactory(this, Network.client) }
     private val resolver by lazy { AudioResolver(this) }
-    private val downloader by lazy { TrackDownloader(this) }
+    private val downloader by lazy { AndroidTrackDownloader(this) }
     private val prefs by lazy { AppPreferences(this) }
 
     override fun onCreate() {

@@ -24,7 +24,7 @@ data class SavedDownload(
  * app's own Music/Dawngasm directory. SAF is used instead of broad storage
  * permissions; the tree URI is persisted after the system picker returns.
  */
-class TrackDownloader(
+class AndroidTrackDownloader(
     private val context: Context,
 ) {
     private val fileSaver = AndroidFileSaver(context)
