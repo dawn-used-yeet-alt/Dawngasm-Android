@@ -61,6 +61,7 @@ kotlin {
                 implementation("dev.brahmkshatriya.compose.desktop:desktop-native:$composeNativeVersion")
                 implementation("dev.brahmkshatriya.kmplayer:kmplayer:0.2.1")
                 implementation("dev.brahmkshatriya.kmedianotification:lib:0.1.1")
+                implementation("io.ktor:ktor-network:$ktorVersion")
             }
         }
     }
