@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dawngasm — Desktop prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <main class="main">
+      <!-- Home -->
+      <section class="screen screen--home" id="screen-home">
+        <div class="topbar">
+          <div class="searchbar" id="search-row" role="button" tabindex="0" aria-label="Search titles and tags">
+            <span class="icon" data-icon="search"></span>
+            <span class="searchbar__text">Search titles and tags</span>
+            <button class="searchbar__clear" id="search-row-clear" type="button" aria-label="Clear search" hidden>
+              <span class="icon" data-icon="closeRounded"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="list" id="home-list" aria-label="Latest tracks"></div>
+
+        <button class="fab" type="button" aria-label="Search">
+          <span class="icon" data-icon="search"></span>
+        </button>
+      </section>
+
+      <!-- Library -->
+      <section class="screen screen--library" id="screen-library" hidden>
+        <div class="topbar">
+          <div class="pill-tabs" role="tablist" aria-label="Library sections">
+            <span class="pill-tabs__indicator" aria-hidden="true"></span>
+            <button class="pill-tab" type="button" role="tab" data-tab="history" aria-selected="true">
+              <span class="icon" data-icon="history"></span>
+              History
+            </button>
+            <button class="pill-tab" type="button" role="tab" data-tab="saved" aria-selected="false">
+              <span class="icon" data-icon="heart"></span>
+              Saved
+            </button>
+            <button class="pill-tab" type="button" role="tab" data-tab="downloads" aria-selected="false">
+              <span class="icon" data-icon="download"></span>
+              Downloads
+            </button>
+          </div>
+        </div>
+
+        <div class="list" id="library-list" aria-label="Library tracks"></div>
+      </section>
+
+      <!-- Settings -->
+      <section class="screen screen--settings" id="screen-settings" hidden>
+        <h1 class="settings-title">Settings</h1>
+
+        <section class="section">
+          <div class="section__head">
+            <span class="section__icon"><span class="icon" data-icon="tag"></span></span>
+            <h2 class="section__title">Blocked tags</h2>
+          </div>
+          <p class="section__subtitle">Posts carrying these tags are hidden by the index.</p>
+          <div class="divider"></div>
+          <div class="chips" id="blocked-tags"></div>
+          <label class="text-field">
+            <input type="text" placeholder="Type a tag, e.g. incest" aria-label="Type a tag, e.g. incest">
+          </label>
+        </section>
+
+        <section class="section">
+          <div class="section__head">
+            <span class="section__icon"><span class="icon" data-icon="folder"></span></span>
+            <h2 class="section__title">Download location</h2>
+          </div>
+          <p class="section__subtitle">Downloads are written here with the system document picker.</p>
+          <div class="divider"></div>
+          <div class="path-field">
+            <span class="icon" data-icon="folder"></span>
+            <span>/home/dawn/Music/Dawngasm</span>
+          </div>
+          <div class="button-row">
+            <button class="btn btn--filled" type="button">Choose folder</button>
+            <button class="btn btn--text" type="button">Open folder</button>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section__head">
+            <span class="section__icon"><span class="icon" data-icon="trash"></span></span>
+            <h2 class="section__title">Downloaded entries</h2>
+          </div>
+          <p class="section__subtitle">Remove the library entries. Files already on disk are left alone.</p>
+          <div class="divider"></div>
+          <button class="btn btn--outlined" type="button">
+            <span class="icon" data-icon="trash"></span>
+            Remove downloaded entries
+          </button>
+        </section>
+      </section>
+    </main>
+
+    <nav class="rail" aria-label="Main navigation">
+      <div class="rail__items">
+        <button class="rail-item is-active" type="button" data-nav="home" aria-current="page">
+          <span class="rail-item__indicator"><span class="icon" data-icon="homeFilled"></span></span>
+          <span class="rail-item__label">Home</span>
+        </button>
+        <button class="rail-item" type="button" data-nav="library">
+          <span class="rail-item__indicator"><span class="icon" data-icon="library"></span></span>
+          <span class="rail-item__label">Library</span>
+        </button>
+        <button class="rail-item" type="button" data-nav="settings">
+          <span class="rail-item__indicator"><span class="icon" data-icon="settings"></span></span>
+          <span class="rail-item__label">Settings</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- Search sheet -->
+  <div class="sheet-layer" id="search-layer" hidden>
+    <div class="scrim" data-search-dismiss></div>
+
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Search">
+      <div class="sheet__scroll">
+        <div class="suggestions" id="search-suggestions" hidden></div>
+
+        <div class="pill-input" id="search-text-field">
+          <span class="icon" data-icon="search"></span>
+          <input id="search-text" type="text" placeholder="Text to Search" autocomplete="off"
+            aria-label="Text to Search">
+          <button class="pill-input__clear" id="search-text-clear" type="button" aria-label="Clear text"
+            hidden>
+            <span class="icon" data-icon="closeRounded"></span>
+          </button>
+        </div>
+
+        <div class="field-row">
+          <div class="field-cell">
+            <div class="tag-field" data-tag-field="block">
+              <label class="tag-field__label" for="block-tags">Block tags</label>
+              <input id="block-tags" type="text" autocomplete="off">
+            </div>
+            <p class="supporting">eg m4f, m4m</p>
+          </div>
+          <div class="field-cell">
+            <div class="dropdown" data-dropdown="sort">
+              <span class="dropdown__label">Sort</span>
+              <span class="dropdown__icon"><span class="icon" data-icon="sort"></span></span>
+              <span class="dropdown__value">Top</span>
+              <span class="dropdown__chevron"><span class="icon" data-icon="chevron"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-cell">
+            <div class="tag-field" data-tag-field="include">
+              <label class="tag-field__label" for="include-tags">Search tags</label>
+              <input id="include-tags" type="text" autocomplete="off">
+            </div>
+            <p class="supporting">eg f4m, script fill</p>
+          </div>
+          <div class="field-cell">
+            <div class="dropdown" data-dropdown="window">
+              <span class="dropdown__label">Window</span>
+              <span class="dropdown__icon"><span class="icon" data-icon="clock"></span></span>
+              <span class="dropdown__value">All time</span>
+              <span class="dropdown__chevron"><span class="icon" data-icon="chevron"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-cell">
+            <div class="tag-field" data-tag-field="author">
+              <label class="tag-field__label" for="author-tags">Author</label>
+              <input id="author-tags" type="text" autocomplete="off">
+            </div>
+            <p class="supporting">eg Ivy_WildeVA</p>
+          </div>
+          <div class="field-cell">
+            <div class="dropdown" data-dropdown="host">
+              <span class="dropdown__label">Host</span>
+              <span class="dropdown__icon"><span class="icon" data-icon="hosts"></span></span>
+              <span class="dropdown__value">All hosts</span>
+              <span class="dropdown__chevron"><span class="icon" data-icon="chevron"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview" id="search-preview" hidden>
+          <span class="icon preview__icon" data-icon="search"></span>
+          <span class="preview__text" id="search-preview-text"></span>
+          <button class="preview__clear" type="button" id="search-clear-all" aria-label="Clear all filters">
+            <span class="icon" data-icon="closeRounded"></span>
+          </button>
+        </div>
+
+        <button class="search-submit" type="button" id="search-submit">
+          <span class="icon" data-icon="search"></span>
+          Search
+        </button>
+      </div>
+    </div>
+
+    <div class="menu" id="search-menu" role="listbox" hidden></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
