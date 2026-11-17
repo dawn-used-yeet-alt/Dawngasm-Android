@@ -219,6 +219,21 @@ jobs:
         working-directory: desktopApp/native/clearance-helper
         run: cargo build --release --locked
 
+      - name: Fetch patched Compose Native from fork release
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.m2/repository
+          ARCHIVE_URL="https://github.com/dawn-used-yeet-alt/compose-native/releases/download/v1.13.0-beta01-patched/compose-native-linux-x64-maven.tar.gz"
+          echo "Attempting to download patched compose-native artifacts from $ARCHIVE_URL..."
+          if curl --fail -sSL "$ARCHIVE_URL" -o /tmp/compose-native.tar.gz; then
+            tar -xzf /tmp/compose-native.tar.gz -C ~/.m2/repository
+            echo "Extracted patched compose-native to ~/.m2/repository"
+          else
+            echo "Release asset not available yet; falling back to published upstream"
+          fi
+
       - name: Package native release
         shell: bash
         working-directory: desktopApp
