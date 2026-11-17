@@ -56,7 +56,7 @@ jobs:
       - name: Check native clearance helper
         shell: bash
         working-directory: desktopApp/native/clearance-helper
-        run: cargo check --locked
+        run: cargo check
 
       - name: Upload test report on failure
         if: failure()
@@ -221,7 +221,7 @@ jobs:
       - name: Build native clearance helper
         shell: bash
         working-directory: desktopApp/native/clearance-helper
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Fetch patched Compose Native from fork release
         if: runner.os == 'Linux'

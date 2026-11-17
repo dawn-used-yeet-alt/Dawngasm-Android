@@ -319,7 +319,7 @@ jobs:
       - name: Build native clearance helper
         shell: bash
         working-directory: desktopApp/native/clearance-helper
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Fetch patched Compose Native from fork release
         shell: bash
@@ -413,7 +413,7 @@ jobs:
       - name: Build native clearance helper
         shell: bash
         working-directory: desktopApp/native/clearance-helper
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Package Windows Zip
         shell: bash
@@ -500,7 +500,7 @@ jobs:
       - name: Build native clearance helper
         shell: bash
         working-directory: desktopApp/native/clearance-helper
-        run: cargo build --release --locked
+        run: cargo build --release
 
       - name: Package macOS DMG
         shell: bash
