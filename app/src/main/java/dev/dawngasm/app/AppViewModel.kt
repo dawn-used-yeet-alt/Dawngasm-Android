@@ -66,7 +66,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-data class FeedSnapshot(
+data class AppFeedSnapshot(
     val tracks: List<Track>,
     val query: String,
     val includeTags: List<String>,
@@ -135,7 +135,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     private var feedJob: Job? = null
     private var feedPage = 0
     private val feedGeneration = AtomicLong(0)
-    private val feedStack = ArrayDeque<FeedSnapshot>()
+    private val feedStack = ArrayDeque<AppFeedSnapshot>()
 
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -338,7 +338,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     override fun showSimilar(track: Track, scrollIndex: Int, scrollOffset: Int) {
         val state = _uiState.value
         feedStack.addLast(
-            FeedSnapshot(
+            AppFeedSnapshot(
                 tracks = state.tracks,
                 query = state.query,
                 includeTags = state.includeTags,
