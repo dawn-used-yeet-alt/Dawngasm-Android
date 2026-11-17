@@ -957,7 +957,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         }
     }
 
-    fun previousTrack() {
+    override fun previousTrack() {
         if (_uiState.value.mediaSessionServiceEnabled) {
             mediaController?.seekToPrevious()
         } else {

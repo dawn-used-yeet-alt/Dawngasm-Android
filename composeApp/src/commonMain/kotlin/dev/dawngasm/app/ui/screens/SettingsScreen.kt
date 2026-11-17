@@ -369,6 +369,14 @@ fun SettingsScreen(
                                 Text("Use app storage")
                             }
                         }
+                        if (platform.canOpenDownloadFolder()) {
+                            TextButton(
+                                onClick = { platform.openDownloadFolder() },
+                                shape = CircleShape,
+                            ) {
+                                Text("Open folder")
+                            }
+                        }
                     }
                 }
             }

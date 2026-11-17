@@ -25,6 +25,13 @@ data class HotaudioStreamSpec(
 class HotaudioStreamState internal constructor(
     val spec: HotaudioStreamSpec,
 ) {
+    /**
+     * File holding this attempt's fragments. Desktop points this at a
+     * generation-specific path so a retry never truncates a file that the
+     * local HTTP server may still be reading; Android keeps [spec.filePath].
+     */
+    @Volatile var filePath: String = spec.filePath
+
     @Volatile var bytesWritten: Long = 0L
     @Volatile var done: Boolean = false
     @Volatile var error: Throwable? = null
@@ -82,6 +89,19 @@ object HotaudioStreamer {
      */
     private const val NO_FIRST_BYTE_ABORT_MS = 150_000L
 
+    /**
+     * Chooses the file for one download attempt. Desktop installs a provider so
+     * every attempt writes to a fresh path; Android leaves it null and keeps
+     * the single `.part` file its data source expects.
+     */
+    var attemptPathProvider: ((HotaudioStreamSpec, Int) -> String)? = null
+
+    /** Deletes abandoned per-attempt files, keeping [keepPath] when restoring (desktop only). */
+    var staleAttemptFileCleaner: ((HotaudioStreamSpec, String?) -> Unit)? = null
+
+    /** Best-effort cleanup of the file left behind by the previous attempt. */
+    var abandonedAttemptCleaner: ((String) -> Unit)? = null
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val states = mutableMapOf<String, HotaudioStreamState>()
@@ -124,19 +144,16 @@ object HotaudioStreamer {
         states[trackId]?.let { return it }
 
         val spec = spec(trackId, "")
-        val marker = markerPathFor(spec)
-        val fileLen = PlatformFileOps.fileLength(spec.filePath)
-        if (PlatformFileOps.fileExists(marker) && fileLen > 0L) {
-            val state = HotaudioStreamState(spec).apply {
-                bytesWritten = fileLen
-                done = true
-                firstByteAt = Clock.nowEpochMillis()
-            }
-            states[trackId] = state
-            PlatformLog.i("HotaudioStreamer", "restored completed stream track=$trackId bytes=${state.bytesWritten}")
-            return state
+        val completed = readCompletedMarker(spec) ?: return null
+        val state = HotaudioStreamState(spec).apply {
+            filePath = completed.first
+            bytesWritten = completed.second
+            done = true
+            firstByteAt = Clock.nowEpochMillis()
         }
-        return null
+        states[trackId] = state
+        PlatformLog.i("HotaudioStreamer", "restored completed stream track=$trackId bytes=${state.bytesWritten}")
+        return state
     }
 
     fun ensureStarted(spec: HotaudioStreamSpec, prefs: AppPreferences?): HotaudioStreamState {
@@ -156,11 +173,12 @@ object HotaudioStreamer {
             states.remove(spec.trackId)
         }
 
-        val marker = markerPathFor(spec)
-        val fileLen = PlatformFileOps.fileLength(spec.filePath)
-        if (PlatformFileOps.fileExists(marker) && fileLen > 0L) {
+        val completed = readCompletedMarker(spec)
+        if (completed != null) {
+            staleAttemptFileCleaner?.invoke(spec, completed.first)
             val state = HotaudioStreamState(spec).apply {
-                bytesWritten = fileLen
+                filePath = completed.first
+                bytesWritten = completed.second
                 done = true
                 firstByteAt = Clock.nowEpochMillis()
             }
@@ -172,8 +190,9 @@ object HotaudioStreamer {
             return state
         }
 
+        staleAttemptFileCleaner?.invoke(spec, null)
         PlatformFileOps.deleteFile(spec.filePath)
-        PlatformFileOps.deleteFile(marker)
+        PlatformFileOps.deleteFile(markerPathFor(spec))
 
         val state = HotaudioStreamState(spec)
         states[spec.trackId] = state
@@ -219,7 +238,17 @@ object HotaudioStreamer {
                     return
                 }
 
-                state.generation += 1
+                val nextGeneration = state.generation + 1
+                attemptPathProvider?.invoke(spec, nextGeneration)?.let { attemptPath ->
+                    val previousPath = state.filePath
+                    state.filePath = attemptPath
+                    if (previousPath != attemptPath) {
+                        abandonedAttemptCleaner?.invoke(previousPath)
+                    }
+                    PlatformFileOps.deleteFile(attemptPath)
+                }
+                state.bytesWritten = 0L
+                state.generation = nextGeneration
                 PlatformLog.i(
                     "HotaudioStreamer",
                     "attempt ${familyIndex + 1}/${families.size} #$attempt track=${spec.trackId} family=$family generation=${state.generation}",
@@ -240,7 +269,7 @@ object HotaudioStreamer {
                     var lastChangeAt = Clock.nowEpochMillis()
                     var wroteAnything = false
                     while (currentCoroutineContext().isActive) {
-                        val length = PlatformFileOps.fileLength(spec.filePath)
+                        val length = PlatformFileOps.fileLength(state.filePath)
                         if (length != state.bytesWritten) {
                             if (state.firstByteAt == 0L && length > 0L) {
                                 state.firstByteAt = Clock.nowEpochMillis()
@@ -274,7 +303,7 @@ object HotaudioStreamer {
                 try {
                     val result = bridge.downloadToFile(
                         pageUrl = spec.pageUrl,
-                        destinationPath = spec.filePath,
+                        destinationPath = state.filePath,
                         initialKeysJson = cachedKeys,
                         onProgress = { phase, loaded, total ->
                             state.progressPhase = phase
@@ -288,11 +317,14 @@ object HotaudioStreamer {
                         },
                     )
 
-                    state.bytesWritten = PlatformFileOps.fileLength(spec.filePath)
+                    state.bytesWritten = PlatformFileOps.fileLength(state.filePath)
                     state.done = true
                     state.error = null
                     runCatching {
-                        PlatformFileOps.writeText(markerPathFor(spec), state.bytesWritten.toString())
+                        PlatformFileOps.writeText(
+                            markerPathFor(spec),
+                            "${state.filePath}\n${state.bytesWritten}",
+                        )
                         PlatformFileOps.writeText(keysFilePathFor(spec), result.keysJson)
                     }
                     if (family != "any") prefs?.saveHotaudioIpFamily(family)
@@ -303,12 +335,12 @@ object HotaudioStreamer {
                     return
                 } catch (error: Throwable) {
                     lastError = error
-                    state.bytesWritten = PlatformFileOps.fileLength(spec.filePath)
+                    state.bytesWritten = PlatformFileOps.fileLength(state.filePath)
 
                     val stalled = state.abortReason == "stalled"
                     if (!currentCoroutineContext().isActive || (cancelledFlags[spec.trackId] == true && !stalled)) {
                         PlatformLog.w("HotaudioStreamer", "download cancelled track=${spec.trackId} family=$family: ${error.message}")
-                        PlatformFileOps.deleteFile(spec.filePath)
+                        PlatformFileOps.deleteFile(state.filePath)
                         PlatformFileOps.deleteFile(markerPathFor(spec))
                         return
                     }
@@ -393,6 +425,33 @@ object HotaudioStreamer {
     private fun markerPathFor(spec: HotaudioStreamSpec): String =
         spec.filePath.substringBeforeLast('/') + "/${spec.trackId}.done"
 
+    /**
+     * Reads a completed `.done` marker. Markers written before per-attempt
+     * paths contain only the byte count; desktop markers start with the file
+     * path so a restored stream can serve its final generation file.
+     */
+    private fun readCompletedMarker(spec: HotaudioStreamSpec): Pair<String, Long>? {
+        val marker = markerPathFor(spec)
+        if (!PlatformFileOps.fileExists(marker)) return null
+        val raw = PlatformFileOps.readText(marker)?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+
+        val lines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val path = if (lines.size >= 2) lines.first() else spec.filePath
+        val bytes = lines.lastOrNull()?.toLongOrNull() ?: return null
+        val length = PlatformFileOps.fileLength(path)
+        if (length > 0L) return path to length
+
+        val baseLength = PlatformFileOps.fileLength(spec.filePath)
+        if (baseLength > 0L) return spec.filePath to baseLength
+
+        PlatformLog.w(
+            "HotaudioStreamer",
+            "completed marker points at missing file track=${spec.trackId} path=$path bytes=$bytes",
+        )
+        return null
+    }
+
     private fun keysFilePathFor(spec: HotaudioStreamSpec): String =
         spec.filePath.substringBeforeLast('/') + "/${spec.trackId}.keys.json"
 
@@ -452,10 +511,10 @@ object HotaudioStreamer {
             delay(POLL_MS)
         }
         state.error?.let { throw it }
-        if (PlatformFileOps.fileLength(spec.filePath) == 0L) {
+        if (PlatformFileOps.fileLength(state.filePath) == 0L) {
             throw ResolveException("hotaudio download produced no file")
         }
-        return spec.filePath
+        return state.filePath
     }
 
     fun cancel(trackId: String) {
@@ -466,7 +525,7 @@ object HotaudioStreamer {
         if (state != null && !state.done) {
             state.error = ResolveException("hotaudio stream cancelled")
             state.done = true
-            PlatformFileOps.deleteFile(state.spec.filePath)
+            PlatformFileOps.deleteFile(state.filePath)
             PlatformFileOps.deleteFile(markerPathFor(state.spec))
         }
     }

@@ -42,4 +42,33 @@ class FormattingTest {
         assertTrue(safeFileName("x".repeat(300), "fallback").length <= 110)
         assertFalse(safeFileName("title", "fallback").endsWith("."))
     }
+
+    @Test
+    fun escapesWindowsReservedNames() {
+        assertEquals("_CON", safeFileName("CON", "fallback"))
+        assertEquals("_con", safeFileName("con", "fallback"))
+        assertEquals("_COM1", safeFileName("COM1", "fallback"))
+        assertEquals("_lpt9", safeFileName("lpt9", "fallback"))
+        assertEquals("_CON.txt", safeFileName("CON.txt", "fallback"))
+        assertEquals("CONSOLE", safeFileName("CONSOLE", "fallback"))
+        assertEquals("_NUL", safeFileName("NUL.", "fallback"))
+    }
+
+    @Test
+    fun trimsTrailingDotsAndSpaces() {
+        assertEquals("title", safeFileName("title...", "fallback"))
+        assertEquals("title", safeFileName("title   ", "fallback"))
+        assertEquals("title", safeFileName("title. . .", "fallback"))
+        // Truncation must not leave a trailing dot either.
+        val truncated = safeFileName("x".repeat(109) + "......", "fallback")
+        assertEquals(109, truncated.length)
+        assertFalse(truncated.endsWith("."))
+    }
+
+    @Test
+    fun respectsCustomLengthBudget() {
+        assertEquals("abc", safeFileName("abc", "fallback", maxLength = 3))
+        assertEquals("abc", safeFileName("abcdef", "fallback", maxLength = 3))
+        assertEquals(24, safeFileName("x".repeat(100), "fallback", maxLength = 24).length)
+    }
 }

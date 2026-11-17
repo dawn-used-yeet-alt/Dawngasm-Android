@@ -90,4 +90,23 @@ class AppPreferencesTest {
         prefs.saveMediaSessionServiceEnabled(true)
         assertTrue(prefs.mediaSessionServiceEnabled())
     }
+
+    @Test
+    fun testWindowBoundsPersistence() {
+        val settings = MapSettings()
+        val prefs = AppPreferences(settings)
+        assertNull(prefs.windowX())
+        assertNull(prefs.windowY())
+        assertNull(prefs.windowWidth())
+        assertNull(prefs.windowHeight())
+        assertFalse(prefs.windowMaximized())
+
+        prefs.saveWindowBounds(x = 120, y = 80, width = 1280, height = 800, maximized = true)
+
+        assertEquals(120, prefs.windowX())
+        assertEquals(80, prefs.windowY())
+        assertEquals(1280, prefs.windowWidth())
+        assertEquals(800, prefs.windowHeight())
+        assertTrue(prefs.windowMaximized())
+    }
 }

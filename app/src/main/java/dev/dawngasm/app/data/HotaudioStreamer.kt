@@ -3,9 +3,6 @@ package dev.dawngasm.app.data
 import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
-import java.io.File
-
-val HotaudioStreamSpec.file: File get() = File(filePath)
 
 fun HotaudioStreamer.spec(context: Context?, trackId: String, pageUrl: String): HotaudioStreamSpec {
     context?.cacheDir?.let { PlatformFileOps.setCacheDir(it.absolutePath) }

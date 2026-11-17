@@ -16,6 +16,7 @@ interface DawngasmActions {
     fun download(track: Track)
     fun togglePlayPause()
     fun nextTrack()
+    fun previousTrack()
     fun dismissPlayer()
     fun seekTo(positionMs: Long)
     fun clearSearch()
@@ -50,4 +51,9 @@ interface SettingsPlatformActions {
 
     /** Extra hotaudio clearance detail, e.g. `IPv4: 203.0.113.4`. */
     fun hotaudioClearanceDetail(): String?
+
+    /** Whether this shell can reveal the download folder in the file manager. */
+    fun canOpenDownloadFolder(): Boolean = false
+
+    fun openDownloadFolder() = Unit
 }

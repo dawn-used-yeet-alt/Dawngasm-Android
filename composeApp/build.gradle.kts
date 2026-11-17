@@ -15,6 +15,12 @@ kotlin {
         }
     }
 
+    jvm("desktop") {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+    }
+
     listOf(
         iosArm64(),
         iosSimulatorArm64(),
@@ -35,10 +41,17 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.material.icons.extended)
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.ktor.client.core)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
+        }
+        val desktopMain by getting {
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation(libs.kotlinx.coroutines.swing)
+            }
         }
     }
 }

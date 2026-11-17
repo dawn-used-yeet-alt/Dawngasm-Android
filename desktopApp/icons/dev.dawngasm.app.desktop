@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dawngasm
+Comment=Audio browser and player for soundgasm, whyp, and audiochan
+Exec=Dawngasm %u
+Icon=dev.dawngasm.app
+Categories=AudioVideo;Audio;Player;
+Terminal=false
+StartupWMClass=Dawngasm
+Keywords=audio;player;streaming;soundgasm;whyp;audiochan;
+MimeType=x-scheme-handler/dawngasm;

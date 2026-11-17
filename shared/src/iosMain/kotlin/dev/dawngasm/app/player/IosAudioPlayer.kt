@@ -1,6 +1,6 @@
 package dev.dawngasm.app.player
 
-import dev.dawngasm.app.data.AudioResolver
+import dev.dawngasm.app.data.AudioUrlResolver
 import dev.dawngasm.app.data.HotaudioStreamer
 import dev.dawngasm.app.data.PlaybackQueue
 import dev.dawngasm.app.model.Track
@@ -32,7 +32,7 @@ import platform.Foundation.NSURL
 
 @OptIn(ExperimentalForeignApi::class)
 class IosAudioPlayer(
-    private val resolver: AudioResolver = AudioResolver(),
+    private val resolver: AudioUrlResolver = dev.dawngasm.app.data.AudioResolver(),
 ) : AudioPlayer {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val queue = PlaybackQueue()
@@ -72,7 +72,7 @@ class IosAudioPlayer(
                 val item = if (resolved.url.startsWith("hotaudio://", ignoreCase = true)) {
                     val trackId = HotaudioStreamer.trackIdFrom(resolved.url)
                     val streamState = trackId?.let { HotaudioStreamer.stateFor(it) }
-                    val path = streamState?.spec?.filePath
+                    val path = streamState?.filePath
                     if (path != null) {
                         AVPlayerItem(uRL = NSURL.fileURLWithPath(path))
                     } else {

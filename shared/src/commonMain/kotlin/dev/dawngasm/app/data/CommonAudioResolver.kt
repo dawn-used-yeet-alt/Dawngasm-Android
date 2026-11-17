@@ -85,6 +85,12 @@ open class CommonAudioResolver(
         }
     }
 
+    suspend fun evictCache(trackId: String) {
+        cacheMutex.withLock {
+            cache.remove(trackId)
+        }
+    }
+
     protected open suspend fun soundgasm(track: Track): ResolvedAudio =
         resolveSoundgasm(track.pageUrl)
 
@@ -95,12 +101,15 @@ open class CommonAudioResolver(
         val slug = parseAudiochanSlug(track.pageUrl)
             ?: throw ResolveException("audiochan slug not found")
         val clearance = prefs?.audiochanClearance()
-        val userAgent = clearance?.second?.ifBlank { Network.BROWSER_USER_AGENT } ?: Network.BROWSER_USER_AGENT
+        val userAgent = clearance?.second?.ifBlank { null }
+            ?: extractAudiochanUserAgent(clearance?.first)
+            ?: Network.BROWSER_USER_AGENT
         val clearanceCookie = clearance?.first.orEmpty()
 
         if (clearanceCookie.isNotBlank()) {
             Network.syncCookie(AUDIOCHAN_ORIGIN, clearanceCookie)
             Network.syncCookie(AUDIOCHAN_API, clearanceCookie)
+            Network.syncCookie(AUDIOCHAN_STREAM, clearanceCookie)
         }
 
         val apiHeaders = mutableMapOf(
@@ -197,6 +206,7 @@ open class CommonAudioResolver(
         private const val AUDIOCHAN_ORIGIN = "https://audiochan.com"
         private const val AUDIOCHAN_REFERER = "https://audiochan.com/"
         private const val AUDIOCHAN_API = "https://api.audiochan.com"
+        private const val AUDIOCHAN_STREAM = "https://stream.audiochan.com"
         const val audiochanVerificationMessage =
             "audiochan needs browser verification — pass the check in Settings"
 
@@ -339,6 +349,24 @@ open class CommonAudioResolver(
                 }
             }
             return response.status.value to response.bodyAsText()
+        }
+
+        @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+        fun extractAudiochanUserAgent(cookie: String?): String? {
+            if (cookie.isNullOrBlank()) return null
+            val token = cookie.split(';').map { it.trim() }
+                .firstOrNull { it.startsWith("__Secure-ac.session_data=") }
+                ?.substringAfter('=')
+                ?.substringBefore(';')
+                ?.substringBefore('.')
+                ?.trim() ?: return null
+            val pad = (4 - (token.length % 4)) % 4
+            val padded = token + "=".repeat(pad)
+            val decoded = runCatching {
+                kotlin.io.encoding.Base64.Default.decode(padded).decodeToString()
+            }.getOrNull() ?: return null
+            val match = Regex("\"userAgent\"\\s*:\\s*\"([^\"]+)\"").find(decoded)
+            return match?.groupValues?.getOrNull(1)
         }
 
         private fun browserHeaders(referer: String): Map<String, String> = mapOf(
