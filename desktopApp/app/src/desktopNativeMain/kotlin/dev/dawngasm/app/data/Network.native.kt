@@ -51,7 +51,7 @@ actual object Network {
     actual fun syncCookie(url: String, cookieHeader: String) {
         if (cookieHeader.isBlank()) return
         val parsedUrl = runCatching { Url(url) }.getOrNull() ?: return
-        val domain = parsedUrl.host.removePrefix("api.")
+        val domain = parsedUrl.host.removePrefix("api.").removePrefix("stream.")
         for (part in cookieHeader.split(';').map { it.trim() }) {
             if (part.isEmpty() || !part.contains('=')) continue
             val name = part.substringBefore('=').trim()

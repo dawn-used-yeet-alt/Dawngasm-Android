@@ -109,6 +109,7 @@ open class CommonAudioResolver(
         if (clearanceCookie.isNotBlank()) {
             Network.syncCookie(AUDIOCHAN_ORIGIN, clearanceCookie)
             Network.syncCookie(AUDIOCHAN_API, clearanceCookie)
+            Network.syncCookie(AUDIOCHAN_STREAM, clearanceCookie)
         }
 
         val apiHeaders = mutableMapOf(
@@ -205,6 +206,7 @@ open class CommonAudioResolver(
         private const val AUDIOCHAN_ORIGIN = "https://audiochan.com"
         private const val AUDIOCHAN_REFERER = "https://audiochan.com/"
         private const val AUDIOCHAN_API = "https://api.audiochan.com"
+        private const val AUDIOCHAN_STREAM = "https://stream.audiochan.com"
         const val audiochanVerificationMessage =
             "audiochan needs browser verification — pass the check in Settings"
 
