@@ -2,6 +2,7 @@ package dev.dawngasm.app.ui.components
 
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -75,6 +76,7 @@ fun AppNavRail(
         modifier = modifier.testTag("app_nav_rail"),
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
+        Spacer(Modifier.weight(1f))
         RailItem(
             selected = selectedTab == NavigationTab.Home,
             label = "Home",
@@ -99,6 +101,7 @@ fun AppNavRail(
             onClick = { onTabSelect(NavigationTab.Settings) },
             testTag = "rail_tab_settings",
         )
+        Spacer(Modifier.weight(1f))
     }
 }
 

@@ -267,13 +267,6 @@ fun DawngasmApp(
                     .fillMaxSize()
                     .padding(innerPadding),
             ) {
-                if (useNavigationRail) {
-                    AppNavRail(
-                        selectedTab = selectedTab,
-                        onTabSelect = { selectedTab = it },
-                    )
-                }
-
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -381,6 +374,13 @@ fun DawngasmApp(
                                 .padding(end = 16.dp, bottom = 16.dp + bottomInset),
                         )
                     }
+                }
+
+                if (useNavigationRail) {
+                    AppNavRail(
+                        selectedTab = selectedTab,
+                        onTabSelect = { selectedTab = it },
+                    )
                 }
             }
         }
