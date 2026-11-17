@@ -96,4 +96,15 @@ class AudioResolverTest {
         assertEquals("m4a", CommonAudioResolver.extensionFromUrl("https://x/stream", "m4a"))
         assertEquals("mp3", CommonAudioResolver.extensionFromUrl("https://x/y.html", "mp3"))
     }
+
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    @Test
+    fun extractsAudiochanUserAgentFromSessionCookie() {
+        val payload = """{"session":{"session":{"userAgent":"Mozilla/5.0 Custom Agent"}}}"""
+        val encoded = kotlin.io.encoding.Base64.Default.encode(payload.encodeToByteArray())
+        val cookie = "__Secure-ac.session_data=$encoded.sig; cf_clearance=123"
+        assertEquals("Mozilla/5.0 Custom Agent", CommonAudioResolver.extractAudiochanUserAgent(cookie))
+        assertNull(CommonAudioResolver.extractAudiochanUserAgent("cf_clearance=123"))
+        assertNull(CommonAudioResolver.extractAudiochanUserAgent(null))
+    }
 }

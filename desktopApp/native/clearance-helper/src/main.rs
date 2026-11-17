@@ -256,6 +256,9 @@ fn capture(request: &Request) -> Result<(String, String), (String, String)> {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
+                if actual_user_agent.lock().map(|s| s.is_none()).unwrap_or(false) {
+                    capture_user_agent(&webview, Arc::clone(&actual_user_agent));
+                }
                 if let Some(cookie) = clearance_from(&webview, request) {
                     captured = Some(cookie);
                     *control_flow = ControlFlow::Exit;
@@ -341,8 +344,12 @@ fn clear_stale_cookies(webview: &WebView, cookie_urls: &[String], required_cooki
 fn capture_user_agent(webview: &WebView, sink: Arc<Mutex<Option<String>>>) {
     let _ = webview.evaluate_script_with_callback("navigator.userAgent", move |value| {
         let user_agent = serde_json::from_str::<String>(&value).unwrap_or(value);
-        if let Ok(mut slot) = sink.lock() {
-            *slot = Some(user_agent);
+        if !user_agent.trim().is_empty() {
+            if let Ok(mut slot) = sink.lock() {
+                if slot.is_none() {
+                    *slot = Some(user_agent);
+                }
+            }
         }
     });
 }

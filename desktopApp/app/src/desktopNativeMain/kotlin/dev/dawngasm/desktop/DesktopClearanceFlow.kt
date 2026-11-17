@@ -145,9 +145,12 @@ fun DesktopClearanceFlow(
                         )
                     }
                     ClearanceTarget.AUDIOCHAN -> {
+                        val userAgent = captured.userAgent.ifBlank {
+                            dev.dawngasm.app.data.CommonAudioResolver.extractAudiochanUserAgent(captured.cookie).orEmpty()
+                        }
                         presenter.saveAudiochanClearance(
                             captured.cookie,
-                            captured.userAgent,
+                            userAgent,
                         )
                     }
                 }

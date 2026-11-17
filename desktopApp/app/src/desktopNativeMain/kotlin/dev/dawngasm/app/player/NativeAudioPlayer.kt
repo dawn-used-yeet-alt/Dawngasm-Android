@@ -2,6 +2,7 @@ package dev.dawngasm.app.player
 
 import dev.brahmkshatriya.kmplayer.KMPlayer
 import dev.brahmkshatriya.kmplayer.KMPlayerConfig
+import dev.brahmkshatriya.kmplayer.KMPlayerEvent
 import dev.brahmkshatriya.kmplayer.KMResult
 import dev.brahmkshatriya.kmedianotification.KMediaNotification
 import dev.brahmkshatriya.kmedianotification.MediaPlatform
@@ -11,10 +12,20 @@ import dev.brahmkshatriya.kmedianotification.NowPlayingItem
 import dev.brahmkshatriya.kmedianotification.PlaybackState as NotificationPlaybackState
 import dev.brahmkshatriya.kmedianotification.desktop
 import dev.dawngasm.app.data.AudioUrlResolver
+import dev.dawngasm.app.data.CommonAudioResolver
+import dev.dawngasm.app.data.DesktopPlatform
 import dev.dawngasm.app.data.HotaudioStreamer
+import dev.dawngasm.app.data.Network
+import dev.dawngasm.app.data.PlatformFileOps
 import dev.dawngasm.app.data.PlaybackQueue
+import dev.dawngasm.app.data.ResolvedAudio
 import dev.dawngasm.app.model.Track
 import dev.dawngasm.app.util.PlatformLog
+import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +37,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.buffer
 
 class NativeAudioPlayer(
     private val resolver: AudioUrlResolver,
@@ -57,6 +72,7 @@ class NativeAudioPlayer(
                                     isLoading = kmState.isBuffering,
                                     positionMs = kmState.position.inWholeMilliseconds,
                                     durationMs = kmState.duration?.inWholeMilliseconds ?: current.durationMs,
+                                    error = kmState.error?.message ?: current.error,
                                 )
                             }
                             updateNotification()
@@ -65,8 +81,19 @@ class NativeAudioPlayer(
                     scope.launch {
                         runCatching {
                             res.value.events.collect { event ->
-                                if (event.toString().contains("Ended", ignoreCase = true)) {
-                                    nextTrack()
+                                when (event) {
+                                    is KMPlayerEvent.MediaEnded -> nextTrack()
+                                    is KMPlayerEvent.PlaybackError -> {
+                                        PlatformLog.e("NativeAudioPlayer", "Playback error: ${event.error.message}")
+                                        _state.update {
+                                            it.copy(
+                                                isLoading = false,
+                                                isPlaying = false,
+                                                error = event.error.message,
+                                            )
+                                        }
+                                    }
+                                    else -> {}
                                 }
                             }
                         }
@@ -159,16 +186,34 @@ class NativeAudioPlayer(
                 PlatformLog.i("NativeAudioPlayer", "Resolving track ${track.id}")
                 val resolved = resolver.resolve(track)
                 val p = player
-                if (p != null) {
-                    p.load(resolved.url, playWhenReady = true)
-                } else {
+                if (p == null) {
                     PlatformLog.w("NativeAudioPlayer", "No player backend available")
                     _state.update { it.copy(isLoading = false, isPlaying = true) }
+                    return@launch
                 }
+
+                val mediaUri: String = when {
+                    !track.localUri.isNullOrBlank() -> track.localUri
+                    resolved.url.startsWith("${HotaudioStreamer.SCHEME}:", ignoreCase = true) -> {
+                        val trackId = HotaudioStreamer.trackIdFrom(resolved.url) ?: track.id
+                        val spec = HotaudioStreamer.spec(trackId, track.pageUrl)
+                        val completedPath = HotaudioStreamer.awaitComplete(spec)
+                        "file://$completedPath"
+                    }
+                    resolved.headers.isNotEmpty() -> {
+                        val localPath = ensureCachedTrack(track, resolved)
+                        "file://$localPath"
+                    }
+                    else -> resolved.url
+                }
+
+                PlatformLog.i("NativeAudioPlayer", "Loading media uri=$mediaUri for track ${track.id}")
+                p.load(mediaUri, playWhenReady = true)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (e: Throwable) {
                 PlatformLog.e("NativeAudioPlayer", "Playback failed for track ${track.id}", e)
+                (resolver as? CommonAudioResolver)?.evictCache(track.id)
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -176,6 +221,91 @@ class NativeAudioPlayer(
                         error = e.message ?: "Failed to play audio",
                     )
                 }
+            }
+        }
+    }
+
+    private suspend fun ensureCachedTrack(track: Track, resolved: ResolvedAudio): String {
+        val cacheDir = "${DesktopPlatform.cacheDir}/tracks"
+        PlatformFileOps.ensureDir(cacheDir)
+        val baseTarget = "$cacheDir/${track.id}"
+        val existing = listOf("mp3", "m4a", "ogg", "flac", "wav", resolved.extension).map { "$baseTarget.$it" }
+            .firstOrNull { PlatformFileOps.fileExists(it) && PlatformFileOps.fileLength(it) > 0L }
+        if (existing != null) {
+            PlatformLog.i("NativeAudioPlayer", "Using cached file for track ${track.id}: $existing")
+            return existing
+        }
+
+        val partFile = "$baseTarget.part"
+        val partPath = partFile.toPath()
+        val client = Network.httpClient
+
+        PlatformLog.i("NativeAudioPlayer", "Downloading track ${track.id} to cache: $partFile")
+        var detectedExt = resolved.extension.ifBlank { "mp3" }
+
+        try {
+            FileSystem.SYSTEM.delete(partPath, mustExist = false)
+            client.prepareGet(resolved.url) {
+                resolved.headers.forEach { (name, value) ->
+                    header(name, value)
+                }
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    throw IllegalStateException("Audio stream request failed: HTTP ${response.status.value}")
+                }
+                val contentType = response.headers["Content-Type"].orEmpty().lowercase()
+                detectedExt = when {
+                    contentType.contains("audio/mpeg") || contentType.contains("mp3") -> "mp3"
+                    contentType.contains("audio/mp4") || contentType.contains("m4a") || contentType.contains("aac") -> "m4a"
+                    contentType.contains("audio/ogg") || contentType.contains("ogg") || contentType.contains("opus") -> "ogg"
+                    contentType.contains("audio/flac") || contentType.contains("flac") -> "flac"
+                    else -> resolved.extension.ifBlank { "mp3" }
+                }
+
+                val channel = response.bodyAsChannel()
+                val sink = FileSystem.SYSTEM.sink(partPath).buffer()
+                try {
+                    val buffer = ByteArray(64 * 1024)
+                    while (!channel.isClosedForRead) {
+                        val count = channel.readAvailable(buffer, 0, buffer.size)
+                        if (count < 0) break
+                        if (count == 0) continue
+                        sink.write(buffer, 0, count)
+                    }
+                    sink.flush()
+                } finally {
+                    sink.close()
+                }
+            }
+
+            val finalTarget = "$baseTarget.$detectedExt"
+            val targetPath = finalTarget.toPath()
+            FileSystem.SYSTEM.delete(targetPath, mustExist = false)
+            FileSystem.SYSTEM.atomicMove(partPath, targetPath)
+            PlatformLog.i("NativeAudioPlayer", "Cached track ${track.id} at $finalTarget (${PlatformFileOps.fileLength(finalTarget)} bytes)")
+            evictCacheIfNeeded(cacheDir.toPath())
+            return finalTarget
+        } catch (ce: CancellationException) {
+            FileSystem.SYSTEM.delete(partPath, mustExist = false)
+            throw ce
+        } catch (t: Throwable) {
+            FileSystem.SYSTEM.delete(partPath, mustExist = false)
+            throw t
+        }
+    }
+
+    private fun evictCacheIfNeeded(directory: Path, maxSizeBytes: Long = 1024L * 1024 * 1024) {
+        runCatching {
+            val entries = FileSystem.SYSTEM.list(directory).filter { path ->
+                !path.name.endsWith(".part") && (FileSystem.SYSTEM.metadataOrNull(path)?.isRegularFile == true)
+            }
+            var total = entries.sumOf { FileSystem.SYSTEM.metadataOrNull(it)?.size ?: 0L }
+            if (total <= maxSizeBytes) return
+            for (path in entries.sortedBy { FileSystem.SYSTEM.metadataOrNull(it)?.lastModifiedAtMillis ?: 0L }) {
+                val size = FileSystem.SYSTEM.metadataOrNull(path)?.size ?: 0L
+                FileSystem.SYSTEM.delete(path, mustExist = false)
+                total -= size
+                if (total <= maxSizeBytes) break
             }
         }
     }

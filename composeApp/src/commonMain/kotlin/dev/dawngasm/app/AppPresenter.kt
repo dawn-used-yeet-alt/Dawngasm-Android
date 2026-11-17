@@ -497,8 +497,11 @@ class AppPresenter(
                             ?: throw IllegalStateException("Could not read downloaded hotaudio stream")
                     } else {
                         val response = Network.httpClient.get(audio.url) {
-                            audio.headers.forEach { (name, value) -> header(name, value) }
-                            header("User-Agent", Network.BROWSER_USER_AGENT)
+                            val userAgent = audio.headers["User-Agent"] ?: Network.BROWSER_USER_AGENT
+                            audio.headers.forEach { (name, value) ->
+                                if (!name.equals("User-Agent", ignoreCase = true)) header(name, value)
+                            }
+                            header("User-Agent", userAgent)
                         }
                         if (!response.status.isSuccess()) {
                             throw IllegalStateException("Server returned HTTP ${response.status.value}")
