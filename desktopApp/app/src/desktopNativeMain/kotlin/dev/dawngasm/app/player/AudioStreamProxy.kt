@@ -27,6 +27,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Loopback HTTP streaming proxy for audio hosts requiring authentication/anti-hotlinking
@@ -40,6 +42,7 @@ object AudioStreamProxy {
     private const val LOG_TAG = "AudioStreamProxy"
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val startMutex = Mutex()
 
     @Volatile
     private var streamMap: Map<String, ResolvedAudio> = emptyMap()
@@ -51,39 +54,42 @@ object AudioStreamProxy {
     private var serverSocket: ServerSocket? = null
     private var acceptJob: Job? = null
 
-    fun streamUrl(trackId: String, audio: ResolvedAudio): String {
+    suspend fun streamUrl(trackId: String, audio: ResolvedAudio): String {
         streamMap = streamMap + (trackId to audio)
         ensureStarted()
         return "http://127.0.0.1:$boundPort/stream/$trackId"
     }
 
-    private fun ensureStarted() {
+    private suspend fun ensureStarted() {
         if (serverSocket != null && boundPort > 0) return
+        startMutex.withLock {
+            if (serverSocket != null && boundPort > 0) return
 
-        try {
-            val sm = SelectorManager(Dispatchers.IO)
-            val server = aSocket(sm).tcp().bind("127.0.0.1", 0)
-            val port = (server.localAddress as? InetSocketAddress)?.port ?: 0
+            try {
+                val sm = SelectorManager(Dispatchers.IO)
+                val server = aSocket(sm).tcp().bind("127.0.0.1", 0)
+                val port = (server.localAddress as? InetSocketAddress)?.port ?: 0
 
-            selectorManager = sm
-            serverSocket = server
-            boundPort = port
-            PlatformLog.i(LOG_TAG, "Streaming proxy listening on 127.0.0.1:$boundPort")
+                selectorManager = sm
+                serverSocket = server
+                boundPort = port
+                PlatformLog.i(LOG_TAG, "Streaming proxy listening on 127.0.0.1:$boundPort")
 
-            acceptJob = scope.launch(Dispatchers.IO) {
-                while (isActive) {
-                    val client = try {
-                        server.accept()
-                    } catch (_: Throwable) {
-                        break
-                    }
-                    launch {
-                        handleClient(client)
+                acceptJob = scope.launch(Dispatchers.IO) {
+                    while (isActive) {
+                        val client = try {
+                            server.accept()
+                        } catch (_: Throwable) {
+                            break
+                        }
+                        launch {
+                            handleClient(client)
+                        }
                     }
                 }
+            } catch (e: Throwable) {
+                PlatformLog.e(LOG_TAG, "Failed to start streaming proxy", e)
             }
-        } catch (e: Throwable) {
-            PlatformLog.e(LOG_TAG, "Failed to start streaming proxy", e)
         }
     }
 
