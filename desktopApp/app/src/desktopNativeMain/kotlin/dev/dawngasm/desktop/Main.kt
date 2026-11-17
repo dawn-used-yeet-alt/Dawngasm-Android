@@ -1,4 +1,7 @@
-@file:OptIn(kotlin.native.runtime.NativeRuntimeApi::class)
+@file:OptIn(
+    kotlin.native.runtime.NativeRuntimeApi::class,
+    kotlinx.cinterop.ExperimentalForeignApi::class,
+)
 
 package dev.dawngasm.desktop
 
@@ -30,8 +33,17 @@ import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.platform.NativeSettingsPlatformActions
 import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.pointed
+import kotlinx.cinterop.ptr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import sdl3.SDL_GetCurrentDisplayMode
+import sdl3.SDL_GetDisplayUsableBounds
+import sdl3.SDL_GetPrimaryDisplay
+import sdl3.SDL_Rect
 import kotlin.math.roundToInt
 import kotlin.native.runtime.GC
 import kotlin.native.runtime.NativeRuntimeApi
@@ -40,6 +52,30 @@ import kotlin.system.exitProcess
 private fun configureNativeRuntime() {
     GC.autotune = true
     GC.heapTriggerCoefficient = 0.75
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun defaultWindowSize(): DpSize = memScoped {
+    try {
+        val display = SDL_GetPrimaryDisplay()
+        if (display != 0u) {
+            val usableBounds = alloc<SDL_Rect>()
+            if (SDL_GetDisplayUsableBounds(display, usableBounds.ptr)) {
+                val w = usableBounds.w
+                val h = usableBounds.h
+                if (w > 0 && h > 0) return@memScoped DpSize(w.dp, h.dp)
+            }
+            val mode = SDL_GetCurrentDisplayMode(display)
+            if (mode != null) {
+                val w = mode.pointed.w
+                val h = mode.pointed.h
+                if (w > 0 && h > 0) return@memScoped DpSize(w.dp, h.dp)
+            }
+        }
+    } catch (_: Throwable) {
+        // Fallback for headless environments or display query failures
+    }
+    DpSize(800.dp, 600.dp)
 }
 
 fun main(args: Array<String>) {
@@ -71,8 +107,8 @@ fun main(args: Array<String>) {
         val initialSize = if (!isDefaultOrNull && savedWidth!! > 0 && savedHeight!! > 0) {
             DpSize(savedWidth.dp, savedHeight.dp)
         } else {
-            // Default to full tile geometry so it tiles like the terminal instead of a tiny 800x600 box
-            DpSize(1354.dp, 756.dp)
+            // Adapt launch geometry universally from the primary display's usable bounds
+            defaultWindowSize()
         }
         val windowState = rememberWindowState(size = initialSize)
 
