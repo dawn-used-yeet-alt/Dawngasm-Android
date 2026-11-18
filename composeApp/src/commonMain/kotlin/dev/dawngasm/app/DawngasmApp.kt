@@ -288,6 +288,7 @@ fun DawngasmApp(
                 onToggleDownload = actions::download,
                 bottomInset = bottomInset,
                 showSearchRow = !desktop,
+                pullToRefreshEnabled = !desktop,
                 horizontalPadding = horizontalPadding,
                 contentTopPadding = if (desktop) 16.dp else 8.dp,
             )
@@ -392,7 +393,10 @@ fun DawngasmApp(
                                         onClick = { searchOpen = true },
                                         onClear = actions::clearSearch,
                                         shortcutHint = "Ctrl K",
-                                        modifier = Modifier.fillMaxWidth(),
+                                        height = Dimens.DesktopSearchFieldHeight,
+                                        modifier = Modifier
+                                            .widthIn(max = Dimens.DesktopSearchFieldMaxWidth)
+                                            .fillMaxWidth(),
                                     )
 
                                     NavigationTab.Library -> PillTabs(

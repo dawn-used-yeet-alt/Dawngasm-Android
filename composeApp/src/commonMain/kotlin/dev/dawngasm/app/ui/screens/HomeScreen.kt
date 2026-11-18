@@ -68,6 +68,7 @@ fun HomeScreen(
     onScrollRestored: () -> Unit = {},
     onSimilarClick: (Track, Int, Int) -> Unit = { _, _, _ -> },
     showSearchRow: Boolean = true,
+    pullToRefreshEnabled: Boolean = true,
     horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
     contentTopPadding: Dp = 8.dp,
 ) {
@@ -99,11 +100,10 @@ fun HomeScreen(
             )
         }
 
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize(),
-        ) {
+        // A pull gesture only makes sense on touch screens. On desktop the
+        // nested-scroll indicator can get stuck at the top of the feed, so the
+        // list is rendered without the pull-to-refresh container there.
+        val feedContent: @Composable () -> Unit = {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -214,6 +214,17 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+        if (pullToRefreshEnabled) {
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                feedContent()
+            }
+        } else {
+            feedContent()
         }
     }
 }

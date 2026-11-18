@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.ui.theme.Dimens
 
@@ -38,12 +39,13 @@ fun SearchRow(
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
     shortcutHint: String? = null,
+    height: Dp = Dimens.SearchRowHeight,
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
-            .height(Dimens.SearchRowHeight)
+            .height(height)
             .clip(CircleShape)
             .clickable(onClick = onClick)
             .testTag("search_row"),

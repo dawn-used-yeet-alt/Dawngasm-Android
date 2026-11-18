@@ -17,14 +17,22 @@ object Dimens {
 
     // Desktop shell: top navigation, generous gutters and a centred content column.
     val DesktopMaxContentWidth = 1600.dp
-    val DesktopHorizontalPadding = 32.dp
-    val DesktopTopBarHeight = 52.dp
+    val DesktopHorizontalPadding = 48.dp
+    val DesktopTopBarHeight = 46.dp
     val DesktopTopBarTopPadding = 12.dp
     val DesktopTopBarBottomPadding = 8.dp
-    val DesktopNavItemHeight = 52.dp
-    val DesktopNavItemPadding = 18.dp
+    val DesktopNavItemHeight = 46.dp
+    val DesktopNavItemPadding = 16.dp
     val DesktopNavGap = 18.dp
     val DesktopSectionGap = 20.dp
+
+    // Desktop search stays compact: the field does not stretch across the
+    // whole header, and the panel is narrower than the field it opens under.
+    val DesktopSearchFieldHeight = 46.dp
+    val DesktopSearchFieldMaxWidth = 760.dp
+    val DesktopSearchPanelWidth = 680.dp
+    val DesktopSearchPanelTopPadding = 78.dp
+    val DesktopSearchPanelBottomPadding = 24.dp
 
     // Material 3 Expressive grouped cards.
     val CardCornerRadiusLarge = 28.dp

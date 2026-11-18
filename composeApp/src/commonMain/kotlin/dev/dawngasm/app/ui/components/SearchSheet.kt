@@ -25,10 +25,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -587,7 +587,13 @@ private fun DesktopSearchPanel(
     )
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val panelWidth = (maxWidth * 0.72f).coerceAtMost(860.dp)
+        val availableWidth = (maxWidth - Dimens.DesktopHorizontalPadding * 2).coerceAtLeast(0.dp)
+        val panelWidth = Dimens.DesktopSearchPanelWidth.coerceAtMost(availableWidth)
+        val panelMaxHeight = (
+            maxHeight -
+                Dimens.DesktopSearchPanelTopPadding -
+                Dimens.DesktopSearchPanelBottomPadding
+            ).coerceAtLeast(0.dp)
 
         Box(
             modifier = Modifier
@@ -604,12 +610,12 @@ private fun DesktopSearchPanel(
             modifier = Modifier
                 .padding(
                     start = Dimens.DesktopHorizontalPadding,
-                    top = 88.dp,
+                    top = Dimens.DesktopSearchPanelTopPadding,
                     end = Dimens.DesktopHorizontalPadding,
-                    bottom = 24.dp,
+                    bottom = Dimens.DesktopSearchPanelBottomPadding,
                 )
                 .width(panelWidth)
-                .fillMaxHeight(0.88f)
+                .heightIn(max = panelMaxHeight)
                 .graphicsLayer {
                     scaleX = panelScale
                     scaleY = panelScale
