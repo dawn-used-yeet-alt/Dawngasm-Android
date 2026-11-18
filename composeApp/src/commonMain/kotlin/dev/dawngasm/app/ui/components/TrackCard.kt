@@ -73,6 +73,7 @@ fun TrackCard(
     modifier: Modifier = Modifier,
     cardPosition: CardGroupPosition = CardGroupPosition.Standalone,
     showSaveAction: Boolean = true,
+    showSimilarAction: Boolean = false,
     onSimilarClick: () -> Unit = {},
 ) {
     var isExpanded by rememberSaveable(track.id) { mutableStateOf(false) }
@@ -189,6 +190,7 @@ fun TrackCard(
                 isDownloaded = isDownloaded,
                 isDownloading = isDownloading,
                 onToggleDownload = onToggleDownload,
+                showSimilarAction = showSimilarAction,
                 onSimilarClick = onSimilarClick,
                 trackId = track.id,
             )
@@ -207,21 +209,23 @@ private fun TrackCardActions(
     isDownloaded: Boolean,
     isDownloading: Boolean,
     onToggleDownload: () -> Unit,
+    showSimilarAction: Boolean,
     onSimilarClick: () -> Unit,
     trackId: String,
 ) {
     val buttonSize = 48.dp
+    val alwaysShowSimilar = showSimilarAction
 
-    val containerWidth = if (showSaveAction) {
-        buttonSize * (2f - clampedProgress)
-    } else {
-        buttonSize
+    val containerWidth = when {
+        alwaysShowSimilar -> buttonSize * (1 + (if (showSaveAction) 1 else 0) + 1)
+        showSaveAction -> buttonSize * (2f - clampedProgress)
+        else -> buttonSize
     }
 
-    val containerHeight = if (showSaveAction) {
-        buttonSize * (1f + 2f * clampedProgress)
-    } else {
-        buttonSize * (1f + clampedProgress)
+    val containerHeight = when {
+        alwaysShowSimilar -> buttonSize
+        showSaveAction -> buttonSize * (1f + 2f * clampedProgress)
+        else -> buttonSize * (1f + clampedProgress)
     }
 
     val heartTint by animateColorAsState(
@@ -268,12 +272,14 @@ private fun TrackCardActions(
             }
         }
 
-        val downloadOffsetX = if (showSaveAction) {
-            buttonSize * (1f - clampedProgress)
-        } else {
-            0.dp
+        val downloadOffsetX = when {
+            alwaysShowSimilar -> if (showSaveAction) buttonSize else 0.dp
+            showSaveAction -> buttonSize * (1f - clampedProgress)
+            else -> 0.dp
         }
-        val downloadOffsetY = if (showSaveAction) {
+        val downloadOffsetY = if (alwaysShowSimilar) {
+            0.dp
+        } else if (showSaveAction) {
             buttonSize * clampedProgress
         } else {
             0.dp
@@ -306,20 +312,25 @@ private fun TrackCardActions(
             }
         }
 
-        val similarOffsetY = if (showSaveAction) {
-            buttonSize * (1f + clampedProgress)
+        val similarOffsetX = if (alwaysShowSimilar) {
+            buttonSize * (if (showSaveAction) 2 else 1)
         } else {
-            buttonSize * clampedProgress
+            0.dp
         }
-        val similarAlpha = clampedProgress
-        val similarScale = 0.5f + 0.5f * clampedProgress
+        val similarOffsetY = when {
+            alwaysShowSimilar -> 0.dp
+            showSaveAction -> buttonSize * (1f + clampedProgress)
+            else -> buttonSize * clampedProgress
+        }
+        val similarAlpha = if (alwaysShowSimilar) 1f else clampedProgress
+        val similarScale = if (alwaysShowSimilar) 1f else 0.5f + 0.5f * clampedProgress
 
-        if (clampedProgress > 0.01f) {
+        if (alwaysShowSimilar || clampedProgress > 0.01f) {
             IconButton(
                 onClick = onSimilarClick,
-                enabled = isExpanded && clampedProgress > 0.7f,
+                enabled = alwaysShowSimilar || (isExpanded && clampedProgress > 0.7f),
                 modifier = Modifier
-                    .offset(x = 0.dp, y = similarOffsetY)
+                    .offset(x = similarOffsetX, y = similarOffsetY)
                     .size(buttonSize)
                     .graphicsLayer {
                         alpha = similarAlpha

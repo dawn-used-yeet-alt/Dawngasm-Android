@@ -48,6 +48,7 @@ fun LibraryScreen(
     bottomInset: Dp = 0.dp,
     onSimilarClick: ((Track) -> Unit)? = null,
     showTabs: Boolean = true,
+    showSimilarAction: Boolean = false,
     horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
     contentTopPadding: Dp = Dimens.ScreenHorizontalPadding,
 ) {
@@ -94,6 +95,7 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, historyTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
                     horizontalPadding = horizontalPadding,
                     contentTopPadding = contentTopPadding,
@@ -110,6 +112,7 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, savedTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
                     horizontalPadding = horizontalPadding,
                     contentTopPadding = contentTopPadding,
@@ -126,6 +129,7 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, downloadedTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
                     horizontalPadding = horizontalPadding,
                     contentTopPadding = contentTopPadding,
@@ -148,6 +152,7 @@ private fun TrackList(
     onToggleDownload: (Track) -> Unit,
     bottomInset: Dp = 0.dp,
     onSimilarClick: ((Track) -> Unit)? = null,
+    showSimilarAction: Boolean = false,
     horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
     contentTopPadding: Dp = Dimens.ScreenHorizontalPadding,
 ) {
@@ -188,6 +193,7 @@ private fun TrackList(
                 onSimilarClick = { onSimilarClick?.invoke(track) },
                 cardPosition = position,
                 showSaveAction = false,
+                showSimilarAction = showSimilarAction,
             )
             Spacer(modifier = Modifier.height(groupGap(position)))
         }

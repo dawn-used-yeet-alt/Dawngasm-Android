@@ -68,6 +68,7 @@ fun HomeScreen(
     onScrollRestored: () -> Unit = {},
     onSimilarClick: (Track, Int, Int) -> Unit = { _, _, _ -> },
     showSearchRow: Boolean = true,
+    showSimilarAction: Boolean = false,
     pullToRefreshEnabled: Boolean = true,
     horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
     contentTopPadding: Dp = 8.dp,
@@ -189,6 +190,7 @@ fun HomeScreen(
                             },
                             cardPosition = position,
                             showSaveAction = true,
+                            showSimilarAction = showSimilarAction,
                         )
                         Spacer(modifier = Modifier.height(groupGap(position)))
                     }

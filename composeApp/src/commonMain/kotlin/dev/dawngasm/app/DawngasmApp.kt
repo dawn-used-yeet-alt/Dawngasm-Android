@@ -324,6 +324,7 @@ fun DawngasmApp(
                 onToggleDownload = actions::download,
                 bottomInset = bottomInset,
                 showSearchRow = !desktop,
+                showSimilarAction = desktop,
                 pullToRefreshEnabled = !desktop,
                 horizontalPadding = horizontalPadding,
                 contentTopPadding = if (desktop) 16.dp else 8.dp,
@@ -345,6 +346,7 @@ fun DawngasmApp(
                 },
                 bottomInset = bottomInset,
                 showTabs = !desktop,
+                showSimilarAction = desktop,
                 horizontalPadding = horizontalPadding,
                 contentTopPadding = if (desktop) 16.dp else Dimens.ScreenHorizontalPadding,
             )
