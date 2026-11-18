@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name for release (e.g. v2.1.0). Inferred from git tag if empty.'
+        description: 'Tag name for release (e.g. v2.1.1). Inferred from git tag if empty.'
         required: false
         type: string
         default: ''
@@ -64,7 +64,7 @@ jobs:
           elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF_NAME}"
           else
-            TAG="v2.1.0"
+            TAG="v2.1.1"
           fi
           VERSION_NAME="${TAG#v}"
 
@@ -348,7 +348,7 @@ jobs:
             cp -L "$sdl_lib" desktopApp/packaging/bundle/libSDL3.so.0
           fi
 
-          VERSION="2.1.0"
+          VERSION="2.1.1"
           cp desktopApp/packaging/nfpm.yaml /tmp/nfpm.yaml
           sed -i "s/\${VERSION}/$VERSION/g" /tmp/nfpm.yaml
 
