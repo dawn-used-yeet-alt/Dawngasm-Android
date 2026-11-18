@@ -37,6 +37,7 @@ fun SearchRow(
     onClick: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    shortcutHint: String? = null,
 ) {
     Surface(
         modifier = modifier
@@ -86,6 +87,23 @@ fun SearchRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (shortcutHint != null && query.isBlank()) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    tonalElevation = 0.dp,
+                ) {
+                    Text(
+                        text = shortcutHint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("search_shortcut_hint"),
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
             if (query.isNotBlank()) {
                 IconButton(

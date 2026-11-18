@@ -15,6 +15,17 @@ val DawngasmShapes = Shapes(
 object Dimens {
     val ScreenHorizontalPadding = 16.dp
 
+    // Desktop shell: top navigation, generous gutters and a centred content column.
+    val DesktopMaxContentWidth = 1600.dp
+    val DesktopHorizontalPadding = 32.dp
+    val DesktopTopBarHeight = 52.dp
+    val DesktopTopBarTopPadding = 12.dp
+    val DesktopTopBarBottomPadding = 8.dp
+    val DesktopNavItemHeight = 52.dp
+    val DesktopNavItemPadding = 18.dp
+    val DesktopNavGap = 18.dp
+    val DesktopSectionGap = 20.dp
+
     // Material 3 Expressive grouped cards.
     val CardCornerRadiusLarge = 28.dp
     val CardCornerRadiusSmall = 5.dp

@@ -14,14 +14,19 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -70,6 +75,7 @@ import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
 import dev.dawngasm.app.model.TagSuggestion
+import dev.dawngasm.app.ui.theme.Dimens
 import dev.dawngasm.app.util.compactScore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -102,6 +108,7 @@ fun SearchSheet(
     initialHosts: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onApply: (SearchRequest) -> Unit,
+    desktopOverlay: Boolean = false,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val keyboard = LocalSoftwareKeyboardController.current
@@ -254,12 +261,7 @@ fun SearchSheet(
         )
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = null,
-    ) {
+    val content: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -532,6 +534,97 @@ fun SearchSheet(
                     Text("Search", style = MaterialTheme.typography.labelLarge)
                 }
             }
+        }
+    }
+
+    if (desktopOverlay) {
+        DesktopSearchPanel(
+            onDismiss = onDismiss,
+            content = content,
+        )
+    } else {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = null,
+        ) {
+            content()
+        }
+    }
+}
+
+/**
+ * Desktop search is a floating panel rather than a bottom sheet so the result
+ * list stays visible. It is anchored near the search field and sized like the
+ * content column.
+ */
+@Composable
+private fun DesktopSearchPanel(
+    onDismiss: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(180),
+        label = "desktopSearchScrim",
+    )
+    val panelAlpha by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(200),
+        label = "desktopSearchAlpha",
+    )
+    val panelScale by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0.97f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "desktopSearchScale",
+    )
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val panelWidth = (maxWidth * 0.72f).coerceAtMost(860.dp)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.32f * scrimAlpha))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        )
+
+        Surface(
+            modifier = Modifier
+                .padding(
+                    start = Dimens.DesktopHorizontalPadding,
+                    top = 88.dp,
+                    end = Dimens.DesktopHorizontalPadding,
+                    bottom = 24.dp,
+                )
+                .width(panelWidth)
+                .fillMaxHeight(0.88f)
+                .graphicsLayer {
+                    scaleX = panelScale
+                    scaleY = panelScale
+                    alpha = panelAlpha
+                }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shadowElevation = 24.dp,
+        ) {
+            content()
         }
     }
 }
