@@ -13,15 +13,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowOverflow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -96,6 +99,9 @@ fun SettingsScreen(
     platform: SettingsPlatformActions,
     appVersion: String,
     modifier: Modifier = Modifier,
+    wideLayout: Boolean = false,
+    showTitle: Boolean = true,
+    horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
 ) {
     val clearanceDetail = platform.hotaudioClearanceDetail()
     var tagDraft by rememberSaveable { mutableStateOf("") }
@@ -134,397 +140,554 @@ fun SettingsScreen(
         tagSearching = false
     }
 
+    val sections: List<@Composable (Modifier) -> Unit> = listOf(
+        { sectionModifier ->
+            BlockedTagsSection(
+                modifier = sectionModifier,
+                blockedTags = blockedTags,
+                blockedTagsExpanded = blockedTagsExpanded,
+                onExpandedChange = { blockedTagsExpanded = it },
+                tagDraft = tagDraft,
+                onTagDraftChange = { tagDraft = it },
+                tagSuggestions = tagSuggestions,
+                tagSearching = tagSearching,
+                onClearDraft = {
+                    tagDraft = ""
+                    tagSuggestions = emptyList()
+                },
+                onAddBlockedTag = { raw -> addBlockedTag(raw) },
+                onRemoveBlockedTag = onRemoveBlockedTag,
+            )
+        },
+        { sectionModifier ->
+            DownloadLocationSection(
+                modifier = sectionModifier,
+                downloadFolderLabel = downloadFolderLabel,
+                downloadTreeUri = downloadTreeUri,
+                platform = platform,
+                onDownloadTreeChange = onDownloadTreeChange,
+            )
+        },
+        { sectionModifier ->
+            DownloadedEntriesSection(
+                modifier = sectionModifier,
+                onClearDownloads = onClearDownloads,
+            )
+        },
+        { sectionModifier ->
+            MediaSessionSection(
+                modifier = sectionModifier,
+                enabled = mediaSessionServiceEnabled,
+                onToggle = onToggleMediaSessionService,
+            )
+        },
+        { sectionModifier ->
+            HotaudioSection(
+                modifier = sectionModifier,
+                connected = hotaudioConnected,
+                clearanceDetail = clearanceDetail,
+                platform = platform,
+                onClearClearance = onClearHotaudioClearance,
+            )
+        },
+        { sectionModifier ->
+            AudiochanSection(
+                modifier = sectionModifier,
+                connected = audiochanConnected,
+                platform = platform,
+                onClearClearance = onClearAudiochanClearance,
+            )
+        },
+        { sectionModifier ->
+            AboutSection(
+                modifier = sectionModifier,
+                appVersion = appVersion,
+            )
+        },
+    )
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .testTag("settings_screen"),
         contentPadding = PaddingValues(
-            start = Dimens.ScreenHorizontalPadding,
-            end = Dimens.ScreenHorizontalPadding,
-            top = 24.dp,
+            start = horizontalPadding,
+            end = horizontalPadding,
+            top = if (wideLayout) 20.dp else 24.dp,
             bottom = 32.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(
+            if (wideLayout) Dimens.DesktopSectionGap else 14.dp,
+        ),
     ) {
-        item {
-            Text(
-                text = "Settings",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.testTag("settings_title"),
-            )
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.Tag,
-                title = "Blocked tags",
-                subtitle = "Posts carrying these tags are hidden by the index.",
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (blockedTags.isEmpty()) {
-                        Text(
-                            text = "No blocked tags",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                            FlowRow(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateContentSize(
-                                        animationSpec = spring(
-                                            dampingRatio = 0.6f,
-                                            stiffness = 800f,
-                                        ),
-                                    ),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                maxLines = if (blockedTagsExpanded) Int.MAX_VALUE else 4,
-                                overflow = FlowRowOverflow.expandOrCollapseIndicator(
-                                    minRowsToShowCollapse = 4,
-                                    expandIndicator = {
-                                        AssistChip(
-                                            onClick = { blockedTagsExpanded = true },
-                                            label = { Text("Show more") },
-                                            trailingIcon = {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.ExpandMore,
-                                                    contentDescription = "Show more blocked tags",
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .padding(end = 8.dp)
-                                                .testTag("blocked_tags_expand"),
-                                        )
-                                    },
-                                    collapseIndicator = {
-                                        AssistChip(
-                                            onClick = { blockedTagsExpanded = false },
-                                            label = { Text("Show less") },
-                                            trailingIcon = {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.ExpandLess,
-                                                    contentDescription = "Show fewer blocked tags",
-                                                    modifier = Modifier.size(16.dp),
-                                                )
-                                            },
-                                            modifier = Modifier
-                                                .padding(end = 8.dp)
-                                                .testTag("blocked_tags_collapse"),
-                                        )
-                                    },
-                                ),
-                            ) {
-                                blockedTags.forEach { tag ->
-                                    InputChip(
-                                        selected = true,
-                                        onClick = { onRemoveBlockedTag(tag) },
-                                        label = { Text(tag) },
-                                        trailingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Close,
-                                                contentDescription = "Remove $tag",
-                                                modifier = Modifier.size(16.dp),
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = tagDraft,
-                        onValueChange = { tagDraft = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("blocked_tag_field"),
-                        singleLine = true,
-                        shape = CircleShape,
-                        placeholder = { Text("Type a tag, e.g. incest") },
-                        trailingIcon = {
-                            when {
-                                tagSearching -> CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                                tagDraft.isNotEmpty() -> IconButton(
-                                    onClick = {
-                                        tagDraft = ""
-                                        tagSuggestions = emptyList()
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = "Clear tag",
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = { addBlockedTag(tagDraft) },
-                        ),
-                    )
-
-                    AnimatedVisibility(
-                        visible = tagSuggestions.isNotEmpty(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically(),
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.large,
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        ) {
-                            Column {
-                                tagSuggestions.forEach { suggestion ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { addBlockedTag(suggestion.tag) }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = suggestion.tag,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Text(
-                                            text = compactScore(suggestion.count),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Spacer(modifier = Modifier.size(8.dp))
-                                        Icon(
-                                            imageVector = Icons.Outlined.Add,
-                                            contentDescription = "Block ${suggestion.tag}",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.FolderOpen,
-                title = "Download location",
-                subtitle = "Downloads are written here with the system document picker.",
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        shape = CircleShape,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FolderOpen,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Text(
-                                text = downloadFolderLabel,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 10.dp),
-                                maxLines = 2,
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { platform.chooseDownloadFolder() },
-                            shape = CircleShape,
-                        ) {
-                            Text("Choose folder")
-                        }
-                        if (downloadTreeUri != null) {
-                            TextButton(
-                                onClick = { onDownloadTreeChange(null) },
-                                shape = CircleShape,
-                            ) {
-                                Text("Use app storage")
-                            }
-                        }
-                        if (platform.canOpenDownloadFolder()) {
-                            TextButton(
-                                onClick = { platform.openDownloadFolder() },
-                                shape = CircleShape,
-                            ) {
-                                Text("Open folder")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.DeleteOutline,
-                title = "Downloaded entries",
-                subtitle = "Remove the library entries. Files already on disk are left alone.",
-            ) {
-                OutlinedButton(
-                    onClick = onClearDownloads,
-                    shape = CircleShape,
-                ) {
-                    Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text("Remove downloaded entries")
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.Radio,
-                title = "Media session service",
-                subtitle = "Keep audio playing in the background with lock screen controls and system notifications.",
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = if (mediaSessionServiceEnabled) "Enabled" else "Disabled",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (mediaSessionServiceEnabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Switch(
-                        checked = mediaSessionServiceEnabled,
-                        onCheckedChange = onToggleMediaSessionService,
-                        modifier = Modifier.testTag("media_session_service_switch"),
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.Language,
-                title = "hotaudio",
-                subtitle = "hotaudio hides its audio behind a Cloudflare check. Open the site in the app, pass the check, and the clearance is saved for playback and downloads.",
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val clearanceStatus = if (hotaudioConnected) {
-                        buildString {
-                            append("Clearance saved")
-                            if (!clearanceDetail.isNullOrBlank()) {
-                                append(" (")
-                                append(clearanceDetail)
-                                append(")")
-                            }
-                        }
-                    } else {
-                        "No clearance saved"
-                    }
-                    Text(
-                        text = clearanceStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (hotaudioConnected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { platform.openHotaudioClearance() },
-                            shape = CircleShape,
-                        ) {
-                            Text(if (hotaudioConnected) "Check again" else "Open hotaudio check")
-                        }
-                        if (hotaudioConnected) {
-                            TextButton(onClick = onClearHotaudioClearance) {
-                                Text("Clear")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.Language,
-                title = "audiochan",
-                subtitle = "audiochan protects audio streams with Cloudflare Turnstile. Open the check in the app, pass verification, and the clearance is saved for playback and downloads.",
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val clearanceStatus = if (audiochanConnected) {
-                        "Clearance saved"
-                    } else {
-                        "No clearance saved"
-                    }
-                    Text(
-                        text = clearanceStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (audiochanConnected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { platform.openAudiochanClearance() },
-                            shape = CircleShape,
-                        ) {
-                            Text(if (audiochanConnected) "Check again" else "Open audiochan check")
-                        }
-                        if (audiochanConnected) {
-                            TextButton(onClick = onClearAudiochanClearance) {
-                                Text("Clear")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                icon = Icons.Outlined.Info,
-                title = "About",
-                subtitle = "Version $appVersion",
-            ) {
+        if (showTitle) {
+            item(key = "settings_title") {
                 Text(
-                    text = "A native Material 3 Expressive client for the Dawngasm audio index. " +
-                        "Playback and downloads support soundgasm, audiochan, and whyp.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "Settings",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.testTag("settings_title"),
                 )
             }
         }
+
+        if (wideLayout) {
+            // The tag library is the primary control, so it keeps the full
+            // width. Related pairs share a row below it.
+            item(key = "settings_blocked_tags") {
+                sections[0](Modifier.fillMaxWidth())
+            }
+            itemsIndexed(
+                items = sections.drop(1).chunked(2),
+                key = { index, _ -> "settings_row_$index" },
+            ) { _, row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.DesktopSectionGap),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    row.forEach { section ->
+                        section(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                    if (row.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        } else {
+            itemsIndexed(
+                items = sections,
+                key = { index, _ -> "settings_section_$index" },
+            ) { _, section ->
+                section(Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BlockedTagsSection(
+    blockedTags: List<String>,
+    blockedTagsExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    tagDraft: String,
+    onTagDraftChange: (String) -> Unit,
+    tagSuggestions: List<TagSuggestion>,
+    tagSearching: Boolean,
+    onClearDraft: () -> Unit,
+    onAddBlockedTag: (String) -> Unit,
+    onRemoveBlockedTag: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.Tag,
+        title = "Blocked tags",
+        subtitle = "Posts carrying these tags are hidden by the index.",
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (blockedTags.isEmpty()) {
+                Text(
+                    text = "No blocked tags",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateContentSize(
+                                animationSpec = spring(
+                                    dampingRatio = 0.6f,
+                                    stiffness = 800f,
+                                ),
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        maxLines = if (blockedTagsExpanded) Int.MAX_VALUE else 4,
+                        overflow = FlowRowOverflow.expandOrCollapseIndicator(
+                            minRowsToShowCollapse = 4,
+                            expandIndicator = {
+                                AssistChip(
+                                    onClick = { onExpandedChange(true) },
+                                    label = { Text("Show more") },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ExpandMore,
+                                            contentDescription = "Show more blocked tags",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .testTag("blocked_tags_expand"),
+                                )
+                            },
+                            collapseIndicator = {
+                                AssistChip(
+                                    onClick = { onExpandedChange(false) },
+                                    label = { Text("Show less") },
+                                    trailingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ExpandLess,
+                                            contentDescription = "Show fewer blocked tags",
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .padding(end = 8.dp)
+                                        .testTag("blocked_tags_collapse"),
+                                )
+                            },
+                        ),
+                    ) {
+                        blockedTags.forEach { tag ->
+                            InputChip(
+                                selected = true,
+                                onClick = { onRemoveBlockedTag(tag) },
+                                label = { Text(tag) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = "Remove $tag",
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = tagDraft,
+                onValueChange = onTagDraftChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("blocked_tag_field"),
+                singleLine = true,
+                shape = CircleShape,
+                placeholder = { Text("Type a tag, e.g. incest") },
+                trailingIcon = {
+                    when {
+                        tagSearching -> CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        tagDraft.isNotEmpty() -> IconButton(onClick = onClearDraft) {
+                            Icon(
+                                imageVector = Icons.Outlined.Close,
+                                contentDescription = "Clear tag",
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = { onAddBlockedTag(tagDraft) },
+                ),
+            )
+
+            AnimatedVisibility(
+                visible = tagSuggestions.isNotEmpty(),
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ) {
+                    Column {
+                        tagSuggestions.forEach { suggestion ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onAddBlockedTag(suggestion.tag) }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = suggestion.tag,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = compactScore(suggestion.count),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Icon(
+                                    imageVector = Icons.Outlined.Add,
+                                    contentDescription = "Block ${suggestion.tag}",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadLocationSection(
+    downloadFolderLabel: String,
+    downloadTreeUri: String?,
+    platform: SettingsPlatformActions,
+    onDownloadTreeChange: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.FolderOpen,
+        title = "Download location",
+        subtitle = "Downloads are written here with the system document picker.",
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                shape = CircleShape,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = downloadFolderLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 10.dp),
+                        maxLines = 2,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { platform.chooseDownloadFolder() },
+                    shape = CircleShape,
+                ) {
+                    Text("Choose folder")
+                }
+                if (downloadTreeUri != null) {
+                    TextButton(
+                        onClick = { onDownloadTreeChange(null) },
+                        shape = CircleShape,
+                    ) {
+                        Text("Use app storage")
+                    }
+                }
+                if (platform.canOpenDownloadFolder()) {
+                    TextButton(
+                        onClick = { platform.openDownloadFolder() },
+                        shape = CircleShape,
+                    ) {
+                        Text("Open folder")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadedEntriesSection(
+    onClearDownloads: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.DeleteOutline,
+        title = "Downloaded entries",
+        subtitle = "Remove the library entries. Files already on disk are left alone.",
+    ) {
+        OutlinedButton(
+            onClick = onClearDownloads,
+            shape = CircleShape,
+        ) {
+            Icon(Icons.Outlined.DeleteOutline, contentDescription = null)
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Remove downloaded entries")
+        }
+    }
+}
+
+@Composable
+private fun MediaSessionSection(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.Radio,
+        title = "Media session service",
+        subtitle = "Keep audio playing in the background with lock screen controls and system notifications.",
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (enabled) "Enabled" else "Disabled",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Switch(
+                checked = enabled,
+                onCheckedChange = onToggle,
+                modifier = Modifier.testTag("media_session_service_switch"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HotaudioSection(
+    connected: Boolean,
+    clearanceDetail: String?,
+    platform: SettingsPlatformActions,
+    onClearClearance: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.Language,
+        title = "hotaudio",
+        subtitle = "hotaudio hides its audio behind a Cloudflare check. Open the site in the app, pass the check, and the clearance is saved for playback and downloads.",
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val clearanceStatus = if (connected) {
+                buildString {
+                    append("Clearance saved")
+                    if (!clearanceDetail.isNullOrBlank()) {
+                        append(" (")
+                        append(clearanceDetail)
+                        append(")")
+                    }
+                }
+            } else {
+                "No clearance saved"
+            }
+            Text(
+                text = clearanceStatus,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (connected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { platform.openHotaudioClearance() },
+                    shape = CircleShape,
+                ) {
+                    Text(if (connected) "Check again" else "Open hotaudio check")
+                }
+                if (connected) {
+                    TextButton(onClick = onClearClearance) {
+                        Text("Clear")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudiochanSection(
+    connected: Boolean,
+    platform: SettingsPlatformActions,
+    onClearClearance: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.Language,
+        title = "audiochan",
+        subtitle = "audiochan protects audio streams with Cloudflare Turnstile. Open the check in the app, pass verification, and the clearance is saved for playback and downloads.",
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val clearanceStatus = if (connected) {
+                "Clearance saved"
+            } else {
+                "No clearance saved"
+            }
+            Text(
+                text = clearanceStatus,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (connected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { platform.openAudiochanClearance() },
+                    shape = CircleShape,
+                ) {
+                    Text(if (connected) "Check again" else "Open audiochan check")
+                }
+                if (connected) {
+                    TextButton(onClick = onClearClearance) {
+                        Text("Clear")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutSection(
+    appVersion: String,
+    modifier: Modifier = Modifier,
+) {
+    SectionCard(
+        modifier = modifier,
+        icon = Icons.Outlined.Info,
+        title = "About",
+        subtitle = "Version $appVersion",
+    ) {
+        Text(
+            text = "A native Material 3 Expressive client for the Dawngasm audio index. " +
+                "Playback and downloads support soundgasm, audiochan, and whyp.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -533,10 +696,11 @@ private fun SectionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     subtitle: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {

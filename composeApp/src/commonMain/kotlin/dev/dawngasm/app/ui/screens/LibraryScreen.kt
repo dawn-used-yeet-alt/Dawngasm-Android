@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -23,11 +22,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
@@ -46,28 +40,34 @@ fun LibraryScreen(
     downloadedTracks: List<Track>,
     downloadedIds: Set<String>,
     downloadingIds: Set<String>,
+    selectedSubTab: LibrarySubTab,
+    onSubTabSelected: (LibrarySubTab) -> Unit,
     onTrackClick: (Track, List<Track>) -> Unit,
     onToggleDownload: (Track) -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
     onSimilarClick: ((Track) -> Unit)? = null,
+    showTabs: Boolean = true,
+    showSimilarAction: Boolean = false,
+    horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
+    contentTopPadding: Dp = Dimens.ScreenHorizontalPadding,
 ) {
-    var selectedSubTab by rememberSaveable { mutableStateOf(LibrarySubTab.History) }
-
     Column(
         modifier = modifier
             .fillMaxSize()
             .testTag("library_screen"),
     ) {
-        PillTabs(
-            selectedTab = selectedSubTab,
-            onTabSelected = { selectedSubTab = it },
-            modifier = Modifier.padding(
-                start = Dimens.ScreenHorizontalPadding,
-                end = Dimens.ScreenHorizontalPadding,
-                top = Dimens.ScreenHorizontalPadding,
-            ),
-        )
+        if (showTabs) {
+            PillTabs(
+                selectedTab = selectedSubTab,
+                onTabSelected = onSubTabSelected,
+                modifier = Modifier.padding(
+                    start = horizontalPadding,
+                    end = horizontalPadding,
+                    top = contentTopPadding,
+                ),
+            )
+        }
 
         AnimatedContent(
             targetState = selectedSubTab,
@@ -95,7 +95,10 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, historyTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
+                    horizontalPadding = horizontalPadding,
+                    contentTopPadding = contentTopPadding,
                 )
 
                 LibrarySubTab.Saved -> TrackList(
@@ -109,7 +112,10 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, savedTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
+                    horizontalPadding = horizontalPadding,
+                    contentTopPadding = contentTopPadding,
                 )
 
                 LibrarySubTab.Downloads -> TrackList(
@@ -123,7 +129,10 @@ fun LibraryScreen(
                     onTrackClick = { onTrackClick(it, downloadedTracks) },
                     onToggleDownload = onToggleDownload,
                     onSimilarClick = onSimilarClick,
+                    showSimilarAction = showSimilarAction,
                     bottomInset = bottomInset,
+                    horizontalPadding = horizontalPadding,
+                    contentTopPadding = contentTopPadding,
                 )
             }
         }
@@ -143,6 +152,9 @@ private fun TrackList(
     onToggleDownload: (Track) -> Unit,
     bottomInset: Dp = 0.dp,
     onSimilarClick: ((Track) -> Unit)? = null,
+    showSimilarAction: Boolean = false,
+    horizontalPadding: Dp = Dimens.ScreenHorizontalPadding,
+    contentTopPadding: Dp = Dimens.ScreenHorizontalPadding,
 ) {
     if (tracks.isEmpty()) {
         EmptyState(
@@ -158,9 +170,9 @@ private fun TrackList(
             .fillMaxSize()
             .testTag(testTag),
         contentPadding = PaddingValues(
-            start = Dimens.ScreenHorizontalPadding,
-            end = Dimens.ScreenHorizontalPadding,
-            top = Dimens.ScreenHorizontalPadding,
+            start = horizontalPadding,
+            end = horizontalPadding,
+            top = contentTopPadding,
             bottom = 24.dp + bottomInset,
         ),
     ) {
@@ -181,6 +193,7 @@ private fun TrackList(
                 onSimilarClick = { onSimilarClick?.invoke(track) },
                 cardPosition = position,
                 showSaveAction = false,
+                showSimilarAction = showSimilarAction,
             )
             Spacer(modifier = Modifier.height(groupGap(position)))
         }

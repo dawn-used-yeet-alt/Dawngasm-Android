@@ -71,7 +71,7 @@ composeNativeApplication {
     applicationName.set("Dawngasm")
     packageName.set("dev.dawngasm")
     executableName.set("Dawngasm")
-    packageVersion.set("2.1.0")
+    packageVersion.set("2.1.1")
     description.set("Audio browser and player for soundgasm, whyp, and audiochan")
     vendor.set("Dawngasm")
     categories.set(listOf("AudioVideo", "Audio", "Player"))

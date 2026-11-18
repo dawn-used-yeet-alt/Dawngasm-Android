@@ -1,7 +1,9 @@
 package dev.dawngasm.app
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -9,18 +11,26 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,13 +58,17 @@ import dev.dawngasm.app.platform.PlatformBackHandler
 import dev.dawngasm.app.platform.SettingsPlatformActions
 import dev.dawngasm.app.state.AppCommand
 import dev.dawngasm.app.state.AppUiState
+import dev.dawngasm.app.state.LibrarySubTab
 import dev.dawngasm.app.state.NavigationTab
 import dev.dawngasm.app.state.PlaybackProgress
 import dev.dawngasm.app.state.UiMessage
 import dev.dawngasm.app.ui.components.AppNavBar
 import dev.dawngasm.app.ui.components.AppNavRail
+import dev.dawngasm.app.ui.components.DesktopTopBar
 import dev.dawngasm.app.ui.components.MiniPlayer
+import dev.dawngasm.app.ui.components.PillTabs
 import dev.dawngasm.app.ui.components.SearchFab
+import dev.dawngasm.app.ui.components.SearchRow
 import dev.dawngasm.app.ui.components.SearchSheet
 import dev.dawngasm.app.ui.screens.HomeScreen
 import dev.dawngasm.app.ui.screens.LibraryScreen
@@ -66,7 +80,42 @@ import kotlinx.coroutines.flow.emptyFlow
 /** Windows at least this wide get a navigation rail instead of a bottom bar. */
 private val WideLayoutBreakpoint = 720.dp
 
+/** Desktop windows at least this wide use the top-navigation shell. */
+private val DesktopShellBreakpoint = 840.dp
+
 private const val SEEK_STEP_MS = 10_000L
+
+/**
+ * Direction-aware page switch: the incoming page drifts in from the side of
+ * the tab order it lives on, with a springy scale so the change reads as a
+ * deliberate move instead of a plain cross-fade.
+ */
+private fun AnimatedContentTransitionScope<NavigationTab>.tabTransition(): ContentTransform {
+    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+    return (
+        fadeIn(tween(240)) +
+            scaleIn(
+                initialScale = 0.965f,
+                animationSpec = spring(
+                    dampingRatio = 0.6f,
+                    stiffness = 420f,
+                ),
+            ) +
+            slideInHorizontally(
+                animationSpec = spring(
+                    dampingRatio = 0.72f,
+                    stiffness = 420f,
+                ),
+            ) { width -> direction * width / 14 }
+        ) togetherWith (
+        fadeOut(tween(150)) +
+            scaleOut(
+                targetScale = 1.015f,
+                animationSpec = tween(200),
+            ) +
+            slideOutHorizontally(tween(210)) { width -> -direction * width / 22 }
+        )
+}
 
 @Composable
 fun DawngasmApp(
@@ -77,10 +126,12 @@ fun DawngasmApp(
     settingsPlatform: SettingsPlatformActions,
     appVersion: String,
     commands: Flow<AppCommand> = emptyFlow(),
+    isDesktop: Boolean = false,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val focusRequester = remember { FocusRequester() }
     var selectedTab by rememberSaveable { mutableStateOf(NavigationTab.Home) }
+    var librarySubTab by rememberSaveable { mutableStateOf(LibrarySubTab.History) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var isPlayerExpanded by rememberSaveable { mutableStateOf(false) }
 
@@ -168,7 +219,9 @@ fun DawngasmApp(
     fun handleCommandKey(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
 
-        if ((event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
+        if ((event.isCtrlPressed || event.isMetaPressed) &&
+            (event.key == Key.F || event.key == Key.K)
+        ) {
             searchOpen = true
             return true
         }
@@ -237,6 +290,91 @@ fun DawngasmApp(
         }
     }
 
+    // One definition of every screen, with the desktop shell switching a few
+    // layout flags. That keeps both shells in sync as the window is resized.
+    val screenContent: @Composable (NavigationTab, Boolean) -> Unit = { tab, desktop ->
+        val horizontalPadding = if (desktop) {
+            Dimens.DesktopHorizontalPadding
+        } else {
+            Dimens.ScreenHorizontalPadding
+        }
+        when (tab) {
+            NavigationTab.Home -> HomeScreen(
+                tracks = state.tracks,
+                savedIds = savedIds,
+                downloadedIds = downloadedIds,
+                downloadingIds = state.downloadingIds,
+                query = state.searchSummary,
+                isLoading = state.isLoading,
+                isRefreshing = state.isRefreshing,
+                error = state.error,
+                hasMore = state.hasMore,
+                isSimilarMode = state.isSimilarMode,
+                pendingScrollRestore = state.pendingScrollRestore,
+                onScrollRestored = actions::onScrollRestored,
+                onSimilarClick = { track, scrollIndex, scrollOffset ->
+                    actions.showSimilar(track, scrollIndex, scrollOffset)
+                },
+                onOpenSearch = { searchOpen = true },
+                onClearSearch = actions::clearSearch,
+                onRefresh = actions::refresh,
+                onLoadMore = actions::loadMore,
+                onTrackClick = { actions.play(it, state.tracks) },
+                onToggleSave = actions::toggleSave,
+                onToggleDownload = actions::download,
+                bottomInset = bottomInset,
+                showSearchRow = !desktop,
+                showSimilarAction = desktop,
+                pullToRefreshEnabled = !desktop,
+                horizontalPadding = horizontalPadding,
+                contentTopPadding = if (desktop) 16.dp else 8.dp,
+            )
+
+            NavigationTab.Library -> LibraryScreen(
+                historyTracks = state.history,
+                savedTracks = state.saved,
+                downloadedTracks = state.downloads,
+                downloadedIds = downloadedIds,
+                downloadingIds = state.downloadingIds,
+                selectedSubTab = librarySubTab,
+                onSubTabSelected = { librarySubTab = it },
+                onTrackClick = { track, list -> actions.play(track, list) },
+                onToggleDownload = actions::download,
+                onSimilarClick = { track ->
+                    selectedTab = NavigationTab.Home
+                    actions.showSimilar(track, 0, 0)
+                },
+                bottomInset = bottomInset,
+                showTabs = !desktop,
+                showSimilarAction = desktop,
+                horizontalPadding = horizontalPadding,
+                contentTopPadding = if (desktop) 16.dp else Dimens.ScreenHorizontalPadding,
+            )
+
+            NavigationTab.Settings -> SettingsScreen(
+                blockedTags = state.blockedTags,
+                downloadFolderLabel = state.downloadFolderLabel,
+                downloadTreeUri = state.downloadTreeUri,
+                tagLookup = actions::suggestTags,
+                hotaudioConnected = state.hotaudioConnected,
+                audiochanConnected = state.audiochanConnected,
+                mediaSessionServiceEnabled = state.mediaSessionServiceEnabled,
+                onToggleMediaSessionService = actions::toggleMediaSessionService,
+                onClearHotaudioClearance = actions::clearHotaudioClearance,
+                onClearAudiochanClearance = actions::clearAudiochanClearance,
+                onAddBlockedTag = actions::addBlockedTag,
+                onRemoveBlockedTag = actions::removeBlockedTag,
+                onDownloadTreeChange = actions::setDownloadTree,
+                onClearDownloads = actions::clearDownloads,
+                platform = settingsPlatform,
+                appVersion = appVersion,
+                wideLayout = desktop,
+                showTitle = !desktop,
+                horizontalPadding = horizontalPadding,
+            )
+        }
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -245,163 +383,275 @@ fun DawngasmApp(
             .onPreviewKeyEvent { event -> handleCommandKey(event) }
             .onKeyEvent { event -> handlePlaybackKey(event) },
     ) {
-        val useNavigationRail = maxWidth >= WideLayoutBreakpoint
+        // Desktop windows below the shell breakpoint get the exact phone
+        // layout (bottom navigation), not the tablet rail.
+        val useNavigationRail = !isDesktop && maxWidth >= WideLayoutBreakpoint
+        val useDesktopShell = isDesktop && maxWidth >= DesktopShellBreakpoint
 
-        Scaffold(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("app_scaffold"),
-            containerColor = MaterialTheme.colorScheme.background,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                if (!useNavigationRail) {
-                    AppNavBar(
-                        selectedTab = selectedTab,
-                        onTabSelect = { selectedTab = it },
+        AnimatedContent(
+            targetState = useDesktopShell,
+            transitionSpec = {
+                val enteringDesktop = targetState
+                // Desktop settles down from above; the phone layout rises up
+                // from the bottom. A bouncy scale gives the reflow weight.
+                val enterSlide = if (enteringDesktop) -1f / 9f else 1f / 9f
+                val exitSlide = if (enteringDesktop) 1f / 26f else -1f / 26f
+                val enterScale = if (enteringDesktop) 0.92f else 0.95f
+                val exitScale = if (enteringDesktop) 1.04f else 0.95f
+                (fadeIn(tween(220)) +
+                    scaleIn(
+                        initialScale = enterScale,
+                        animationSpec = spring(
+                            dampingRatio = 0.6f,
+                            stiffness = 380f,
+                        ),
+                    ) +
+                    slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = 0.72f,
+                            stiffness = 360f,
+                        ),
+                    ) { height -> (height * enterSlide).toInt() }
+                    ) togetherWith (
+                    fadeOut(tween(160)) +
+                        scaleOut(
+                            targetScale = exitScale,
+                            animationSpec = tween(240),
+                        ) +
+                        slideOutVertically(tween(220)) { height ->
+                            (height * exitSlide).toInt()
+                        }
                     )
-                }
-            }
-        ) { innerPadding ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
+            },
+            label = "shellLayoutTransition",
+            modifier = Modifier.fillMaxSize(),
+        ) { desktopShell ->
+            if (desktopShell) {
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = {
-                            (fadeIn(tween(220)) + scaleIn(
-                                initialScale = 0.975f,
-                                animationSpec = spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                            )) togetherWith (fadeOut(tween(130)) + scaleOut(targetScale = 1.01f))
-                        },
-                        label = "screenTabTransition",
-                        modifier = Modifier.fillMaxSize(),
-                    ) { tab ->
-                        when (tab) {
-                            NavigationTab.Home -> HomeScreen(
-                                tracks = state.tracks,
-                                savedIds = savedIds,
-                                downloadedIds = downloadedIds,
-                                downloadingIds = state.downloadingIds,
-                                query = state.searchSummary,
-                                isLoading = state.isLoading,
-                                isRefreshing = state.isRefreshing,
-                                error = state.error,
-                                hasMore = state.hasMore,
-                                isSimilarMode = state.isSimilarMode,
-                                pendingScrollRestore = state.pendingScrollRestore,
-                                onScrollRestored = actions::onScrollRestored,
-                                onSimilarClick = { track, scrollIndex, scrollOffset ->
-                                    actions.showSimilar(track, scrollIndex, scrollOffset)
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = Dimens.DesktopMaxContentWidth)
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                    ) {
+                        DesktopTopBar(
+                            selectedTab = selectedTab,
+                            onTabSelect = { selectedTab = it },
+                        ) {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = {
+                                    val direction =
+                                        if (targetState.ordinal > initialState.ordinal) 1 else -1
+                                    (fadeIn(tween(200)) +
+                                        scaleIn(
+                                            initialScale = 0.96f,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.7f,
+                                                stiffness = 500f,
+                                            ),
+                                        ) +
+                                        slideInHorizontally(tween(260)) { width ->
+                                            direction * width / 20
+                                        }
+                                        ) togetherWith (
+                                        fadeOut(tween(120)) +
+                                            slideOutHorizontally(tween(180)) { width ->
+                                                -direction * width / 28
+                                            }
+                                        )
                                 },
-                                onOpenSearch = { searchOpen = true },
-                                onClearSearch = actions::clearSearch,
-                                onRefresh = actions::refresh,
-                                onLoadMore = actions::loadMore,
-                                onTrackClick = { actions.play(it, state.tracks) },
-                                onToggleSave = actions::toggleSave,
-                                onToggleDownload = actions::download,
-                                bottomInset = bottomInset,
-                            )
+                                label = "desktopTopBarLeading",
+                            ) { tab ->
+                                when (tab) {
+                                    NavigationTab.Home -> SearchRow(
+                                        query = state.searchSummary,
+                                        onClick = { searchOpen = true },
+                                        onClear = actions::clearSearch,
+                                        shortcutHint = "Ctrl K",
+                                        height = Dimens.PillTabsHeight,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
 
-                            NavigationTab.Library -> LibraryScreen(
-                                historyTracks = state.history,
-                                savedTracks = state.saved,
-                                downloadedTracks = state.downloads,
-                                downloadedIds = downloadedIds,
-                                downloadingIds = state.downloadingIds,
-                                onTrackClick = { track, list -> actions.play(track, list) },
-                                onToggleDownload = actions::download,
-                                onSimilarClick = { track ->
-                                    selectedTab = NavigationTab.Home
-                                    actions.showSimilar(track, 0, 0)
+                                    NavigationTab.Library -> PillTabs(
+                                        selectedTab = librarySubTab,
+                                        onTabSelected = { librarySubTab = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+
+                                    NavigationTab.Settings -> Text(
+                                        text = "Settings",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                    )
+                                }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                        ) {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = { tabTransition() },
+                                label = "desktopScreenTabTransition",
+                                modifier = Modifier.fillMaxSize(),
+                            ) { tab ->
+                                screenContent(tab, true)
+                            }
+
+                            MiniPlayer(
+                                player = state.player,
+                                progress = progress,
+                                isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
+                                isExpanded = isPlayerExpanded,
+                                onExpandedChange = { isPlayerExpanded = it },
+                                onTogglePlayPause = actions::togglePlayPause,
+                                onToggleSave = {
+                                    state.player.currentTrack?.let(actions::toggleSave)
                                 },
-                                bottomInset = bottomInset,
-                            )
-
-                            NavigationTab.Settings -> SettingsScreen(
-                                blockedTags = state.blockedTags,
-                                downloadFolderLabel = state.downloadFolderLabel,
-                                downloadTreeUri = state.downloadTreeUri,
-                                tagLookup = actions::suggestTags,
-                                hotaudioConnected = state.hotaudioConnected,
-                                audiochanConnected = state.audiochanConnected,
-                                mediaSessionServiceEnabled = state.mediaSessionServiceEnabled,
-                                onToggleMediaSessionService = actions::toggleMediaSessionService,
-                                onClearHotaudioClearance = actions::clearHotaudioClearance,
-                                onClearAudiochanClearance = actions::clearAudiochanClearance,
-                                onAddBlockedTag = actions::addBlockedTag,
-                                onRemoveBlockedTag = actions::removeBlockedTag,
-                                onDownloadTreeChange = actions::setDownloadTree,
-                                onClearDownloads = actions::clearDownloads,
-                                platform = settingsPlatform,
-                                appVersion = appVersion,
+                                onNextTrack = actions::nextTrack,
+                                onDismiss = actions::dismissPlayer,
+                                onSeek = actions::seekTo,
+                                modifier = Modifier.align(Alignment.BottomCenter),
                             )
                         }
                     }
 
-                    // Floats over the content, so the area around the pill is transparent.
-                    MiniPlayer(
-                        player = state.player,
-                        progress = progress,
-                        isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
-                        isExpanded = isPlayerExpanded,
-                        onExpandedChange = { isPlayerExpanded = it },
-                        onTogglePlayPause = actions::togglePlayPause,
-                        onToggleSave = {
-                            state.player.currentTrack?.let(actions::toggleSave)
-                        },
-                        onNextTrack = actions::nextTrack,
-                        onDismiss = actions::dismissPlayer,
-                        onSeek = actions::seekTo,
-                        modifier = Modifier.align(Alignment.BottomCenter),
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 24.dp + bottomInset),
                     )
-
-                    if (selectedTab == NavigationTab.Home && !searchOpen) {
-                        SearchFab(
-                            onClick = { searchOpen = true },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 16.dp + bottomInset),
-                        )
-                    }
                 }
+            } else {
+                Scaffold(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("app_scaffold"),
+                    containerColor = MaterialTheme.colorScheme.background,
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    bottomBar = {
+                        if (!useNavigationRail) {
+                            AppNavBar(
+                                selectedTab = selectedTab,
+                                onTabSelect = { selectedTab = it },
+                            )
+                        }
+                    }
+                ) { innerPadding ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        ) {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = { tabTransition() },
+                                label = "screenTabTransition",
+                                modifier = Modifier.fillMaxSize(),
+                            ) { tab ->
+                                screenContent(tab, false)
+                            }
 
-                if (useNavigationRail) {
-                    AppNavRail(
-                        selectedTab = selectedTab,
-                        onTabSelect = { selectedTab = it },
-                    )
+                            // Floats over the content, so the area around the pill is transparent.
+                            MiniPlayer(
+                                player = state.player,
+                                progress = progress,
+                                isSaved = state.player.currentTrack?.let { it.id in savedIds } == true,
+                                isExpanded = isPlayerExpanded,
+                                onExpandedChange = { isPlayerExpanded = it },
+                                onTogglePlayPause = actions::togglePlayPause,
+                                onToggleSave = {
+                                    state.player.currentTrack?.let(actions::toggleSave)
+                                },
+                                onNextTrack = actions::nextTrack,
+                                onDismiss = actions::dismissPlayer,
+                                onSeek = actions::seekTo,
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+
+                            if (selectedTab == NavigationTab.Home && !searchOpen) {
+                                SearchFab(
+                                    onClick = { searchOpen = true },
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(end = 16.dp, bottom = 16.dp + bottomInset),
+                                )
+                            }
+                        }
+
+                        if (useNavigationRail) {
+                            AppNavRail(
+                                selectedTab = selectedTab,
+                                onTabSelect = { selectedTab = it },
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
 
-    if (searchOpen) {
-        SearchSheet(
-            initialQuery = state.query,
-            initialTags = state.includeTags,
-            initialExcludeTags = state.excludeTags,
-            initialAuthors = state.authors,
-            initialHosts = state.hosts,
-            defaultSort = state.sort,
-            defaultWindow = state.window,
-            tagLookup = actions::suggestTags,
-            authorLookup = actions::suggestAuthors,
-            onDismiss = { searchOpen = false },
-            onApply = { request ->
-                actions.applySearch(request)
-                searchOpen = false
-            },
-        )
+        val searchSheet: @Composable (Boolean) -> Unit = { desktopOverlay ->
+            SearchSheet(
+                initialQuery = state.query,
+                initialTags = state.includeTags,
+                initialExcludeTags = state.excludeTags,
+                initialAuthors = state.authors,
+                initialHosts = state.hosts,
+                defaultSort = state.sort,
+                defaultWindow = state.window,
+                tagLookup = actions::suggestTags,
+                authorLookup = actions::suggestAuthors,
+                onDismiss = { searchOpen = false },
+                onApply = { request ->
+                    actions.applySearch(request)
+                    searchOpen = false
+                },
+                desktopOverlay = desktopOverlay,
+            )
+        }
+
+        if (useDesktopShell) {
+            AnimatedVisibility(
+                visible = searchOpen,
+                enter = fadeIn(tween(180)) +
+                    scaleIn(
+                        initialScale = 0.90f,
+                        animationSpec = spring(
+                            dampingRatio = 0.55f,
+                            stiffness = 520f,
+                        ),
+                    ) +
+                    slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = 0.7f,
+                            stiffness = 450f,
+                        ),
+                    ) { height -> -height / 36 },
+                exit = fadeOut(tween(140)) +
+                    scaleOut(
+                        targetScale = 0.94f,
+                        animationSpec = tween(170),
+                    ) +
+                    slideOutVertically(tween(170)) { height -> -height / 60 },
+                label = "desktopSearchVisibility",
+            ) {
+                searchSheet(true)
+            }
+        } else if (searchOpen) {
+            searchSheet(false)
+        }
     }
 }

@@ -291,7 +291,7 @@ jobs:
             cp -L "$sdl_lib" desktopApp/packaging/bundle/libSDL3.so.0
           fi
 
-          VERSION="2.1.0"
+          VERSION="2.1.1"
           cp desktopApp/packaging/nfpm.yaml /tmp/nfpm.yaml
           sed -i "s/\${VERSION}/$VERSION/g" /tmp/nfpm.yaml
 

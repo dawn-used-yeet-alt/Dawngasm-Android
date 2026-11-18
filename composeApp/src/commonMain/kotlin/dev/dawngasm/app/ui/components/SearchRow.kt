@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.dawngasm.app.ui.theme.Dimens
 
@@ -37,12 +38,14 @@ fun SearchRow(
     onClick: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    shortcutHint: String? = null,
+    height: Dp = Dimens.SearchRowHeight,
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 2.dp)
-            .height(Dimens.SearchRowHeight)
+            .height(height)
             .clip(CircleShape)
             .clickable(onClick = onClick)
             .testTag("search_row"),
@@ -86,6 +89,23 @@ fun SearchRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (shortcutHint != null && query.isBlank()) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    tonalElevation = 0.dp,
+                ) {
+                    Text(
+                        text = shortcutHint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("search_shortcut_hint"),
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
             if (query.isNotBlank()) {
                 IconButton(

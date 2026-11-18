@@ -71,7 +71,9 @@ fun main(args: Array<String>) {
         val initialSize = if (!isDefaultOrNull && savedWidth!! > 0 && savedHeight!! > 0) {
             DpSize(savedWidth.dp, savedHeight.dp)
         } else {
-            DpSize.Unspecified
+            // Open wide enough for the desktop shell; resizing below the
+            // breakpoint animates back to the compact, touch-first layout.
+            DpSize(1280.dp, 820.dp)
         }
         val windowState = rememberWindowState(size = initialSize)
 
@@ -132,6 +134,7 @@ fun main(args: Array<String>) {
                         actions = presenter,
                         settingsPlatform = settingsActions,
                         appVersion = DesktopInfo.VERSION,
+                        isDesktop = true,
                     )
                 }
 
