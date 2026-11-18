@@ -26,12 +26,10 @@ object Dimens {
     val DesktopNavGap = 18.dp
     val DesktopSectionGap = 20.dp
 
-    // Desktop search stays compact: the field does not stretch across the
-    // whole header, and the panel is narrower than the field it opens under.
-    val DesktopSearchFieldHeight = 46.dp
-    val DesktopSearchFieldMaxWidth = 760.dp
+    // Desktop search stays compact: the panel is narrower than the header
+    // field it opens under.
     val DesktopSearchPanelWidth = 680.dp
-    val DesktopSearchPanelTopPadding = 78.dp
+    val DesktopSearchPanelTopPadding = 88.dp
     val DesktopSearchPanelBottomPadding = 24.dp
 
     // Material 3 Expressive grouped cards.

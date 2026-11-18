@@ -1,7 +1,9 @@
 package dev.dawngasm.app
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -9,7 +11,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.focusable
@@ -80,6 +84,38 @@ private val WideLayoutBreakpoint = 720.dp
 private val DesktopShellBreakpoint = 840.dp
 
 private const val SEEK_STEP_MS = 10_000L
+
+/**
+ * Direction-aware page switch: the incoming page drifts in from the side of
+ * the tab order it lives on, with a springy scale so the change reads as a
+ * deliberate move instead of a plain cross-fade.
+ */
+private fun AnimatedContentTransitionScope<NavigationTab>.tabTransition(): ContentTransform {
+    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+    return (
+        fadeIn(tween(240)) +
+            scaleIn(
+                initialScale = 0.965f,
+                animationSpec = spring(
+                    dampingRatio = 0.6f,
+                    stiffness = 420f,
+                ),
+            ) +
+            slideInHorizontally(
+                animationSpec = spring(
+                    dampingRatio = 0.72f,
+                    stiffness = 420f,
+                ),
+            ) { width -> direction * width / 14 }
+        ) togetherWith (
+        fadeOut(tween(150)) +
+            scaleOut(
+                targetScale = 1.015f,
+                animationSpec = tween(200),
+            ) +
+            slideOutHorizontally(tween(210)) { width -> -direction * width / 22 }
+        )
+}
 
 @Composable
 fun DawngasmApp(
@@ -354,13 +390,36 @@ fun DawngasmApp(
             targetState = useDesktopShell,
             transitionSpec = {
                 val enteringDesktop = targetState
-                val enterSlide = if (enteringDesktop) -1f / 16f else 1f / 14f
-                val exitSlide = if (enteringDesktop) 1f / 22f else -1f / 22f
-                (fadeIn(tween(280)) + slideInVertically(tween(360)) { height ->
-                    (height * enterSlide).toInt()
-                }) togetherWith (fadeOut(tween(160)) + slideOutVertically(tween(220)) { height ->
-                    (height * exitSlide).toInt()
-                })
+                // Desktop settles down from above; the phone layout rises up
+                // from the bottom. A bouncy scale gives the reflow weight.
+                val enterSlide = if (enteringDesktop) -1f / 9f else 1f / 9f
+                val exitSlide = if (enteringDesktop) 1f / 26f else -1f / 26f
+                val enterScale = if (enteringDesktop) 0.92f else 0.95f
+                val exitScale = if (enteringDesktop) 1.04f else 0.95f
+                (fadeIn(tween(220)) +
+                    scaleIn(
+                        initialScale = enterScale,
+                        animationSpec = spring(
+                            dampingRatio = 0.6f,
+                            stiffness = 380f,
+                        ),
+                    ) +
+                    slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = 0.72f,
+                            stiffness = 360f,
+                        ),
+                    ) { height -> (height * enterSlide).toInt() }
+                    ) togetherWith (
+                    fadeOut(tween(160)) +
+                        scaleOut(
+                            targetScale = exitScale,
+                            animationSpec = tween(240),
+                        ) +
+                        slideOutVertically(tween(220)) { height ->
+                            (height * exitSlide).toInt()
+                        }
+                    )
             },
             label = "shellLayoutTransition",
             modifier = Modifier.fillMaxSize(),
@@ -383,7 +442,25 @@ fun DawngasmApp(
                             AnimatedContent(
                                 targetState = selectedTab,
                                 transitionSpec = {
-                                    fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+                                    val direction =
+                                        if (targetState.ordinal > initialState.ordinal) 1 else -1
+                                    (fadeIn(tween(200)) +
+                                        scaleIn(
+                                            initialScale = 0.96f,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.7f,
+                                                stiffness = 500f,
+                                            ),
+                                        ) +
+                                        slideInHorizontally(tween(260)) { width ->
+                                            direction * width / 20
+                                        }
+                                        ) togetherWith (
+                                        fadeOut(tween(120)) +
+                                            slideOutHorizontally(tween(180)) { width ->
+                                                -direction * width / 28
+                                            }
+                                        )
                                 },
                                 label = "desktopTopBarLeading",
                             ) { tab ->
@@ -393,10 +470,8 @@ fun DawngasmApp(
                                         onClick = { searchOpen = true },
                                         onClear = actions::clearSearch,
                                         shortcutHint = "Ctrl K",
-                                        height = Dimens.DesktopSearchFieldHeight,
-                                        modifier = Modifier
-                                            .widthIn(max = Dimens.DesktopSearchFieldMaxWidth)
-                                            .fillMaxWidth(),
+                                        height = Dimens.PillTabsHeight,
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
 
                                     NavigationTab.Library -> PillTabs(
@@ -421,15 +496,7 @@ fun DawngasmApp(
                         ) {
                             AnimatedContent(
                                 targetState = selectedTab,
-                                transitionSpec = {
-                                    (fadeIn(tween(220)) + scaleIn(
-                                        initialScale = 0.975f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioLowBouncy,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
-                                    )) togetherWith (fadeOut(tween(130)) + scaleOut(targetScale = 1.01f))
-                                },
+                                transitionSpec = { tabTransition() },
                                 label = "desktopScreenTabTransition",
                                 modifier = Modifier.fillMaxSize(),
                             ) { tab ->
@@ -489,15 +556,7 @@ fun DawngasmApp(
                         ) {
                             AnimatedContent(
                                 targetState = selectedTab,
-                                transitionSpec = {
-                                    (fadeIn(tween(220)) + scaleIn(
-                                        initialScale = 0.975f,
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioLowBouncy,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
-                                    )) togetherWith (fadeOut(tween(130)) + scaleOut(targetScale = 1.01f))
-                                },
+                                transitionSpec = { tabTransition() },
                                 label = "screenTabTransition",
                                 modifier = Modifier.fillMaxSize(),
                             ) { tab ->
@@ -542,7 +601,7 @@ fun DawngasmApp(
             }
         }
 
-        if (searchOpen) {
+        val searchSheet: @Composable (Boolean) -> Unit = { desktopOverlay ->
             SearchSheet(
                 initialQuery = state.query,
                 initialTags = state.includeTags,
@@ -558,8 +617,39 @@ fun DawngasmApp(
                     actions.applySearch(request)
                     searchOpen = false
                 },
-                desktopOverlay = useDesktopShell,
+                desktopOverlay = desktopOverlay,
             )
+        }
+
+        if (useDesktopShell) {
+            AnimatedVisibility(
+                visible = searchOpen,
+                enter = fadeIn(tween(180)) +
+                    scaleIn(
+                        initialScale = 0.90f,
+                        animationSpec = spring(
+                            dampingRatio = 0.55f,
+                            stiffness = 520f,
+                        ),
+                    ) +
+                    slideInVertically(
+                        animationSpec = spring(
+                            dampingRatio = 0.7f,
+                            stiffness = 450f,
+                        ),
+                    ) { height -> -height / 36 },
+                exit = fadeOut(tween(140)) +
+                    scaleOut(
+                        targetScale = 0.94f,
+                        animationSpec = tween(170),
+                    ) +
+                    slideOutVertically(tween(170)) { height -> -height / 60 },
+                label = "desktopSearchVisibility",
+            ) {
+                searchSheet(true)
+            }
+        } else if (searchOpen) {
+            searchSheet(false)
         }
     }
 }

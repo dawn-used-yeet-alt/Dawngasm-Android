@@ -564,28 +564,8 @@ private fun DesktopSearchPanel(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    var appeared by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { appeared = true }
-
-    val scrimAlpha by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0f,
-        animationSpec = tween(180),
-        label = "desktopSearchScrim",
-    )
-    val panelAlpha by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0f,
-        animationSpec = tween(200),
-        label = "desktopSearchAlpha",
-    )
-    val panelScale by animateFloatAsState(
-        targetValue = if (appeared) 1f else 0.97f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "desktopSearchScale",
-    )
-
+    // Visibility (enter/exit scale, fade and slide) is driven by the caller so
+    // the panel can animate out instead of disappearing instantly.
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val availableWidth = (maxWidth - Dimens.DesktopHorizontalPadding * 2).coerceAtLeast(0.dp)
         val panelWidth = Dimens.DesktopSearchPanelWidth.coerceAtMost(availableWidth)
@@ -598,7 +578,7 @@ private fun DesktopSearchPanel(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f * scrimAlpha))
+                .background(Color.Black.copy(alpha = 0.32f))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -616,11 +596,6 @@ private fun DesktopSearchPanel(
                 )
                 .width(panelWidth)
                 .heightIn(max = panelMaxHeight)
-                .graphicsLayer {
-                    scaleX = panelScale
-                    scaleY = panelScale
-                    alpha = panelAlpha
-                }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
