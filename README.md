@@ -1,4 +1,4 @@
-# Dawngasm (Android)
+# Dawngasm
 
 An Android app to browse, download, and stream audios from r/gonewildaudio and adjacent subreddits.
 
