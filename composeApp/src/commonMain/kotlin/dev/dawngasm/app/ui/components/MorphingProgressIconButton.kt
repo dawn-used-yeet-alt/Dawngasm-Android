@@ -1,3 +1,6 @@
+// Shamelessly stolen from 
+// https://github.com/brahmkshatriya/echo/blob/compose/client/src/commonMain/kotlin/ui/components/MorphingProgressIconButton.kt
+
 package dev.dawngasm.app.ui.components
 
 import androidx.compose.animation.core.LinearEasing
