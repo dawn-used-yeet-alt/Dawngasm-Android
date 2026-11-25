@@ -8,6 +8,7 @@ import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlatformFileOps
+import dev.dawngasm.app.data.PlatformSecureStorage
 
 /**
  * Initializes the hotaudio native runtime before any Activity or network call.
@@ -18,6 +19,8 @@ class DawngasmApplication : Application() {
         super.onCreate()
         HotaudioLog.i("Application.onCreate: initializing hotaudio runtime")
         PlatformFileOps.setCacheDir(cacheDir.absolutePath)
+        PlatformFileOps.setDataDir(filesDir.absolutePath)
+        PlatformSecureStorage.init(this)
         if (HotaudioBridgeProvider.bridge == null) {
             HotaudioBridgeProvider.bridge = AndroidHotaudioBridge()
         }

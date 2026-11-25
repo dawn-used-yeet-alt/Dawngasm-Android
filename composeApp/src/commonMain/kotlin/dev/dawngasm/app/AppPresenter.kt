@@ -5,11 +5,16 @@ import dev.dawngasm.app.data.AudioUrlResolver
 import dev.dawngasm.app.data.CookieUtils
 import dev.dawngasm.app.data.DawngasmApi
 import dev.dawngasm.app.data.FileSaver
+import dev.dawngasm.app.data.HistoryStore
 import dev.dawngasm.app.data.HotaudioBridgeProvider
 import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.HotaudioStreamer
+import dev.dawngasm.app.data.ImportMode
 import dev.dawngasm.app.data.Network
 import dev.dawngasm.app.data.PlatformFileOps
+import dev.dawngasm.app.data.SyncBackendType
+import dev.dawngasm.app.data.SyncEngine
+import dev.dawngasm.app.data.SyncStatus
 import dev.dawngasm.app.data.TrackDownloader
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.AuthorSuggestion
@@ -44,8 +49,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private const val MAX_HISTORY = 100
-
 data class FeedSnapshot(
     val tracks: List<Track>,
     val query: String,
@@ -78,6 +81,31 @@ class AppPresenter(
     coroutineDispatcher: CoroutineDispatcher = defaultPresenterDispatcher(),
 ) : DawngasmActions {
     private val scope = CoroutineScope(coroutineDispatcher + SupervisorJob())
+    private val historyStore = HistoryStore()
+    private val syncEngine = SyncEngine(
+        prefs = prefs,
+        historyStore = historyStore,
+        scope = scope,
+        onStateApplied = { applied ->
+            val prev = _uiState.value
+            val feedChanged = prev.blockedTags != applied.blockedTags ||
+                prev.sort != applied.sort ||
+                prev.window != applied.window
+            _uiState.update { current ->
+                current.copy(
+                    saved = applied.saved,
+                    history = applied.history,
+                    blockedTags = applied.blockedTags,
+                    sort = applied.sort,
+                    window = applied.window,
+                    syncStatus = current.syncStatus.copy(config = applied.config),
+                )
+            }
+            if (feedChanged) {
+                loadFeed(reset = true)
+            }
+        },
+    )
 
     private val _uiState = MutableStateFlow(initialState())
     val uiState: StateFlow<AppUiState> = _uiState.asStateFlow()
@@ -100,6 +128,23 @@ class AppPresenter(
         }
         if (prefs.hotaudioClearance() != null) {
             HotaudioRuntime.applyClearance(prefs)
+        }
+
+        scope.launch {
+            val loadedHistory = historyStore.load(
+                legacyTracks = prefs.history(),
+                onLegacyMigrated = prefs::clearLegacyHistory,
+            )
+            _uiState.update { it.copy(history = loadedHistory) }
+            if (prefs.syncConfig().enabled) {
+                syncEngine.syncNow()
+            }
+        }
+
+        scope.launch {
+            syncEngine.status.collect { status ->
+                _uiState.update { it.copy(syncStatus = status) }
+            }
         }
 
         scope.launch {
@@ -140,7 +185,7 @@ class AppPresenter(
         return AppUiState(
             isLoading = true,
             saved = prefs.saved(),
-            history = prefs.history(),
+            history = emptyList(),
             downloads = prefs.downloads(),
             query = "",
             sort = prefs.sort(),
@@ -151,6 +196,7 @@ class AppPresenter(
             hotaudioConnected = hasHotaudioClearance,
             audiochanConnected = hasAudiochanClearance,
             mediaSessionServiceEnabled = prefs.mediaSessionServiceEnabled(),
+            syncStatus = SyncStatus(config = prefs.syncConfig()),
         )
     }
 
@@ -345,6 +391,7 @@ class AppPresenter(
         val next = (_uiState.value.blockedTags + tag).distinct()
         _uiState.update { it.copy(blockedTags = next) }
         prefs.saveBlockedTags(next)
+        scope.launch { syncEngine.onBlockedTagsChanged(next) }
         loadFeed(reset = true)
     }
 
@@ -352,12 +399,17 @@ class AppPresenter(
         val next = _uiState.value.blockedTags.filterNot { it == tag }
         _uiState.update { it.copy(blockedTags = next) }
         prefs.saveBlockedTags(next)
+        scope.launch { syncEngine.onBlockedTagsChanged(next) }
         loadFeed(reset = true)
     }
 
     private fun persistFeed() {
         val state = _uiState.value
+        val changed = state.sort != prefs.sort() || state.window != prefs.window()
         prefs.saveFeed(state.sort, state.window)
+        if (changed) {
+            scope.launch { syncEngine.onFeedSettingsChanged() }
+        }
     }
 
     private fun loadFeed(reset: Boolean, refreshing: Boolean = false) {
@@ -444,6 +496,7 @@ class AppPresenter(
         }
         prefs.saveSaved(next)
         _uiState.update { it.copy(saved = next) }
+        scope.launch { syncEngine.onSavedChanged(next) }
     }
 
     override fun clearDownloads() {
@@ -452,10 +505,74 @@ class AppPresenter(
     }
 
     private fun recordHistory(track: Track) {
-        val next = (listOf(track) + _uiState.value.history.filterNot { it.id == track.id })
-            .take(MAX_HISTORY)
-        prefs.saveHistory(next)
-        _uiState.update { it.copy(history = next) }
+        scope.launch(Dispatchers.Default) {
+            val updated = historyStore.recordPlay(track)
+            _uiState.update { it.copy(history = updated) }
+            syncEngine.onHistoryRecorded()
+        }
+    }
+
+    // --- backup & sync ------------------------------------------------------
+
+    override suspend fun exportEncryptedBackup(password: String): Result<String> =
+        runCatching { syncEngine.exportEncrypted(password) }
+
+    override suspend fun importEncryptedBackup(
+        source: String,
+        password: String,
+        mode: ImportMode,
+    ): Result<Unit> = runCatching {
+        syncEngine.importEncrypted(source, password, mode)
+        emitMessage("Backup imported")
+    }
+
+    override suspend fun configureSync(
+        backend: SyncBackendType,
+        remoteUrl: String,
+        password: String,
+        authToken: String?,
+        gistFilename: String,
+    ): Result<SyncStatus> = runCatching {
+        val status = syncEngine.configureSync(backend, remoteUrl, password, authToken, gistFilename)
+        if (status.config.lastSyncError == null) {
+            emitMessage("Sync enabled and updated")
+        } else {
+            emitMessage("Sync error: ${status.config.lastSyncError}", isError = true)
+        }
+        status
+    }
+
+    override suspend fun unlockSync(password: String): Result<SyncStatus> = runCatching {
+        val status = syncEngine.unlockWithPassword(password)
+        if (status.config.lastSyncError == null) {
+            emitMessage("Sync unlocked")
+        }
+        status
+    }
+
+    override fun syncNow() {
+        scope.launch {
+            val status = syncEngine.syncNow()
+            val error = status.config.lastSyncError
+            if (error != null) {
+                emitMessage("Sync failed: $error", isError = true)
+            } else {
+                emitMessage("Synced")
+            }
+        }
+    }
+
+    override fun disableSync() {
+        syncEngine.disableSync()
+        emitMessage("Sync disabled")
+    }
+
+    override fun notifyMessage(text: String, isError: Boolean) {
+        emitMessage(text, isError = isError)
+    }
+
+    suspend fun flushSync() {
+        syncEngine.flushPendingSync()
     }
 
     // --- downloads ----------------------------------------------------------

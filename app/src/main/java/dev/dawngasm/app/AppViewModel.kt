@@ -29,16 +29,23 @@ import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import dev.dawngasm.app.data.AndroidTrackDownloader
 import dev.dawngasm.app.data.AppPreferences
 import dev.dawngasm.app.data.AudioResolver
 import dev.dawngasm.app.data.DawngasmApi
 import dev.dawngasm.app.data.HeaderDataSourceFactory
+import dev.dawngasm.app.data.HistoryStore
 import dev.dawngasm.app.data.HotaudioLog
 import dev.dawngasm.app.data.HotaudioRuntime
 import dev.dawngasm.app.data.HotaudioStreamer
+import dev.dawngasm.app.data.ImportMode
 import dev.dawngasm.app.data.Network
+import dev.dawngasm.app.data.PlatformFileOps
+import dev.dawngasm.app.data.PlatformSecureStorage
 import dev.dawngasm.app.data.PlaybackQueue
-import dev.dawngasm.app.data.AndroidTrackDownloader
+import dev.dawngasm.app.data.SyncBackendType
+import dev.dawngasm.app.data.SyncEngine
+import dev.dawngasm.app.data.SyncStatus
 import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.SearchSyntax
@@ -54,6 +61,7 @@ import java.io.File
 import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -89,6 +97,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     private val api = DawngasmApi()
     private val resolver = AudioResolver(application)
     private val downloader = AndroidTrackDownloader(application)
+    private val historyStore = HistoryStore()
+    private val syncEngine: SyncEngine
+
+    init {
+        PlatformFileOps.setCacheDir(application.cacheDir.absolutePath)
+        PlatformFileOps.setDataDir(application.filesDir.absolutePath)
+        PlatformSecureStorage.init(application)
+        syncEngine = SyncEngine(
+            prefs = prefs,
+            historyStore = historyStore,
+            scope = viewModelScope,
+            onStateApplied = { applied ->
+                val prev = _uiState.value
+                val feedChanged = prev.blockedTags != applied.blockedTags ||
+                    prev.sort != applied.sort ||
+                    prev.window != applied.window
+                _uiState.update { current ->
+                    current.copy(
+                        saved = applied.saved,
+                        history = applied.history,
+                        blockedTags = applied.blockedTags,
+                        sort = applied.sort,
+                        window = applied.window,
+                        syncStatus = current.syncStatus.copy(config = applied.config),
+                    )
+                }
+                if (feedChanged) {
+                    loadFeed(reset = true)
+                }
+            },
+        )
+    }
 
     private val controllerListener = object : MediaController.Listener {
         override fun onCustomCommand(
@@ -237,6 +277,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
             ensureMediaController()
         }
 
+        viewModelScope.launch {
+            val loadedHistory = historyStore.load(
+                legacyTracks = prefs.history(),
+                onLegacyMigrated = prefs::clearLegacyHistory,
+            )
+            _uiState.update { it.copy(history = loadedHistory) }
+            if (prefs.syncConfig().enabled) {
+                syncEngine.syncNow()
+            }
+        }
+
+        viewModelScope.launch {
+            syncEngine.status.collect { status ->
+                _uiState.update { it.copy(syncStatus = status) }
+            }
+        }
+
         loadFeed(reset = true)
         startProgressLoop()
         HotaudioLog.i("AppViewModel.init: ensuring hotaudio runtime")
@@ -253,7 +310,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         return AppUiState(
             isLoading = true,
             saved = prefs.saved(),
-            history = prefs.history(),
+            history = emptyList(),
             downloads = prefs.downloads(),
             query = "",
             sort = prefs.sort(),
@@ -264,6 +321,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
             hotaudioConnected = prefs.hotaudioClearance() != null,
             audiochanConnected = prefs.audiochanClearance() != null,
             mediaSessionServiceEnabled = prefs.mediaSessionServiceEnabled(),
+            syncStatus = SyncStatus(config = prefs.syncConfig()),
         )
     }
 
@@ -455,6 +513,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         val next = (_uiState.value.blockedTags + tag).distinct()
         _uiState.update { it.copy(blockedTags = next) }
         prefs.saveBlockedTags(next)
+        viewModelScope.launch { syncEngine.onBlockedTagsChanged(next) }
         loadFeed(reset = true)
     }
 
@@ -462,12 +521,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         val next = _uiState.value.blockedTags.filterNot { it == tag }
         _uiState.update { it.copy(blockedTags = next) }
         prefs.saveBlockedTags(next)
+        viewModelScope.launch { syncEngine.onBlockedTagsChanged(next) }
         loadFeed(reset = true)
     }
 
     private fun persistFeed() {
         val state = _uiState.value
+        val changed = state.sort != prefs.sort() || state.window != prefs.window()
         prefs.saveFeed(state.sort, state.window)
+        if (changed) {
+            viewModelScope.launch { syncEngine.onFeedSettingsChanged() }
+        }
     }
 
     private fun loadFeed(reset: Boolean, refreshing: Boolean = false) {
@@ -555,6 +619,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         }
         prefs.saveSaved(next)
         _uiState.update { it.copy(saved = next) }
+        viewModelScope.launch { syncEngine.onSavedChanged(next) }
     }
 
     override fun clearDownloads() {
@@ -563,10 +628,76 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
     }
 
     private fun recordHistory(track: Track) {
-        val next = (listOf(track) + _uiState.value.history.filterNot { it.id == track.id })
-            .take(MAX_HISTORY)
-        prefs.saveHistory(next)
-        _uiState.update { it.copy(history = next) }
+        viewModelScope.launch(Dispatchers.Default) {
+            val updated = historyStore.recordPlay(track)
+            _uiState.update { it.copy(history = updated) }
+            syncEngine.onHistoryRecorded()
+        }
+    }
+
+    // --- backup & sync ------------------------------------------------------
+
+    override suspend fun exportEncryptedBackup(password: String): Result<String> =
+        runCatching { syncEngine.exportEncrypted(password) }
+
+    override suspend fun importEncryptedBackup(
+        source: String,
+        password: String,
+        mode: ImportMode,
+    ): Result<Unit> = runCatching {
+        syncEngine.importEncrypted(source, password, mode)
+        emitMessage("Backup imported")
+    }
+
+    override suspend fun configureSync(
+        backend: SyncBackendType,
+        remoteUrl: String,
+        password: String,
+        authToken: String?,
+        gistFilename: String,
+    ): Result<SyncStatus> = runCatching {
+        val status = syncEngine.configureSync(backend, remoteUrl, password, authToken, gistFilename)
+        if (status.config.lastSyncError == null) {
+            emitMessage("Sync enabled and updated")
+        } else {
+            emitMessage("Sync error: ${status.config.lastSyncError}", isError = true)
+        }
+        status
+    }
+
+    override suspend fun unlockSync(password: String): Result<SyncStatus> = runCatching {
+        val status = syncEngine.unlockWithPassword(password)
+        if (status.config.lastSyncError == null) {
+            emitMessage("Sync unlocked")
+        }
+        status
+    }
+
+    override fun syncNow() {
+        viewModelScope.launch {
+            val status = syncEngine.syncNow()
+            val error = status.config.lastSyncError
+            if (error != null) {
+                emitMessage("Sync failed: $error", isError = true)
+            } else {
+                emitMessage("Synced")
+            }
+        }
+    }
+
+    override fun disableSync() {
+        syncEngine.disableSync()
+        emitMessage("Sync disabled")
+    }
+
+    override fun notifyMessage(text: String, isError: Boolean) {
+        emitMessage(text, isError = isError)
+    }
+
+    fun flushSync() {
+        viewModelScope.launch {
+            runCatching { syncEngine.flushPendingSync() }
+        }
     }
 
     // --- downloads ----------------------------------------------------------
@@ -702,9 +833,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
 
     private fun playViaService(track: Track, queue: List<Track>, seekToMs: Long = 0L) {
         HotaudioLog.i("AppViewModel.playViaService track=${track.id} title=${track.title}")
+        val boundedQueue = PlaybackQueue.sliceAround(
+            center = track,
+            queue = queue,
+            radius = PlaybackQueue.DEFAULT_SERVICE_QUEUE_RADIUS,
+        )
         val args = Bundle().apply {
             putString(PlaybackService.KEY_TRACK_JSON, TrackJson.toJson(track))
-            putString(PlaybackService.KEY_QUEUE_JSON, TrackJson.listToJson(queue))
+            putString(PlaybackService.KEY_QUEUE_JSON, TrackJson.listToJson(boundedQueue))
         }
         val command = SessionCommand(PlaybackService.COMMAND_PLAY_TRACK, Bundle.EMPTY)
 
@@ -1066,9 +1202,5 @@ class AppViewModel(application: Application) : AndroidViewModel(application), Da
         controllerFuture = null
         mediaController = null
         super.onCleared()
-    }
-
-    private companion object {
-        const val MAX_HISTORY = 50
     }
 }

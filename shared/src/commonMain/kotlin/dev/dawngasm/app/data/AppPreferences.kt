@@ -101,6 +101,38 @@ class AppPreferences(private val settings: Settings) {
         settings.putString(KEY_HISTORY, TrackJson.listToJson(tracks))
     }
 
+    fun clearLegacyHistory() {
+        settings.remove(KEY_HISTORY)
+    }
+
+    fun syncConfig(): SyncConfig {
+        val raw = settings.getStringOrNull(KEY_SYNC_CONFIG) ?: return SyncConfig()
+        return runCatching {
+            DawngasmBackup.json.decodeFromString(SyncConfig.serializer(), raw)
+        }.getOrDefault(SyncConfig())
+    }
+
+    fun saveSyncConfig(config: SyncConfig) {
+        settings.putString(
+            KEY_SYNC_CONFIG,
+            DawngasmBackup.json.encodeToString(SyncConfig.serializer(), config),
+        )
+    }
+
+    fun localSyncMetadata(): LocalSyncMetadata {
+        val raw = settings.getStringOrNull(KEY_SYNC_METADATA) ?: return LocalSyncMetadata()
+        return runCatching {
+            DawngasmBackup.json.decodeFromString(LocalSyncMetadata.serializer(), raw)
+        }.getOrDefault(LocalSyncMetadata())
+    }
+
+    fun saveLocalSyncMetadata(metadata: LocalSyncMetadata) {
+        settings.putString(
+            KEY_SYNC_METADATA,
+            DawngasmBackup.json.encodeToString(LocalSyncMetadata.serializer(), metadata),
+        )
+    }
+
     fun downloads(): List<Track> = TrackJson.listFromJson(settings.getStringOrNull(KEY_DOWNLOADS))
 
     fun saveDownloads(tracks: List<Track>) {
@@ -158,5 +190,7 @@ class AppPreferences(private val settings: Settings) {
         const val KEY_WINDOW_WIDTH = "window_width"
         const val KEY_WINDOW_HEIGHT = "window_height"
         const val KEY_WINDOW_MAXIMIZED = "window_maximized"
+        const val KEY_SYNC_CONFIG = "sync_config_v1"
+        const val KEY_SYNC_METADATA = "sync_metadata_v1"
     }
 }

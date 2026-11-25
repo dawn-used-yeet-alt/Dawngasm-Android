@@ -1,5 +1,9 @@
 package dev.dawngasm.app.platform
 
+import dev.dawngasm.app.data.ImportMode
+import dev.dawngasm.app.data.SyncBackendType
+import dev.dawngasm.app.data.SyncConfig
+import dev.dawngasm.app.data.SyncStatus
 import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.TagSuggestion
@@ -7,8 +11,7 @@ import dev.dawngasm.app.model.Track
 
 /**
  * Everything the shared UI needs from the app shell. The Android shell adapts
- * `AppViewModel` to this contract; iOS provides a no-op/demo implementation
- * until Phase 3 adds the shared data layer.
+ * `AppViewModel` to this contract; desktop and iOS use `AppPresenter`.
  */
 interface DawngasmActions {
     fun play(track: Track, queue: List<Track>?)
@@ -37,12 +40,24 @@ interface DawngasmActions {
     fun toggleMediaSessionService(enabled: Boolean)
     suspend fun suggestTags(prefix: String): List<TagSuggestion>
     suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion>
+    suspend fun exportEncryptedBackup(password: String): Result<String>
+    suspend fun importEncryptedBackup(source: String, password: String, mode: ImportMode): Result<Unit>
+    suspend fun configureSync(
+        backend: SyncBackendType,
+        remoteUrl: String,
+        password: String,
+        authToken: String?,
+        gistFilename: String = SyncConfig.DEFAULT_GIST_FILENAME,
+    ): Result<SyncStatus>
+    suspend fun unlockSync(password: String): Result<SyncStatus>
+    fun syncNow()
+    fun disableSync()
+    fun notifyMessage(text: String, isError: Boolean = false)
 }
 
 /**
  * Platform-owned settings actions that need an activity result launcher or a
- * native picker. Android keeps the existing SAF folder picker and clearance
- * activities; iOS uses stubs until Phase 4.
+ * native picker.
  */
 interface SettingsPlatformActions {
     fun chooseDownloadFolder()
@@ -56,4 +71,15 @@ interface SettingsPlatformActions {
     fun canOpenDownloadFolder(): Boolean = false
 
     fun openDownloadFolder() = Unit
+
+    /** Whether this shell exposes a native document picker for backup files. */
+    fun canPickBackupFiles(): Boolean = false
+
+    fun saveBackupFile(suggestedName: String, content: String, onResult: (Result<String>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("File export is not supported on this platform")))
+    }
+
+    fun pickBackupFile(onResult: (Result<String>) -> Unit) {
+        onResult(Result.failure(UnsupportedOperationException("File picker is not supported on this platform")))
+    }
 }
