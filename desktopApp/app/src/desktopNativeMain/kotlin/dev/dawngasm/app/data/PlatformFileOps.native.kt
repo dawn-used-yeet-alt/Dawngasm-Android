@@ -33,8 +33,11 @@ actual object PlatformFileOps {
     actual fun appendText(path: String, text: String) {
         val p = path.toPath()
         p.parent?.let { FileSystem.SYSTEM.createDirectories(it) }
-        FileSystem.SYSTEM.appendingSink(p).buffer().use { sink ->
+        val sink = FileSystem.SYSTEM.appendingSink(p).buffer()
+        try {
             sink.writeUtf8(text)
+        } finally {
+            sink.close()
         }
     }
 

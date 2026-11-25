@@ -506,7 +506,8 @@ class SyncEngine(
 
         try {
             var attempts = 0
-            while (true) {
+            var resultStatus: SyncStatus? = null
+            while (resultStatus == null) {
                 attempts++
                 var cachedKey = secureStorage.getString(KEY_VAULT_KEY)
                     ?.let { runCatching { BackupCrypto.decodeUrlSafeBase64(it) }.getOrNull() }
@@ -656,8 +657,9 @@ class SyncEngine(
                     lastMessage = "Synced",
                 )
                 _status.value = okStatus
-                return okStatus
+                resultStatus = okStatus
             }
+            resultStatus
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (unlock: SyncNeedsUnlockException) {
@@ -665,7 +667,7 @@ class SyncEngine(
             prefs.saveSyncConfig(failedConfig)
             val status = SyncStatus(config = failedConfig, isSyncing = false, needsUnlock = true)
             _status.value = status
-            return status
+            status
         } catch (error: Exception) {
             PlatformLog.e("SyncEngine", "Sync failed: ${error.message}", error)
             val failedConfig = workingConfig.copy(
@@ -674,7 +676,7 @@ class SyncEngine(
             prefs.saveSyncConfig(failedConfig)
             val status = SyncStatus(config = failedConfig, isSyncing = false, needsUnlock = false)
             _status.value = status
-            return status
+            status
         }
     }
 
