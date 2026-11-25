@@ -13,7 +13,6 @@ actual fun createCookieFreeHttpClient(): HttpClient =
             }
             configureRequest {
                 setAllowsCellularAccess(true)
-                setHTTPShouldHandleCookies(false)
             }
         }
         install(HttpTimeout) {
