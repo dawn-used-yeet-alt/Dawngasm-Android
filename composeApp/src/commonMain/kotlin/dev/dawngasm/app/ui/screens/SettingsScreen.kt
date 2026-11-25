@@ -35,11 +35,11 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Radio
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -987,7 +987,7 @@ private fun CrossDeviceSyncSection(
 
     SectionCard(
         modifier = modifier,
-        icon = Icons.Outlined.Hub,
+        icon = Icons.Outlined.Sync,
         title = "Cross-device sync",
         subtitle = "End-to-end encrypted conflict-free sync over HTTP/WebDAV, GitHub Gist, or a read-only link. Credentials stay in platform secure storage.",
     ) {
