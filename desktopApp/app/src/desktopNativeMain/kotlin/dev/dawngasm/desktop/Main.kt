@@ -32,6 +32,8 @@ import dev.dawngasm.app.player.NativeAudioPlayer
 import dev.dawngasm.app.ui.theme.DawngasmTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 import kotlin.native.runtime.GC
 import kotlin.native.runtime.NativeRuntimeApi
@@ -98,6 +100,11 @@ fun main(args: Array<String>) {
         Window(
             onCloseRequest = {
                 persistWindowState()
+                runBlocking {
+                    withTimeoutOrNull(1_500L) {
+                        runCatching { presenter.flushSync() }
+                    }
+                }
                 player.release()
                 exitApplication()
             },

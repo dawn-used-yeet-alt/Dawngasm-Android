@@ -11,6 +11,12 @@ actual object PlatformFileOps {
         return dir.toString()
     }
 
+    actual fun getDataDir(): String {
+        val dir = DesktopPlatform.configDir
+        runCatching { Files.createDirectories(dir) }
+        return dir.toString()
+    }
+
     actual fun fileExists(path: String): Boolean =
         runCatching { Files.exists(Path.of(path)) }.getOrDefault(false)
 
@@ -22,6 +28,19 @@ actual object PlatformFileOps {
 
     actual fun writeText(path: String, text: String) {
         DesktopFs.writeTextAtomic(Path.of(path), text)
+    }
+
+    actual fun appendText(path: String, text: String) {
+        val file = Path.of(path)
+        file.parent?.let { Files.createDirectories(it) }
+        Files.writeString(
+            file,
+            text,
+            Charsets.UTF_8,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.APPEND,
+            StandardOpenOption.WRITE,
+        )
     }
 
     actual fun readText(path: String): String? =

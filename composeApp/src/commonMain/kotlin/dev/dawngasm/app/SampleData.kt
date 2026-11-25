@@ -1,5 +1,8 @@
 package dev.dawngasm.app
 
+import dev.dawngasm.app.data.ImportMode
+import dev.dawngasm.app.data.SyncBackendType
+import dev.dawngasm.app.data.SyncStatus
 import dev.dawngasm.app.model.AudioHost
 import dev.dawngasm.app.model.AuthorSuggestion
 import dev.dawngasm.app.model.SearchRequest
@@ -93,6 +96,23 @@ object NoOpDawngasmActions : DawngasmActions {
     override fun toggleMediaSessionService(enabled: Boolean) = Unit
     override suspend fun suggestTags(prefix: String): List<TagSuggestion> = emptyList()
     override suspend fun suggestAuthors(prefix: String): List<AuthorSuggestion> = emptyList()
+    override suspend fun exportEncryptedBackup(password: String): Result<String> = Result.success("")
+    override suspend fun importEncryptedBackup(
+        source: String,
+        password: String,
+        mode: ImportMode,
+    ): Result<Unit> = Result.success(Unit)
+    override suspend fun configureSync(
+        backend: SyncBackendType,
+        remoteUrl: String,
+        password: String,
+        authToken: String?,
+        gistFilename: String,
+    ): Result<SyncStatus> = Result.success(SyncStatus())
+    override suspend fun unlockSync(password: String): Result<SyncStatus> = Result.success(SyncStatus())
+    override fun syncNow() = Unit
+    override fun disableSync() = Unit
+    override fun notifyMessage(text: String, isError: Boolean) = Unit
 }
 
 /** No-op settings platform for the iOS demo shell until Phase 4. */

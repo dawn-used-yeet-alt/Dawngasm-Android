@@ -6,10 +6,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.ComposeUIViewController
+import dev.dawngasm.app.data.PlatformFileOps
 import dev.dawngasm.app.platform.SettingsPlatformActions
 import dev.dawngasm.app.ui.screens.AudiochanClearanceScreen
 import dev.dawngasm.app.ui.screens.HotaudioClearanceScreen
 import dev.dawngasm.app.ui.theme.DawngasmTheme
+import platform.Foundation.NSDocumentDirectory
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIViewController
 
 fun MainViewController(): UIViewController = ComposeUIViewController(
@@ -41,6 +45,22 @@ fun MainViewController(): UIViewController = ComposeUIViewController(
                     !family.isNullOrBlank() -> family
                     else -> null
                 }
+            }
+
+            override fun saveBackupFile(
+                suggestedName: String,
+                content: String,
+                onResult: (Result<String>) -> Unit,
+            ) {
+                val result = runCatching {
+                    val paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true)
+                    val docsDir = paths.firstOrNull() as? String
+                        ?: error("Could not locate Documents directory")
+                    val path = "$docsDir/$suggestedName"
+                    PlatformFileOps.writeText(path, content)
+                    "Saved to Documents/$suggestedName"
+                }
+                onResult(result)
             }
         }
     }

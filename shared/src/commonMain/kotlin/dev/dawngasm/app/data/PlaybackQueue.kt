@@ -76,4 +76,35 @@ class PlaybackQueue(
         tracks = emptyList()
         currentTrack = null
     }
+
+    companion object {
+        const val DEFAULT_SERVICE_QUEUE_RADIUS = 50
+
+        /**
+         * Slices a bounded window around [center] (up to `2 * radius + 1` tracks) so
+         * passing large lists (such as unbounded history) through Android's Binder
+         * `Bundle` never hits `TransactionTooLargeException`.
+         */
+        fun sliceAround(
+            center: Track,
+            queue: List<Track>,
+            radius: Int = DEFAULT_SERVICE_QUEUE_RADIUS,
+        ): List<Track> {
+            if (queue.isEmpty()) return listOf(center)
+            val maxItems = radius * 2 + 1
+            if (queue.size <= maxItems) {
+                return if (queue.any { it.id == center.id }) queue else listOf(center) + queue.take(maxItems - 1)
+            }
+            val index = queue.indexOfFirst { it.id == center.id }
+            if (index < 0) {
+                return listOf(center) + queue.take(maxItems - 1)
+            }
+            var start = (index - radius).coerceAtLeast(0)
+            var end = (start + maxItems).coerceAtMost(queue.size)
+            if (end - start < maxItems) {
+                start = (end - maxItems).coerceAtLeast(0)
+            }
+            return queue.subList(start, end)
+        }
+    }
 }

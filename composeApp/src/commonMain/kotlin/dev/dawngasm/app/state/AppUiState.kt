@@ -1,5 +1,6 @@
 package dev.dawngasm.app.state
 
+import dev.dawngasm.app.data.SyncStatus
 import dev.dawngasm.app.model.SearchRequest
 import dev.dawngasm.app.model.Track
 
@@ -29,6 +30,7 @@ data class AppUiState(
     val hotaudioConnected: Boolean = false,
     val audiochanConnected: Boolean = false,
     val mediaSessionServiceEnabled: Boolean = true,
+    val syncStatus: SyncStatus = SyncStatus(),
     val similarSourceTrack: Track? = null,
     val canGoBack: Boolean = false,
     val pendingScrollRestore: Pair<Int, Int>? = null,

@@ -2,7 +2,9 @@ package dev.dawngasm.app.data
 
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
+import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSCachesDirectory
 import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
@@ -21,6 +23,13 @@ actual object PlatformFileOps {
     actual fun getCacheDir(): String {
         val paths = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, true)
         return (paths.firstOrNull() as? String) ?: NSTemporaryDirectory()
+    }
+
+    actual fun getDataDir(): String {
+        val paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, true)
+        val dir = (paths.firstOrNull() as? String) ?: NSTemporaryDirectory()
+        ensureDir(dir)
+        return dir
     }
 
     actual fun fileExists(path: String): Boolean =
@@ -49,6 +58,23 @@ actual object PlatformFileOps {
             NSData()
         }
         nsData.writeToFile(path, atomically = true)
+    }
+
+    actual fun appendText(path: String, text: String) {
+        val parent = path.substringBeforeLast('/', "")
+        if (parent.isNotEmpty()) {
+            ensureDir(parent)
+        }
+        val bytes = text.encodeToByteArray()
+        if (bytes.isEmpty()) return
+        val file = platform.posix.fopen(path, "ab") ?: return
+        try {
+            bytes.usePinned { pinned ->
+                platform.posix.fwrite(pinned.addressOf(0), 1.convert(), bytes.size.convert(), file)
+            }
+        } finally {
+            platform.posix.fclose(file)
+        }
     }
 
     actual fun readText(path: String): String? =
