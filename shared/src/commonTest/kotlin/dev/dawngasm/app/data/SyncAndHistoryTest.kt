@@ -139,11 +139,12 @@ class SyncAndHistoryTest {
             assertTrue(prefs.history().isEmpty(), "Legacy KEY_HISTORY should be cleared after migration")
 
             // Append more than the old 100-item cap
+            val base = dev.dawngasm.app.util.Clock.nowEpochMillis() + 1_000L
             for (i in 1..150) {
-                store.recordPlay(sampleTrack("t-$i"), playedAtMs = 1_000L + i)
+                store.recordPlay(sampleTrack("t-$i"), playedAtMs = base + i)
             }
             // Replay an older track -> moves to front without duplicating
-            store.recordPlay(sampleTrack("t-1"), playedAtMs = 9_999L)
+            store.recordPlay(sampleTrack("t-1"), playedAtMs = base + 10_000L)
 
             val reopened = HistoryStore(filePathProvider = { filePath })
             val reloaded = reopened.load()
