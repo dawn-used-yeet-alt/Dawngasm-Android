@@ -51,6 +51,8 @@ class SyncEngine(
     private val secureStorage: SecureStorage = PlatformSecureStorage,
     private val kdfParams: BackupKdfParams = BackupKdfParams(),
     private val remoteFactory: (SyncConfig, String?) -> SyncRemote? = ::defaultRemoteFactory,
+    private val gistCreator: suspend (pat: String, filename: String, initialContent: String) -> GitHubGistSyncRemote.CreatedGist =
+        { pat, filename, content -> GitHubGistSyncRemote.createPrivateGist(pat, filename, content) },
     private val onStateApplied: suspend (AppliedSyncState) -> Unit = {},
 ) {
     private val syncMutex = Mutex()
@@ -349,10 +351,65 @@ class SyncEngine(
         gistFilename: String = SyncConfig.DEFAULT_GIST_FILENAME,
     ): SyncStatus {
         require(backend != SyncBackendType.NONE) { "Select a sync backend" }
-        require(remoteUrl.isNotBlank()) { "Remote URL or Gist ID is required" }
         if (password.isEmpty()) throw BackupCryptoException("Sync password cannot be empty")
 
         val cleanToken = authToken?.trim().orEmpty()
+        val effectiveFilename = gistFilename.ifBlank { SyncConfig.DEFAULT_GIST_FILENAME }
+
+        if (backend == SyncBackendType.GITHUB_GIST && remoteUrl.isBlank()) {
+            require(cleanToken.isNotEmpty()) {
+                "Provide a Gist URL/ID or a GitHub PAT with gist scope to create a private gist"
+            }
+            secureStorage.putString(KEY_AUTH_TOKEN, cleanToken)
+
+            val now = Clock.nowEpochMillis()
+            val vaultSalt = secureRandomBytes(BackupCrypto.SALT_SIZE)
+            val finalKey = withContext(Dispatchers.Default) {
+                BackupCrypto.deriveKey(password, vaultSalt, kdfParams)
+            }
+            secureStorage.putString(KEY_VAULT_KEY, BackupCrypto.encodeUrlSafeBase64(finalKey))
+
+            val backup = buildLocalBackup(now = now, inlineLimit = null)
+            val initialEncrypted = withContext(Dispatchers.Default) {
+                BackupCrypto.encryptWithKey(
+                    jsonText = DawngasmBackup.toJson(backup),
+                    derivedKey = finalKey,
+                    salt = vaultSalt,
+                    params = kdfParams,
+                )
+            }
+            val created = gistCreator(cleanToken, effectiveFilename, initialEncrypted)
+
+            val savedConfig = SyncConfig(
+                enabled = true,
+                backend = SyncBackendType.GITHUB_GIST,
+                remoteUrl = created.htmlUrl,
+                gistFilename = effectiveFilename,
+                vaultSaltBase64 = BackupCrypto.encodeUrlSafeBase64(vaultSalt),
+                kdfMemoryKiB = kdfParams.memoryKiB,
+                kdfIterations = kdfParams.iterations,
+                kdfParallelism = kdfParams.parallelism,
+                lastEtag = created.etag,
+                lastSyncAtMs = now,
+                lastSyncError = null,
+            )
+            prefs.saveSyncConfig(savedConfig)
+            metaMutex.withLock {
+                val latest = ensureInitializedMetaLocked(now)
+                prefs.saveLocalSyncMetadata(latest.copy(dirty = false, historyDirty = false))
+            }
+            val status = SyncStatus(
+                config = savedConfig,
+                isSyncing = false,
+                needsUnlock = false,
+                lastMessage = "Created private Gist and synced",
+            )
+            _status.value = status
+            return status
+        }
+
+        require(remoteUrl.isNotBlank()) { "Remote URL or Gist ID is required" }
+
         if (cleanToken.isNotEmpty()) {
             secureStorage.putString(KEY_AUTH_TOKEN, cleanToken)
         } else {
@@ -365,7 +422,7 @@ class SyncEngine(
             enabled = true,
             backend = backend,
             remoteUrl = remoteUrl.trim(),
-            gistFilename = gistFilename.ifBlank { SyncConfig.DEFAULT_GIST_FILENAME },
+            gistFilename = effectiveFilename,
             vaultSaltBase64 = null,
             kdfMemoryKiB = kdfParams.memoryKiB,
             kdfIterations = kdfParams.iterations,
@@ -408,7 +465,7 @@ class SyncEngine(
             prefs.saveLocalSyncMetadata(meta.copy(dirty = true))
         }
         _status.value = SyncStatus(config = savedConfig)
-        return syncNow(passwordOverride = password)
+        return syncNow(passwordOverride = password, allowOverwriteUninitialized = true)
     }
 
     suspend fun unlockWithPassword(password: String): SyncStatus {
@@ -480,7 +537,10 @@ class SyncEngine(
         }
     }
 
-    suspend fun syncNow(passwordOverride: String? = null): SyncStatus = syncMutex.withLock {
+    suspend fun syncNow(
+        passwordOverride: String? = null,
+        allowOverwriteUninitialized: Boolean = false,
+    ): SyncStatus = syncMutex.withLock {
         val initialConfig = prefs.syncConfig()
         if (!initialConfig.enabled || initialConfig.backend == SyncBackendType.NONE) {
             val status = SyncStatus(config = initialConfig)
@@ -522,6 +582,14 @@ class SyncEngine(
                     val payload = pullResult.payload?.trim()
                     if (payload.isNullOrEmpty()) {
                         remoteMissingOrEmpty = true
+                    } else if (!BackupCrypto.isEncryptedBackup(payload)) {
+                        if ((allowOverwriteUninitialized || workingConfig.lastSyncAtMs == null) && !remote.isReadOnly) {
+                            // GitHub does not allow creating empty gists; treat non-encrypted placeholder
+                            // content as uninitialized on initial setup and replace it cleanly.
+                            remoteMissingOrEmpty = true
+                        } else {
+                            throw BackupCryptoException("Remote does not contain a valid Dawngasm encrypted backup")
+                        }
                     } else {
                         val header = BackupCrypto.inspectHeader(payload)
                         val storedSalt = workingConfig.vaultSaltBase64?.let {

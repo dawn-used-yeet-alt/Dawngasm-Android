@@ -970,6 +970,8 @@ private fun CrossDeviceSyncSection(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    @Suppress("DEPRECATION")
+    val clipboard = LocalClipboardManager.current
     val config = syncStatus.config
 
     var selectedBackend by rememberSaveable(config.backend) {
@@ -1007,6 +1009,31 @@ private fun CrossDeviceSyncSection(
                 },
             )
 
+            if (config.enabled && config.remoteUrl.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = config.remoteUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(config.remoteUrl))
+                            onNotifyMessage("Sync link copied", false)
+                        },
+                    ) {
+                        Text("Copy link")
+                    }
+                }
+            }
+
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1037,7 +1064,7 @@ private fun CrossDeviceSyncSection(
                 placeholder = {
                     Text(
                         when (selectedBackend) {
-                            SyncBackendType.GITHUB_GIST -> "GitHub Gist URL or ID"
+                            SyncBackendType.GITHUB_GIST -> "Gist URL/ID (leave blank with PAT to create private gist)"
                             SyncBackendType.HTTP -> "https://server.example/dawngasm.txt"
                             SyncBackendType.READ_ONLY_LINK -> "https://... or GitHub Gist/blob URL"
                             SyncBackendType.NONE -> ""
@@ -1097,8 +1124,15 @@ private fun CrossDeviceSyncSection(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                val canConfigure = !busy &&
+                    !syncStatus.isSyncing &&
+                    syncPassword.isNotEmpty() &&
+                    (
+                        remoteUrl.isNotBlank() ||
+                            (selectedBackend == SyncBackendType.GITHUB_GIST && authToken.isNotBlank())
+                        )
                 Button(
-                    enabled = !busy && !syncStatus.isSyncing && remoteUrl.isNotBlank() && syncPassword.isNotEmpty(),
+                    enabled = canConfigure,
                     onClick = {
                         scope.launch {
                             busy = true

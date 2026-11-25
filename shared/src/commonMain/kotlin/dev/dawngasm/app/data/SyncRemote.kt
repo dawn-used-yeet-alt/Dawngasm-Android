@@ -1,9 +1,11 @@
 package dev.dawngasm.app.data
 
+import dev.dawngasm.app.crypto.BackupCrypto
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
+import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -159,7 +161,7 @@ class GitHubGistSyncRemote(
         val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
         val files = root["files"]?.jsonObject ?: return RemotePullResult(null, notModified = false, etag = etag)
         val fileObj = files[filename]?.jsonObject
-            ?: BackupUrlResolver.selectGistBackupFile(files)
+            ?: findEncryptedGistFile(files)
             ?: return RemotePullResult(null, notModified = false, etag = etag)
 
         val text = readGistFileContent(fileObj)?.trim()
@@ -168,6 +170,15 @@ class GitHubGistSyncRemote(
             notModified = false,
             etag = etag,
         )
+    }
+
+    private fun findEncryptedGistFile(files: kotlinx.serialization.json.JsonObject): kotlinx.serialization.json.JsonObject? {
+        for ((_, el) in files.entries) {
+            val obj = runCatching { el.jsonObject }.getOrNull() ?: continue
+            val content = obj["content"]?.jsonPrimitive?.content.orEmpty()
+            if (BackupCrypto.isEncryptedBackup(content)) return obj
+        }
+        return null
     }
 
     override suspend fun push(payload: String, expectedEtag: String?): RemotePushResult {
@@ -263,9 +274,63 @@ class GitHubGistSyncRemote(
     private fun chunkFilename(chunkId: String): String =
         "dawngasm-history-$chunkId.txt"
 
+    data class CreatedGist(
+        val gistId: String,
+        val htmlUrl: String,
+        val etag: String?,
+    )
+
     companion object {
         private const val GIST_API_BASE = "https://api.github.com/gists"
         private const val GITHUB_API_VERSION = "2022-11-28"
+
+        suspend fun createPrivateGist(
+            pat: String,
+            filename: String = SyncConfig.DEFAULT_GIST_FILENAME,
+            initialContent: String,
+            client: HttpClient = BackupHttpClient.client,
+        ): CreatedGist {
+            require(pat.isNotBlank()) { "GitHub PAT is required to create a private gist" }
+            require(initialContent.isNotBlank()) { "Initial gist content cannot be empty" }
+            val safeFilename = filename.ifBlank { SyncConfig.DEFAULT_GIST_FILENAME }
+            val bodyJson = buildJsonObject {
+                put("description", "Dawngasm Encrypted Sync")
+                put("public", false)
+                put(
+                    "files",
+                    buildJsonObject {
+                        put(
+                            safeFilename,
+                            buildJsonObject {
+                                put("content", initialContent)
+                            },
+                        )
+                    },
+                )
+            }.toString()
+
+            val response = client.post(GIST_API_BASE) {
+                header("User-Agent", Network.APP_USER_AGENT)
+                header("Accept", "application/vnd.github+json")
+                header("X-GitHub-Api-Version", GITHUB_API_VERSION)
+                header("Authorization", "Bearer ${pat.trim()}")
+                contentType(ContentType.Application.Json)
+                setBody(bodyJson)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("Could not create private GitHub Gist (HTTP ${response.status.value})")
+            }
+            val root = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+            val id = root["id"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                ?: throw IllegalStateException("GitHub Gist creation returned no ID")
+            val htmlUrl = root["html_url"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                ?: "https://gist.github.com/$id"
+            return CreatedGist(
+                gistId = id,
+                htmlUrl = htmlUrl,
+                etag = response.headers["ETag"],
+            )
+        }
     }
 }
 

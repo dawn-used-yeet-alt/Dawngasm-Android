@@ -308,4 +308,80 @@ class SyncAndHistoryTest {
             PlatformFileOps.deleteFile(fileB)
         }
     }
+
+    @Test
+    fun setupOverwritesPlaceholderTextAndAutoCreatesPrivateGistWithPatOnly() = runTest {
+        val fastKdf = BackupKdfParams(memoryKiB = 64, iterations = 1, parallelism = 1)
+        val dir = PlatformFileOps.getCacheDir() + "/dawngasm-test-gist-${kotlin.random.Random.nextInt()}"
+        val fileA = "$dir/a.ndjson"
+        val fileB = "$dir/b.ndjson"
+
+        try {
+            // 1. Existing gist/remote with placeholder text (because GitHub rejects empty gists)
+            val placeholderRemote = FakeSyncRemote().apply {
+                payload = "useless placeholder text"
+                etag = "\"v0\""
+            }
+            val prefsA = AppPreferences(MapSettings())
+            prefsA.saveSaved(listOf(sampleTrack("s1")))
+            val histA = HistoryStore { fileA }.also { it.load() }
+            val engineA = SyncEngine(
+                prefs = prefsA,
+                historyStore = histA,
+                scope = this,
+                secureStorage = InMemorySecureStorage(),
+                kdfParams = fastKdf,
+                remoteFactory = { _, _ -> placeholderRemote },
+            )
+            val statusA = engineA.configureSync(
+                backend = SyncBackendType.GITHUB_GIST,
+                remoteUrl = "https://gist.github.com/user/abc123def4567890",
+                password = "vault-password",
+                authToken = "ghp_pat",
+            )
+            assertNull(statusA.config.lastSyncError)
+            assertEquals(1, placeholderRemote.pushCount)
+            assertTrue(BackupCrypto.isEncryptedBackup(placeholderRemote.payload.orEmpty()))
+
+            // 2. PAT-only setup with blank remoteUrl auto-creates a private gist with encrypted content
+            var capturedPat = ""
+            var capturedFilename = ""
+            var capturedInitialContent = ""
+            val prefsB = AppPreferences(MapSettings())
+            prefsB.saveSaved(listOf(sampleTrack("s2")))
+            val histB = HistoryStore { fileB }.also { it.load() }
+            val engineB = SyncEngine(
+                prefs = prefsB,
+                historyStore = histB,
+                scope = this,
+                secureStorage = InMemorySecureStorage(),
+                kdfParams = fastKdf,
+                gistCreator = { pat, filename, content ->
+                    capturedPat = pat
+                    capturedFilename = filename
+                    capturedInitialContent = content
+                    GitHubGistSyncRemote.CreatedGist(
+                        gistId = "deadbeefcafebabe1234",
+                        htmlUrl = "https://gist.github.com/deadbeefcafebabe1234",
+                        etag = "\"created-1\"",
+                    )
+                },
+            )
+            val statusB = engineB.configureSync(
+                backend = SyncBackendType.GITHUB_GIST,
+                remoteUrl = "",
+                password = "vault-password",
+                authToken = "ghp_new_pat",
+            )
+            assertNull(statusB.config.lastSyncError)
+            assertEquals("ghp_new_pat", capturedPat)
+            assertEquals(SyncConfig.DEFAULT_GIST_FILENAME, capturedFilename)
+            assertTrue(BackupCrypto.isEncryptedBackup(capturedInitialContent))
+            assertEquals("https://gist.github.com/deadbeefcafebabe1234", statusB.config.remoteUrl)
+            assertEquals("s2", DawngasmBackup.fromJson(BackupCrypto.decrypt(capturedInitialContent, "vault-password").plaintextJson).saved.first().id)
+        } finally {
+            PlatformFileOps.deleteFile(fileA)
+            PlatformFileOps.deleteFile(fileB)
+        }
+    }
 }
