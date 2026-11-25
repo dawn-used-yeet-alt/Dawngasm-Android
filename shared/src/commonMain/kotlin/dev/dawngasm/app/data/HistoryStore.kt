@@ -85,11 +85,6 @@ class HistoryStore(
                         needsCompaction = true
                     }
                 }
-                if (needsCompaction) {
-                    compactLocked(path)
-                    needsCompaction = false
-                }
-                runCatching { onLegacyMigrated() }
             }
 
             rebuildOrderedLocked()
@@ -97,6 +92,9 @@ class HistoryStore(
                 compactLocked(path)
             } else {
                 uncompactedLines = (totalLines - entriesById.size).coerceAtLeast(0)
+            }
+            if (legacyTracks.isNotEmpty()) {
+                runCatching { onLegacyMigrated() }
             }
             orderedEntries.map { it.track }
         }

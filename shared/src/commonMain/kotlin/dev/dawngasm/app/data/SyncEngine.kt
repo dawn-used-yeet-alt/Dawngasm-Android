@@ -902,11 +902,11 @@ class SyncEngine(
             changed = true
         }
 
-        if (meta.sortUpdatedAtMs == 0L) {
+        if (meta.sortUpdatedAtMs == 0L && prefs.sort() != SearchSyntax.DEFAULT_SORT) {
             updated = updated.copy(sortUpdatedAtMs = now)
             changed = true
         }
-        if (meta.windowUpdatedAtMs == 0L) {
+        if (meta.windowUpdatedAtMs == 0L && prefs.window() != SearchSyntax.DEFAULT_WINDOW) {
             updated = updated.copy(windowUpdatedAtMs = now)
             changed = true
         }
